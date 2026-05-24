@@ -20,6 +20,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Leadgrid CRM" },
       { name: "description", content: "Internal lead operations dashboard" },
       { name: "robots", content: "noindex, nofollow" },
+      { name: "theme-color", content: "#1a1c24" },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
   }),
@@ -31,7 +32,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <HeadContent />
       </head>
@@ -56,7 +57,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
-      <Toaster richColors position="top-right" />
+      <Toaster richColors position="top-right" theme="dark" />
     </QueryClientProvider>
   );
 }
@@ -65,9 +66,9 @@ function NotFound() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="text-center">
-        <h1 className="text-6xl font-bold">404</h1>
-        <p className="text-muted-foreground mt-2">Page not found</p>
-        <a href="/" className="inline-block mt-4 text-primary underline">Go home</a>
+        <h1 className="text-7xl font-semibold tracking-tight">404</h1>
+        <p className="text-muted-foreground mt-3">This page doesn't exist.</p>
+        <a href="/" className="inline-block mt-5 text-primary hover:text-primary-glow transition">Back home →</a>
       </div>
     </div>
   );
@@ -76,10 +77,10 @@ function NotFound() {
 function ErrorView({ error }: { error: Error }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="text-center max-w-md">
+      <div className="text-center max-w-md glass-card p-8">
         <h1 className="text-2xl font-semibold">Something went wrong</h1>
         <p className="text-sm text-muted-foreground mt-2">{error.message}</p>
-        <a href="/" className="inline-block mt-4 text-primary underline">Reload</a>
+        <a href="/" className="inline-block mt-5 text-primary hover:text-primary-glow transition">Reload →</a>
       </div>
     </div>
   );
