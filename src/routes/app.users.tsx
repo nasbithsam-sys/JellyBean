@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader, PageBody } from "@/components/page";
 
-export const Route = createFileRoute("/_authenticated/cs-leads")({
+export const Route = createFileRoute("/app/users")({
   component: () => (
     <div>
-      <PageHeader title="CS Leads" description="Work your assigned leads" />
+      <PageHeader title="Users" description="Create and manage team members" />
       <PageBody>
         <div className="border rounded-lg bg-card p-10 text-center text-sm text-muted-foreground">
-          Lead cards coming next.
+          Admin user management coming next.
         </div>
       </PageBody>
     </div>

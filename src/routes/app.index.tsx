@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody } from "@/components/page";
 
-export const Route = createFileRoute("/_authenticated/")({
+export const Route = createFileRoute("/app/")({
   component: DashboardHome,
 });
 

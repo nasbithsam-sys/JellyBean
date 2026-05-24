@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader, PageBody } from "@/components/page";
 
-export const Route = createFileRoute("/_authenticated/accounts")({
+export const Route = createFileRoute("/app/accounts")({
   component: () => (
     <div>
       <PageHeader title="Accounts" />
