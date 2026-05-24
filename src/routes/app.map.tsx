@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { supabase } from "@/integrations/supabase/client";
-import { MapPin } from "lucide-react";
 
 export const Route = createFileRoute("/app/map")({ component: Page });
 
@@ -12,7 +11,7 @@ function Page() {
   const auth = useAuth();
   return (
     <div>
-      <PageHeader title="Map Coverage" description="Visual layout of monitored account locations." />
+      <PageHeader title="Map" description="Geographic spread of monitored lead-source accounts." />
       <PageBody>
         <RoleGate allow={["admin", "marketing"]} current={auth.primaryRole}>
           <Inner />
@@ -26,7 +25,7 @@ function Inner() {
   const accounts = useQuery({
     queryKey: ["accounts-map"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("accounts").select("id, name, area, latitude, longitude");
+      const { data, error } = await supabase.from("accounts").select("id, name, area, latitude, longitude, last_opened_at");
       if (error) throw error;
       return data ?? [];
     },
@@ -45,8 +44,8 @@ function Inner() {
 
   function project(lat: number, lng: number) {
     if (!bounds) return { x: 50, y: 50 };
-    const padLat = (bounds.maxLat - bounds.minLat) * 0.1 || 0.001;
-    const padLng = (bounds.maxLng - bounds.minLng) * 0.1 || 0.001;
+    const padLat = (bounds.maxLat - bounds.minLat) * 0.12 || 0.001;
+    const padLng = (bounds.maxLng - bounds.minLng) * 0.12 || 0.001;
     const x = ((lng - (bounds.minLng - padLng)) / (bounds.maxLng - bounds.minLng + padLng * 2)) * 100;
     const y = 100 - ((lat - (bounds.minLat - padLat)) / (bounds.maxLat - bounds.minLat + padLat * 2)) * 100;
     return { x, y };
@@ -58,31 +57,66 @@ function Inner() {
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
   }, [accounts.data]);
 
+  const isActive = (a: { last_opened_at: string | null }) => {
+    if (!a.last_opened_at) return false;
+    return (Date.now() - new Date(a.last_opened_at).getTime()) < 1000 * 60 * 60 * 24 * 14;
+  };
+
   return (
     <div className="grid lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-2 bg-card border rounded-lg p-5">
-        <h3 className="text-sm font-semibold mb-3">Account positions</h3>
+      <div className="lg:col-span-2 glass-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold tracking-tight">Account positions</h3>
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success shadow-[0_0_8px_var(--success)]" />Active</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-muted-foreground/60" />Idle</span>
+          </div>
+        </div>
         {accounts.isLoading ? (
-          <div className="h-96 grid place-items-center text-muted-foreground">Loading…</div>
+          <div className="h-[480px] grid place-items-center text-muted-foreground">Loading…</div>
         ) : !accounts.data?.length ? (
-          <div className="h-96 grid place-items-center text-muted-foreground text-sm">No accounts yet — add some on the Accounts page.</div>
+          <div className="h-[480px] grid place-items-center text-muted-foreground text-sm">No accounts yet — add some on the Accounts page.</div>
         ) : (
-          <div className="relative aspect-[4/3] w-full bg-[radial-gradient(circle_at_30%_30%,hsl(var(--primary)/0.08),transparent_60%),linear-gradient(to_bottom_right,hsl(var(--muted)),hsl(var(--background)))] border rounded-md overflow-hidden">
-            <svg className="absolute inset-0 w-full h-full opacity-20" preserveAspectRatio="none" viewBox="0 0 100 100">
-              {Array.from({ length: 11 }).map((_, i) => (
+          <div
+            className="relative aspect-[4/3] w-full rounded-lg overflow-hidden border border-border"
+            style={{
+              backgroundImage:
+                "radial-gradient(800px 400px at 70% 20%, color-mix(in oklab, var(--primary) 18%, transparent), transparent 60%)," +
+                "radial-gradient(600px 400px at 20% 80%, color-mix(in oklab, var(--primary-glow) 12%, transparent), transparent 60%)," +
+                "linear-gradient(180deg, oklch(0.18 0.014 260), oklch(0.13 0.012 260))",
+            }}
+          >
+            {/* Grid */}
+            <svg className="absolute inset-0 w-full h-full text-foreground/8" preserveAspectRatio="none" viewBox="0 0 100 100">
+              {Array.from({ length: 21 }).map((_, i) => (
                 <g key={i}>
-                  <line x1={i * 10} y1="0" x2={i * 10} y2="100" stroke="currentColor" strokeWidth="0.1" />
-                  <line x1="0" y1={i * 10} x2="100" y2={i * 10} stroke="currentColor" strokeWidth="0.1" />
+                  <line x1={i * 5} y1="0" x2={i * 5} y2="100" stroke="currentColor" strokeWidth="0.08" />
+                  <line x1="0" y1={i * 5} x2="100" y2={i * 5} stroke="currentColor" strokeWidth="0.08" />
                 </g>
               ))}
             </svg>
+
+            {/* Coverage circles + pins */}
             {accounts.data.map((a) => {
               const p = project(a.latitude, a.longitude);
+              const active = isActive(a);
               return (
-                <div key={a.id} className="absolute -translate-x-1/2 -translate-y-full group" style={{ left: `${p.x}%`, top: `${p.y}%` }}>
-                  <MapPin className="h-5 w-5 text-primary drop-shadow" fill="currentColor" />
-                  <div className="absolute left-1/2 -translate-x-1/2 mt-1 px-2 py-1 rounded bg-popover border text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    <div className="font-medium">{a.name}</div>
+                <div key={a.id} className="absolute group" style={{ left: `${p.x}%`, top: `${p.y}%`, transform: "translate(-50%, -50%)" }}>
+                  {/* coverage glow */}
+                  <div
+                    className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ${active ? "bg-success/15" : "bg-muted-foreground/10"} blur-xl`}
+                    style={{ width: active ? 90 : 50, height: active ? 90 : 50 }}
+                  />
+                  <div
+                    className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border ${active ? "border-success/40" : "border-muted-foreground/25"}`}
+                    style={{ width: active ? 56 : 32, height: active ? 56 : 32 }}
+                  />
+                  {/* pin */}
+                  <div
+                    className={`relative h-3 w-3 rounded-full ${active ? "bg-success animate-pulse-glow" : "bg-muted-foreground/70"} ring-2 ring-background`}
+                  />
+                  <div className="absolute left-1/2 -translate-x-1/2 top-5 px-2.5 py-1.5 rounded-md bg-popover border border-border text-[11.5px] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md">
+                    <div className="font-medium text-foreground">{a.name}</div>
                     <div className="text-muted-foreground">{a.area}</div>
                   </div>
                 </div>
@@ -92,16 +126,28 @@ function Inner() {
         )}
       </div>
 
-      <div className="bg-card border rounded-lg p-5">
-        <h3 className="text-sm font-semibold mb-3">Coverage by area</h3>
+      <div className="glass-card p-5">
+        <h3 className="text-sm font-semibold tracking-tight mb-4">Coverage by area</h3>
         <div className="space-y-2">
           {byArea.length === 0 && <div className="text-sm text-muted-foreground">—</div>}
-          {byArea.map(([area, count]) => (
-            <div key={area} className="flex items-center justify-between text-sm">
-              <span>{area}</span>
-              <span className="font-mono bg-muted px-2 py-0.5 rounded text-xs">{count}</span>
-            </div>
-          ))}
+          {byArea.map(([area, count]) => {
+            const max = Math.max(...byArea.map(([, c]) => c));
+            const pct = (count / max) * 100;
+            return (
+              <div key={area} className="group">
+                <div className="flex items-center justify-between text-[12.5px] mb-1">
+                  <span className="truncate">{area}</span>
+                  <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{count}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-surface overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-primary to-primary-glow transition-all duration-500"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -117,50 +117,57 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Leadgrid</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to continue</p>
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
+      {/* Decorative glow */}
+      <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-[460px] w-[820px] rounded-full bg-primary/20 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 right-0 h-[300px] w-[500px] rounded-full bg-primary-glow/10 blur-[120px] pointer-events-none" />
+
+      <div className="w-full max-w-sm relative animate-fade-in-up">
+        <div className="mb-8 flex flex-col items-center">
+          <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary to-primary-glow grid place-items-center shadow-lg ring-1 ring-primary/40">
+            <span className="text-[16px] font-semibold text-primary-foreground">L</span>
+          </div>
+          <h1 className="text-[22px] font-semibold tracking-tight mt-4">Welcome back</h1>
+          <p className="text-[13px] text-muted-foreground mt-1">Sign in to Leadgrid</p>
         </div>
         {mfaRequired ? (
-          <form onSubmit={handleMfaVerify} className="bg-card border rounded-lg p-6 space-y-4">
+          <form onSubmit={handleMfaVerify} className="glass-card p-6 space-y-4 ring-glow">
             <div>
-              <Label htmlFor="otp">Authenticator code</Label>
+              <Label htmlFor="otp" className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium">Authenticator code</Label>
               <Input
                 id="otp"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                placeholder="123456"
+                placeholder="123 456"
                 value={mfaCode}
                 onChange={(e) => setMfaCode(e.target.value)}
                 maxLength={6}
-                className="mt-1.5 tracking-widest text-center text-lg"
+                className="mt-2 tracking-[0.4em] text-center text-lg h-12 font-mono"
               />
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-[11.5px] text-muted-foreground mt-2 text-center">
                 Open Google Authenticator and enter the 6-digit code.
               </p>
             </div>
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button type="submit" className="w-full h-10" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Verify
             </Button>
           </form>
         ) : (
-          <form onSubmit={handleSignIn} className="bg-card border rounded-lg p-6 space-y-4">
+          <form onSubmit={handleSignIn} className="glass-card p-6 space-y-4 ring-glow">
             <div>
-              <Label htmlFor="id">Email or username</Label>
+              <Label htmlFor="id" className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium">Email or username</Label>
               <Input
                 id="id"
                 autoComplete="username"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 required
-                className="mt-1.5"
+                className="mt-2 h-10"
               />
             </div>
             <div>
-              <Label htmlFor="pw">Password</Label>
+              <Label htmlFor="pw" className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium">Password</Label>
               <Input
                 id="pw"
                 type="password"
@@ -168,15 +175,15 @@ function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="mt-1.5"
+                className="mt-2 h-10"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button type="submit" className="w-full h-10 shadow-md hover:shadow-lg" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Sign in
             </Button>
-            <p className="text-xs text-muted-foreground text-center pt-2">
-              Accounts are created by your administrator.
+            <p className="text-[11.5px] text-muted-foreground text-center pt-2">
+              Accounts are provisioned by your administrator.
             </p>
           </form>
         )}
