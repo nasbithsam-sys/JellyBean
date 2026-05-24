@@ -237,7 +237,6 @@ function BootstrapPanel() {
           </Button>
         </form>
       )}
-      </div>
     </div>
   );
 }
