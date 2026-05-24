@@ -71,4 +71,3 @@ function AuthenticatedLayout() {
     </AppShell>
   );
 }
-// touch
