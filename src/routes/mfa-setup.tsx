@@ -30,7 +30,7 @@ function MfaSetup() {
       }
       // Reuse pending unverified factor if one exists, else enroll a new one
       const { data: factors } = await supabase.auth.mfa.listFactors();
-      let factor = factors?.totp?.find((f) => f.status === "unverified");
+      let factor = factors?.totp?.find((f) => (f.status as string) !== "verified");
       if (!factor) {
         const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
         if (error) {
