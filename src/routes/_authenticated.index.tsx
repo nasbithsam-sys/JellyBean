@@ -63,3 +63,4 @@ function StatCard({ label, hint }: { label: string; hint?: string }) {
     </div>
   );
 }
+
