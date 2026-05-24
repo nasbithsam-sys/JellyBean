@@ -11,18 +11,18 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as MfaSetupRouteImport } from './routes/mfa-setup'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppUsersRouteImport } from './routes/app.users'
+import { Route as AppSettingsRouteImport } from './routes/app.settings'
+import { Route as AppReportsRouteImport } from './routes/app.reports'
+import { Route as AppRawLeadsRouteImport } from './routes/app.raw-leads'
 import { Route as AppMapRouteImport } from './routes/app.map'
 import { Route as AppLogsRouteImport } from './routes/app.logs'
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
 import { Route as AppAccountsRouteImport } from './routes/app.accounts'
-import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated.users'
-import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated.settings'
-import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated.reports'
-import { Route as AuthenticatedRawLeadsRouteImport } from './routes/_authenticated.raw-leads'
 
 const MfaSetupRoute = MfaSetupRouteImport.update({
   id: '/mfa-setup',
@@ -34,8 +34,9 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: '/_authenticated',
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -44,163 +45,159 @@ const IndexRoute = IndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
-  id: '/app/',
-  path: '/app/',
-  getParentRoute: () => rootRouteImport,
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
 } as any)
-const AppMapRoute = AppMapRouteImport.update({
-  id: '/app/map',
-  path: '/app/map',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppLogsRoute = AppLogsRouteImport.update({
-  id: '/app/logs',
-  path: '/app/logs',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppCsLeadsRoute = AppCsLeadsRouteImport.update({
-  id: '/app/cs-leads',
-  path: '/app/cs-leads',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
-  id: '/app/analytics',
-  path: '/app/analytics',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppAccountsRoute = AppAccountsRouteImport.update({
-  id: '/app/accounts',
-  path: '/app/accounts',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
+const AppUsersRoute = AppUsersRouteImport.update({
   id: '/users',
   path: '/users',
-  getParentRoute: () => AuthenticatedRoute,
+  getParentRoute: () => AppRoute,
 } as any)
-const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => AuthenticatedRoute,
+  getParentRoute: () => AppRoute,
 } as any)
-const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
+const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
-  getParentRoute: () => AuthenticatedRoute,
+  getParentRoute: () => AppRoute,
 } as any)
-const AuthenticatedRawLeadsRoute = AuthenticatedRawLeadsRouteImport.update({
+const AppRawLeadsRoute = AppRawLeadsRouteImport.update({
   id: '/raw-leads',
   path: '/raw-leads',
-  getParentRoute: () => AuthenticatedRoute,
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMapRoute = AppMapRouteImport.update({
+  id: '/map',
+  path: '/map',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLogsRoute = AppLogsRouteImport.update({
+  id: '/logs',
+  path: '/logs',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCsLeadsRoute = AppCsLeadsRouteImport.update({
+  id: '/cs-leads',
+  path: '/cs-leads',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAccountsRoute = AppAccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/mfa-setup': typeof MfaSetupRoute
-  '/raw-leads': typeof AuthenticatedRawLeadsRoute
-  '/reports': typeof AuthenticatedReportsRoute
-  '/settings': typeof AuthenticatedSettingsRoute
-  '/users': typeof AuthenticatedUsersRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
+  '/app/raw-leads': typeof AppRawLeadsRoute
+  '/app/reports': typeof AppReportsRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/mfa-setup': typeof MfaSetupRoute
-  '/raw-leads': typeof AuthenticatedRawLeadsRoute
-  '/reports': typeof AuthenticatedReportsRoute
-  '/settings': typeof AuthenticatedSettingsRoute
-  '/users': typeof AuthenticatedUsersRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
+  '/app/raw-leads': typeof AppRawLeadsRoute
+  '/app/reports': typeof AppReportsRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/users': typeof AppUsersRoute
   '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/mfa-setup': typeof MfaSetupRoute
-  '/_authenticated/raw-leads': typeof AuthenticatedRawLeadsRoute
-  '/_authenticated/reports': typeof AuthenticatedReportsRoute
-  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
-  '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
+  '/app/raw-leads': typeof AppRawLeadsRoute
+  '/app/reports': typeof AppReportsRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/users': typeof AppUsersRoute
   '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/app'
     | '/login'
     | '/mfa-setup'
-    | '/raw-leads'
-    | '/reports'
-    | '/settings'
-    | '/users'
     | '/app/accounts'
     | '/app/analytics'
     | '/app/cs-leads'
     | '/app/logs'
     | '/app/map'
+    | '/app/raw-leads'
+    | '/app/reports'
+    | '/app/settings'
+    | '/app/users'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/mfa-setup'
-    | '/raw-leads'
-    | '/reports'
-    | '/settings'
-    | '/users'
     | '/app/accounts'
     | '/app/analytics'
     | '/app/cs-leads'
     | '/app/logs'
     | '/app/map'
+    | '/app/raw-leads'
+    | '/app/reports'
+    | '/app/settings'
+    | '/app/users'
     | '/app'
   id:
     | '__root__'
     | '/'
-    | '/_authenticated'
+    | '/app'
     | '/login'
     | '/mfa-setup'
-    | '/_authenticated/raw-leads'
-    | '/_authenticated/reports'
-    | '/_authenticated/settings'
-    | '/_authenticated/users'
     | '/app/accounts'
     | '/app/analytics'
     | '/app/cs-leads'
     | '/app/logs'
     | '/app/map'
+    | '/app/raw-leads'
+    | '/app/reports'
+    | '/app/settings'
+    | '/app/users'
     | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   MfaSetupRoute: typeof MfaSetupRoute
-  AppAccountsRoute: typeof AppAccountsRoute
-  AppAnalyticsRoute: typeof AppAnalyticsRoute
-  AppCsLeadsRoute: typeof AppCsLeadsRoute
-  AppLogsRoute: typeof AppLogsRoute
-  AppMapRoute: typeof AppMapRoute
-  AppIndexRoute: typeof AppIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -219,11 +216,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteImport
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -235,106 +232,110 @@ declare module '@tanstack/react-router' {
     }
     '/app/': {
       id: '/app/'
-      path: '/app'
+      path: '/'
       fullPath: '/app/'
       preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/users': {
+      id: '/app/users'
+      path: '/users'
+      fullPath: '/app/users'
+      preLoaderRoute: typeof AppUsersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/settings': {
+      id: '/app/settings'
+      path: '/settings'
+      fullPath: '/app/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/reports': {
+      id: '/app/reports'
+      path: '/reports'
+      fullPath: '/app/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/raw-leads': {
+      id: '/app/raw-leads'
+      path: '/raw-leads'
+      fullPath: '/app/raw-leads'
+      preLoaderRoute: typeof AppRawLeadsRouteImport
+      parentRoute: typeof AppRoute
     }
     '/app/map': {
       id: '/app/map'
-      path: '/app/map'
+      path: '/map'
       fullPath: '/app/map'
       preLoaderRoute: typeof AppMapRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AppRoute
     }
     '/app/logs': {
       id: '/app/logs'
-      path: '/app/logs'
+      path: '/logs'
       fullPath: '/app/logs'
       preLoaderRoute: typeof AppLogsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AppRoute
     }
     '/app/cs-leads': {
       id: '/app/cs-leads'
-      path: '/app/cs-leads'
+      path: '/cs-leads'
       fullPath: '/app/cs-leads'
       preLoaderRoute: typeof AppCsLeadsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AppRoute
     }
     '/app/analytics': {
       id: '/app/analytics'
-      path: '/app/analytics'
+      path: '/analytics'
       fullPath: '/app/analytics'
       preLoaderRoute: typeof AppAnalyticsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AppRoute
     }
     '/app/accounts': {
       id: '/app/accounts'
-      path: '/app/accounts'
+      path: '/accounts'
       fullPath: '/app/accounts'
       preLoaderRoute: typeof AppAccountsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/users': {
-      id: '/_authenticated/users'
-      path: '/users'
-      fullPath: '/users'
-      preLoaderRoute: typeof AuthenticatedUsersRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/settings': {
-      id: '/_authenticated/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/reports': {
-      id: '/_authenticated/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof AuthenticatedReportsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/raw-leads': {
-      id: '/_authenticated/raw-leads'
-      path: '/raw-leads'
-      fullPath: '/raw-leads'
-      preLoaderRoute: typeof AuthenticatedRawLeadsRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      parentRoute: typeof AppRoute
     }
   }
 }
 
-interface AuthenticatedRouteChildren {
-  AuthenticatedRawLeadsRoute: typeof AuthenticatedRawLeadsRoute
-  AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
-  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
+interface AppRouteChildren {
+  AppAccountsRoute: typeof AppAccountsRoute
+  AppAnalyticsRoute: typeof AppAnalyticsRoute
+  AppCsLeadsRoute: typeof AppCsLeadsRoute
+  AppLogsRoute: typeof AppLogsRoute
+  AppMapRoute: typeof AppMapRoute
+  AppRawLeadsRoute: typeof AppRawLeadsRoute
+  AppReportsRoute: typeof AppReportsRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppUsersRoute: typeof AppUsersRoute
+  AppIndexRoute: typeof AppIndexRoute
 }
 
-const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedRawLeadsRoute: AuthenticatedRawLeadsRoute,
-  AuthenticatedReportsRoute: AuthenticatedReportsRoute,
-  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedUsersRoute: AuthenticatedUsersRoute,
-}
-
-const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
-  AuthenticatedRouteChildren,
-)
-
-const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AuthenticatedRoute: AuthenticatedRouteWithChildren,
-  LoginRoute: LoginRoute,
-  MfaSetupRoute: MfaSetupRoute,
+const AppRouteChildren: AppRouteChildren = {
   AppAccountsRoute: AppAccountsRoute,
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppCsLeadsRoute: AppCsLeadsRoute,
   AppLogsRoute: AppLogsRoute,
   AppMapRoute: AppMapRoute,
+  AppRawLeadsRoute: AppRawLeadsRoute,
+  AppReportsRoute: AppReportsRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppUsersRoute: AppUsersRoute,
   AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
+const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  LoginRoute: LoginRoute,
+  MfaSetupRoute: MfaSetupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
