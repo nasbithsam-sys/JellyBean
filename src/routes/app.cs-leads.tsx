@@ -10,10 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, MessageSquarePlus, ExternalLink, Phone } from "lucide-react";
+import { Loader2, ExternalLink, Phone, MapPin, MessageSquarePlus, ArrowRight, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Constants } from "@/integrations/supabase/types";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
@@ -32,8 +32,8 @@ function Page() {
   const auth = useAuth();
   return (
     <div>
-      <PageHeader title="CS Leads" description="Work your assigned customer leads." />
-      <PageBody>
+      <PageHeader title="CS Pipeline" description="Your inbox of qualified customer leads — call, follow-up, convert." />
+      <PageBody className="!pt-5">
         <RoleGate allow={["admin", "cs", "marketing"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
@@ -42,15 +42,16 @@ function Page() {
   );
 }
 
-const GROUPS: Record<string, string[]> = {
-  Active: ["new", "called", "messaged", "follow_up", "interested"],
-  Won: ["converted", "closed_won"],
-  Lost: ["closed_lost"],
+const GROUPS: Record<string, { statuses: string[]; tone: string }> = {
+  Active: { statuses: ["new", "called", "messaged", "follow_up", "interested"], tone: "bg-primary" },
+  Won: { statuses: ["converted", "closed_won"], tone: "bg-success" },
+  Lost: { statuses: ["closed_lost"], tone: "bg-destructive" },
 };
 
 function Inner() {
   const qc = useQueryClient();
   const [group, setGroup] = useState<keyof typeof GROUPS>("Active");
+  const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<Lead | null>(null);
 
   const list = useQuery({
@@ -59,7 +60,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select("*")
-        .in("cs_status", GROUPS[group] as never)
+        .in("cs_status", GROUPS[group].statuses as never)
         .order("assigned_at", { ascending: false })
         .limit(300);
       if (error) throw error;
@@ -67,51 +68,126 @@ function Inner() {
     },
   });
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return list.data ?? [];
+    return (list.data ?? []).filter((l) =>
+      [l.customer_name, l.customer_number, l.main_area, l.sub_area, l.pass_it_to].some((f) => f?.toLowerCase().includes(q))
+    );
+  }, [list.data, query]);
+
   return (
     <div className="space-y-4">
-      <Tabs value={group} onValueChange={(v) => setGroup(v as keyof typeof GROUPS)}>
-        <TabsList>
-          {Object.keys(GROUPS).map((g) => <TabsTrigger key={g} value={g}>{g}</TabsTrigger>)}
-        </TabsList>
-      </Tabs>
-
-      <div className="bg-card border rounded-lg overflow-hidden">
-        <table className="crm-table">
-          <thead>
-            <tr><th>Customer</th><th>Phone</th><th>Area</th><th>Status</th><th>Follow-up</th><th>Assigned</th><th className="text-right">Actions</th></tr>
-          </thead>
-          <tbody>
-            {list.isLoading && <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">Loading…</td></tr>}
-            {list.data?.length === 0 && <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">No leads in this view.</td></tr>}
-            {list.data?.map((l) => (
-              <tr key={l.id}>
-                <td className="font-medium">{l.customer_name}</td>
-                <td><a href={`tel:${l.customer_number}`} className="inline-flex items-center text-primary text-sm hover:underline"><Phone className="h-3 w-3 mr-1" />{l.customer_number}</a></td>
-                <td className="text-sm">{[l.main_area, l.sub_area].filter(Boolean).join(" · ") || "—"}</td>
-                <td><StatusBadge status={l.cs_status} /></td>
-                <td className="text-xs whitespace-nowrap">{l.followup_at ? formatDistanceToNow(new Date(l.followup_at), { addSuffix: true }) : "—"}</td>
-                <td className="text-xs text-muted-foreground whitespace-nowrap">{formatDistanceToNow(new Date(l.assigned_at), { addSuffix: true })}</td>
-                <td className="text-right whitespace-nowrap">
-                  <Button size="sm" variant="outline" onClick={() => setOpened(l)}><MessageSquarePlus className="h-3.5 w-3.5 mr-1" />Open</Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+          {Object.entries(GROUPS).map(([name, g]) => (
+            <button
+              key={name}
+              onClick={() => setGroup(name as keyof typeof GROUPS)}
+              className={cn(
+                "relative px-3 h-8 text-[12.5px] font-medium rounded-md transition-all flex items-center gap-2",
+                group === name
+                  ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", g.tone)} />
+              {name}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search customer, area, phone…"
+            className="w-full h-9 pl-9 pr-3 rounded-md bg-surface border border-border text-[13px] placeholder:text-muted-foreground/70 focus:outline-none"
+          />
+        </div>
       </div>
+
+      {list.isLoading ? (
+        <div className="glass-card p-16 text-center text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="glass-card p-16 text-center">
+          <div className="text-sm text-muted-foreground">No leads in this view.</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filtered.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpened(l)} />)}
+        </div>
+      )}
 
       {opened && <LeadDrawer lead={opened} onClose={() => setOpened(null)} onSaved={() => { setOpened(null); qc.invalidateQueries({ queryKey: ["cs_leads"] }); }} />}
     </div>
   );
 }
 
+function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
+  const initials = (lead.customer_name || "?").split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <div className="glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up" onClick={onOpen}>
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 shrink-0 rounded-lg bg-gradient-to-br from-primary/30 to-primary-glow/20 grid place-items-center text-[12px] font-semibold ring-1 ring-primary/30">
+          {initials || "·"}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-[13.5px] font-semibold truncate">{lead.customer_name}</h3>
+            <StatusBadge status={lead.cs_status} />
+          </div>
+          <a
+            href={`tel:${lead.customer_number}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-primary transition-colors mt-0.5"
+          >
+            <Phone className="h-3 w-3" /> {lead.customer_number}
+          </a>
+        </div>
+      </div>
+
+      {(lead.main_area || lead.sub_area) && (
+        <div className="mt-3 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+          <MapPin className="h-3 w-3" />
+          <span className="truncate">{[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")}</span>
+        </div>
+      )}
+
+      {lead.context && (
+        <p className="mt-3 text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-2">
+          {lead.context}
+        </p>
+      )}
+
+      <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11.5px] text-muted-foreground">
+        <span className="tabular-nums">{formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}</span>
+        {lead.followup_at && (
+          <span className="inline-flex items-center gap-1 text-warning">
+            <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+            Follow-up {formatDistanceToNow(new Date(lead.followup_at), { addSuffix: true })}
+          </span>
+        )}
+        <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-primary" />
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const tone =
-    status === "converted" || status === "closed_won" ? "bg-success/15 text-success"
-      : status === "closed_lost" ? "bg-destructive/15 text-destructive"
-        : status === "follow_up" || status === "interested" ? "bg-primary/15 text-primary"
-          : "bg-muted text-muted-foreground";
-  return <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${tone}`}>{status.replace(/_/g, " ")}</span>;
+    status === "converted" || status === "closed_won" ? "bg-success/15 text-success border-success/30"
+      : status === "closed_lost" ? "bg-destructive/15 text-destructive border-destructive/30"
+        : status === "follow_up" || status === "interested" ? "bg-primary/15 text-primary border-primary/30"
+          : status === "called" || status === "messaged" ? "bg-warning/15 text-warning border-warning/30"
+            : "bg-muted text-muted-foreground border-border";
+  return (
+    <span className={cn("text-[10.5px] px-2 py-0.5 rounded-full capitalize border font-medium whitespace-nowrap", tone)}>
+      {status.replace(/_/g, " ")}
+    </span>
+  );
 }
 
 function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => void; onSaved: () => void }) {
@@ -148,27 +224,31 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex justify-end" onClick={onClose}>
-      <div className="bg-card w-full max-w-lg h-full overflow-y-auto border-l p-6 space-y-5" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up" onClick={onClose}>
+      <div className="bg-card w-full max-w-lg h-full overflow-y-auto border-l border-border p-7 space-y-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
         <div>
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Customer</div>
-          <h2 className="text-xl font-semibold">{lead.customer_name}</h2>
-          <a href={`tel:${lead.customer_number}`} className="text-sm text-primary inline-flex items-center mt-1"><Phone className="h-3 w-3 mr-1" />{lead.customer_number}</a>
+          <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">Customer</div>
+          <h2 className="text-[22px] font-semibold tracking-tight mt-1">{lead.customer_name}</h2>
+          <a href={`tel:${lead.customer_number}`} className="text-sm text-primary inline-flex items-center mt-1.5 hover:text-primary-glow transition-colors">
+            <Phone className="h-3.5 w-3.5 mr-1.5" />{lead.customer_number}
+          </a>
         </div>
 
-        {(lead.main_area || lead.sub_area) && (
-          <Info label="Area" value={[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")} />
-        )}
-        {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
+        <div className="grid grid-cols-2 gap-3">
+          {(lead.main_area || lead.sub_area) && <Info label="Area" value={[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")} />}
+          {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
+        </div>
         {lead.context && <Info label="Context" value={lead.context} multiline />}
         {lead.marketing_notes && <Info label="Marketing notes" value={lead.marketing_notes} multiline />}
         {lead.original_lead_link && (
-          <a href={lead.original_lead_link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm text-primary"><ExternalLink className="h-3 w-3 mr-1" />Original post</a>
+          <a href={lead.original_lead_link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm text-primary hover:text-primary-glow transition-colors">
+            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />Original post
+          </a>
         )}
 
-        <div className="border-t pt-4 space-y-3">
+        <div className="border-t border-border pt-5 space-y-4">
           <div>
-            <Label className="block mb-1.5">Status</Label>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Status</Label>
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -177,11 +257,11 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
             </Select>
           </div>
           <div>
-            <Label className="block mb-1.5">Follow-up at</Label>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Follow-up at</Label>
             <Input type="datetime-local" value={followup} onChange={(e) => setFollowup(e.target.value)} />
           </div>
           <div>
-            <Label className="block mb-1.5">Add a note</Label>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Add a note</Label>
             <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Conversation summary, next steps…" />
           </div>
           <div className="flex justify-end gap-2">
@@ -191,13 +271,15 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
         </div>
 
         {notes.length > 0 && (
-          <div className="border-t pt-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">History</div>
-            <div className="space-y-3">
+          <div className="border-t border-border pt-5">
+            <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium mb-3 flex items-center gap-2">
+              <MessageSquarePlus className="h-3 w-3" /> History · {notes.length}
+            </div>
+            <div className="space-y-2.5">
               {[...notes].reverse().map((n, i) => (
-                <div key={i} className="bg-muted/40 rounded-md p-3">
-                  <div className="text-xs text-muted-foreground">{n.by} · {new Date(n.at).toLocaleString()}</div>
-                  <div className="text-sm mt-1 whitespace-pre-wrap">{n.text}</div>
+                <div key={i} className="bg-surface/60 border border-border rounded-md p-3">
+                  <div className="text-[11px] text-muted-foreground tabular-nums">{n.by} · {new Date(n.at).toLocaleString()}</div>
+                  <div className="text-[13px] mt-1 whitespace-pre-wrap leading-relaxed">{n.text}</div>
                 </div>
               ))}
             </div>
@@ -211,8 +293,8 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
 function Info({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`text-sm mt-0.5 ${multiline ? "whitespace-pre-wrap" : ""}`}>{value}</div>
+      <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">{label}</div>
+      <div className={cn("text-[13px] mt-1 leading-relaxed", multiline ? "whitespace-pre-wrap" : "")}>{value}</div>
     </div>
   );
 }
