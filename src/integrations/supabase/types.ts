@@ -14,16 +14,327 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      accounts: {
+        Row: {
+          area: string
+          created_at: string
+          created_by: string | null
+          id: string
+          last_opened_at: string | null
+          latitude: number
+          longitude: number
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          area: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_opened_at?: string | null
+          latitude: number
+          longitude: number
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          area?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_opened_at?: string | null
+          latitude?: number
+          longitude?: number
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      activity_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_name: string | null
+          actor_role: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          metadata: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_name?: string | null
+          actor_role?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          metadata?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_name?: string | null
+          actor_role?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
+      app_settings: {
+        Row: {
+          admin_otp_required: boolean
+          id: boolean
+          updated_at: string
+        }
+        Insert: {
+          admin_otp_required?: boolean
+          id?: boolean
+          updated_at?: string
+        }
+        Update: {
+          admin_otp_required?: boolean
+          id?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean
+          otp_required: boolean
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          otp_required?: boolean
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          otp_required?: boolean
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      qualified_leads: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          assigned_to: string | null
+          context: string | null
+          created_at: string
+          cs_notes: Json
+          cs_status: Database["public"]["Enums"]["cs_status"]
+          customer_name: string
+          customer_number: string
+          followup_at: string | null
+          id: string
+          main_area: string | null
+          marketing_notes: string | null
+          original_lead_link: string | null
+          pass_it_to: string | null
+          raw_lead_id: string | null
+          sub_area: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          assigned_to?: string | null
+          context?: string | null
+          created_at?: string
+          cs_notes?: Json
+          cs_status?: Database["public"]["Enums"]["cs_status"]
+          customer_name: string
+          customer_number: string
+          followup_at?: string | null
+          id?: string
+          main_area?: string | null
+          marketing_notes?: string | null
+          original_lead_link?: string | null
+          pass_it_to?: string | null
+          raw_lead_id?: string | null
+          sub_area?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          assigned_to?: string | null
+          context?: string | null
+          created_at?: string
+          cs_notes?: Json
+          cs_status?: Database["public"]["Enums"]["cs_status"]
+          customer_name?: string
+          customer_number?: string
+          followup_at?: string | null
+          id?: string
+          main_area?: string | null
+          marketing_notes?: string | null
+          original_lead_link?: string | null
+          pass_it_to?: string | null
+          raw_lead_id?: string | null
+          sub_area?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qualified_leads_raw_lead_id_fkey"
+            columns: ["raw_lead_id"]
+            isOneToOne: false
+            referencedRelation: "raw_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      raw_leads: {
+        Row: {
+          account_area: string | null
+          account_name: string | null
+          cancel_reason:
+            | Database["public"]["Enums"]["raw_lead_cancel_reason"]
+            | null
+          captured_at: string
+          created_at: string
+          external_id: string | null
+          id: string
+          lead_link: string | null
+          post_text: string | null
+          posted_at: string | null
+          poster_name: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["raw_lead_status"]
+          sub_area: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_area?: string | null
+          account_name?: string | null
+          cancel_reason?:
+            | Database["public"]["Enums"]["raw_lead_cancel_reason"]
+            | null
+          captured_at?: string
+          created_at?: string
+          external_id?: string | null
+          id?: string
+          lead_link?: string | null
+          post_text?: string | null
+          posted_at?: string | null
+          poster_name?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["raw_lead_status"]
+          sub_area?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_area?: string | null
+          account_name?: string | null
+          cancel_reason?:
+            | Database["public"]["Enums"]["raw_lead_cancel_reason"]
+            | null
+          captured_at?: string
+          created_at?: string
+          external_id?: string | null
+          id?: string
+          lead_link?: string | null
+          post_text?: string | null
+          posted_at?: string | null
+          poster_name?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["raw_lead_status"]
+          sub_area?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      current_user_has_role: {
+        Args: { _role: Database["public"]["Enums"]["app_role"] }
+        Returns: boolean
+      }
+      email_for_username: { Args: { _username: string }; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "marketing" | "cs"
+      cs_status:
+        | "new"
+        | "called"
+        | "messaged"
+        | "follow_up"
+        | "interested"
+        | "converted"
+        | "closed_won"
+        | "closed_lost"
+      raw_lead_cancel_reason:
+        | "not_a_lead"
+        | "general_post"
+        | "spam"
+        | "duplicate"
+        | "irrelevant"
+        | "number_not_found"
+      raw_lead_status: "new" | "qualified" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +461,27 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "marketing", "cs"],
+      cs_status: [
+        "new",
+        "called",
+        "messaged",
+        "follow_up",
+        "interested",
+        "converted",
+        "closed_won",
+        "closed_lost",
+      ],
+      raw_lead_cancel_reason: [
+        "not_a_lead",
+        "general_post",
+        "spam",
+        "duplicate",
+        "irrelevant",
+        "number_not_found",
+      ],
+      raw_lead_status: ["new", "qualified", "cancelled"],
+    },
   },
 } as const
