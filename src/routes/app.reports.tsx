@@ -20,21 +20,6 @@ function Page() {
   );
 }
 
-function useCount(table: "raw_leads" | "qualified_leads" | "accounts", filter?: (q: ReturnType<typeof supabase.from>) => unknown, key?: string) {
-  return useQuery({
-    queryKey: ["count", table, key],
-    queryFn: async () => {
-      let q = supabase.from(table).select("id", { count: "exact", head: true });
-      if (filter) q = filter(q as never) as never;
-      const { count, error } = await q;
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-}
-
-function Page2() { return null; }
-
 function Inner() {
   const raw = useQuery({
     queryKey: ["report-raw"],
@@ -56,7 +41,14 @@ function Inner() {
       return c;
     },
   });
-  const accountsCount = useCount("accounts");
+  const accountsCount = useQuery({
+    queryKey: ["report-accounts"],
+    queryFn: async () => {
+      const { count, error } = await supabase.from("accounts").select("id", { count: "exact", head: true });
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
 
   return (
     <div className="space-y-8">

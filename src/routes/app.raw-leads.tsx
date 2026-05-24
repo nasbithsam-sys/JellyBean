@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import type { Tables } from "@/integrations/supabase/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -49,7 +50,7 @@ function Inner() {
       return data ?? [];
     },
   });
-  const [qualify, setQualify] = useState<null | (typeof leads.data extends (infer T)[] | undefined ? T : never)>(null);
+  const [qualify, setQualify] = useState<Tables<"raw_leads"> | null>(null);
   const [cancelling, setCancelling] = useState<null | string>(null);
 
   return (
