@@ -1,28 +1,14 @@
-import { Fragment } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
-import L from "leaflet";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import type { PlacedAccount } from "@/components/leaflet-map";
 
 export const Route = createFileRoute("/app/map")({ component: Page });
-
-// Fix default marker icon paths (leaflet's default uses build-time URLs)
-const DefaultIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
-L.Marker.prototype.options.icon = DefaultIcon;
 
 type Account = {
   id: string; name: string; area: string | null;
@@ -44,12 +30,18 @@ function Page() {
   );
 }
 
+type LeafletMapComp = ComponentType<{ placed: PlacedAccount[]; visuals: boolean }>;
+
 function Inner() {
   const [visuals, setVisuals] = useState(false);
+  const [LeafletMap, setLeafletMap] = useState<LeafletMapComp | null>(null);
+
   useEffect(() => {
     const v = localStorage.getItem("map.visuals");
     if (v === "1") setVisuals(true);
+    import("@/components/leaflet-map").then((m) => setLeafletMap(() => m.default));
   }, []);
+
   const toggle = (next: boolean) => {
     setVisuals(next);
     localStorage.setItem("map.visuals", next ? "1" : "0");
@@ -66,11 +58,12 @@ function Inner() {
     },
   });
 
-  const placed = useMemo(
-    () => (accounts.data ?? []).filter(
-      (a): a is Account & { latitude: number; longitude: number } =>
-        a.latitude !== null && a.longitude !== null,
-    ),
+  const placed = useMemo<PlacedAccount[]>(
+    () =>
+      (accounts.data ?? []).filter(
+        (a): a is Account & { latitude: number; longitude: number } =>
+          a.latitude !== null && a.longitude !== null,
+      ),
     [accounts.data],
   );
 
@@ -82,11 +75,6 @@ function Inner() {
     });
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
   }, [accounts.data]);
-
-  const isActive = (a: { last_opened_at: string | null }) => {
-    if (!a.last_opened_at) return false;
-    return (Date.now() - new Date(a.last_opened_at).getTime()) < 1000 * 60 * 60 * 24 * 14;
-  };
 
   return (
     <div className="grid lg:grid-cols-3 gap-4">
@@ -105,53 +93,11 @@ function Inner() {
           </div>
         </div>
 
-        {accounts.isLoading ? (
+        {accounts.isLoading || !LeafletMap ? (
           <div className="h-[480px] grid place-items-center text-muted-foreground">Loading…</div>
         ) : (
           <div className="aspect-[16/10] w-full rounded-lg overflow-hidden border border-border bg-surface">
-            <MapContainer
-              center={[39.5, -98.35]}
-              zoom={4}
-              minZoom={3}
-              scrollWheelZoom
-              style={{ height: "100%", width: "100%" }}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {placed.map((a) => {
-                const active = isActive(a);
-                return (
-                  <Fragment key={a.id}>
-
-                    {visuals && (
-                      <Circle
-                        center={[a.latitude, a.longitude]}
-                        radius={active ? 60000 : 30000}
-                        pathOptions={{
-                          color: active ? "#22c55e" : "#94a3b8",
-                          fillOpacity: 0.15,
-                          weight: 1,
-                        }}
-                      />
-                    )}
-                    <Marker position={[a.latitude, a.longitude]}>
-                      <Popup>
-                        <div className="text-[12.5px]">
-                          <div className="font-semibold">{a.name}</div>
-                          <div className="text-muted-foreground">{a.area ?? "—"}</div>
-                          <div className="mt-1 text-[11px]">
-                            {active ? "Active" : "Idle"}
-                          </div>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  </Fragment>
-
-                );
-              })}
-            </MapContainer>
+            <LeafletMap placed={placed} visuals={visuals} />
           </div>
         )}
         <p className="text-[11.5px] text-muted-foreground mt-3">
