@@ -102,14 +102,13 @@ function Inner() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (profiles.data ?? []).filter((p) => {
-      if (groupFilter !== "__all__" && (p.group_name ?? "") !== groupFilter) return false;
       if (!q) return true;
       return (
         p.profile_name.toLowerCase().includes(q) ||
         (p.platform ?? "").toLowerCase().includes(q)
       );
     });
-  }, [profiles.data, query, groupFilter]);
+  }, [profiles.data, query]);
 
   async function sync() {
     setSyncing(true);
