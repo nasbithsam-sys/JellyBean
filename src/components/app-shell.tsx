@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Table2, Building2, Map, BarChart3, LineChart,
-  ScrollText, Users, Settings, Headphones, LogOut, Command,
+  ScrollText, Settings, Headphones, LogOut, Command,
 } from "lucide-react";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -17,19 +17,16 @@ const ADMIN: Item[] = [
   { to: "/app/analytics", label: "Analytics", icon: LineChart, shortcut: "N" },
   { to: "/app/reports", label: "Reports", icon: BarChart3, shortcut: "R" },
   { to: "/app/logs", label: "Activity", icon: ScrollText, shortcut: "G" },
-  { to: "/app/users", label: "Users", icon: Users, shortcut: "U" },
   { to: "/app/settings", label: "Settings", icon: Settings, shortcut: "S" },
 ];
 
 const MARKETING: Item[] = [
-  { to: "/app", label: "Dashboard", icon: LayoutDashboard },
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2 },
   { to: "/app/accounts", label: "Accounts", icon: Building2 },
 ];
 
 const CS: Item[] = [
-  { to: "/app", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/app/cs-leads", label: "Pipeline", icon: Headphones },
+  { to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard },
 ];
 
 function itemsForRole(role: AppRole | null): Item[] {
@@ -53,7 +50,6 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <aside className="w-[244px] shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col">
-        {/* Brand */}
         <div className="px-4 pt-5 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-md bg-gradient-to-br from-primary to-primary-glow grid place-items-center shadow-md ring-1 ring-primary/30">
@@ -66,7 +62,6 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           </div>
         </div>
 
-        {/* Search/cmd hint */}
         <div className="px-3 pb-3">
           <div className="flex items-center gap-2 px-2.5 h-8 rounded-md bg-sidebar-accent/60 border border-sidebar-border text-[12px] text-sidebar-foreground/65 hover:bg-sidebar-accent transition-colors cursor-default select-none">
             <Command className="h-3.5 w-3.5" />
@@ -114,7 +109,6 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           })}
         </nav>
 
-        {/* User card */}
         <div className="border-t border-sidebar-border p-2.5">
           <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-sidebar-accent/50 transition-colors">
             <div className="h-8 w-8 rounded-md bg-gradient-to-br from-accent to-secondary grid place-items-center text-[12px] font-semibold ring-1 ring-sidebar-border">

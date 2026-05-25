@@ -30,9 +30,13 @@ const STATUSES = Constants.public.Enums.cs_status;
 
 function Page() {
   const auth = useAuth();
+  const isCs = auth.primaryRole === "cs";
   return (
     <div>
-      <PageHeader title="CS Pipeline" description="Your inbox of qualified customer leads — call, follow-up, convert." />
+      <PageHeader
+        title={isCs ? "Dashboard" : "CS Pipeline"}
+        description="Qualified leads handed off to CS — reach out, log the outcome, and add a comment."
+      />
       <PageBody className="!pt-5">
         <RoleGate allow={["admin", "cs", "marketing"]} current={auth.primaryRole}>
           <Inner />
@@ -42,15 +46,31 @@ function Page() {
   );
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  new: "New (to contact)",
+  called: "Called",
+  messaged: "Messaged",
+  follow_up: "Follow-up",
+  interested: "Interested",
+  not_interested: "Not interested",
+  already_done: "Already done",
+  no_response: "No response",
+  converted: "Converted",
+  closed_won: "Closed (done)",
+  closed_lost: "Closed (lost)",
+};
+
 const GROUPS: Record<string, { statuses: string[]; tone: string }> = {
-  Active: { statuses: ["new", "called", "messaged", "follow_up", "interested"], tone: "bg-primary" },
-  Won: { statuses: ["converted", "closed_won"], tone: "bg-success" },
-  Lost: { statuses: ["closed_lost"], tone: "bg-destructive" },
+  "To contact": { statuses: ["new"], tone: "bg-primary" },
+  "Reached out": { statuses: ["called", "messaged", "follow_up", "no_response"], tone: "bg-warning" },
+  Interested: { statuses: ["interested"], tone: "bg-primary-glow" },
+  Done: { statuses: ["converted", "closed_won", "already_done"], tone: "bg-success" },
+  Dropped: { statuses: ["not_interested", "closed_lost"], tone: "bg-destructive" },
 };
 
 function Inner() {
   const qc = useQueryClient();
-  const [group, setGroup] = useState<keyof typeof GROUPS>("Active");
+  const [group, setGroup] = useState<keyof typeof GROUPS>("To contact");
   const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<Lead | null>(null);
 
@@ -178,14 +198,16 @@ function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
 
 function StatusBadge({ status }: { status: string }) {
   const tone =
-    status === "converted" || status === "closed_won" ? "bg-success/15 text-success border-success/30"
-      : status === "closed_lost" ? "bg-destructive/15 text-destructive border-destructive/30"
-        : status === "follow_up" || status === "interested" ? "bg-primary/15 text-primary border-primary/30"
-          : status === "called" || status === "messaged" ? "bg-warning/15 text-warning border-warning/30"
-            : "bg-muted text-muted-foreground border-border";
+    status === "converted" || status === "closed_won" || status === "already_done" ? "bg-success/15 text-success border-success/30"
+      : status === "closed_lost" || status === "not_interested" ? "bg-destructive/15 text-destructive border-destructive/30"
+        : status === "interested" ? "bg-primary/15 text-primary border-primary/30"
+          : status === "follow_up" ? "bg-primary-glow/15 text-primary-glow border-primary-glow/30"
+            : status === "called" || status === "messaged" ? "bg-warning/15 text-warning border-warning/30"
+              : status === "no_response" ? "bg-muted text-muted-foreground border-border"
+                : "bg-muted text-muted-foreground border-border";
   return (
-    <span className={cn("text-[10.5px] px-2 py-0.5 rounded-full capitalize border font-medium whitespace-nowrap", tone)}>
-      {status.replace(/_/g, " ")}
+    <span className={cn("text-[10.5px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap", tone)}>
+      {STATUS_LABEL[status] ?? status.replace(/_/g, " ")}
     </span>
   );
 }
@@ -252,7 +274,7 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>)}
+                {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABEL[s] ?? s.replace(/_/g, " ")}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -261,8 +283,14 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
             <Input type="datetime-local" value={followup} onChange={(e) => setFollowup(e.target.value)} />
           </div>
           <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Add a note</Label>
-            <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Conversation summary, next steps…" />
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Comment</Label>
+            <Textarea
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Write what happened in your own words — e.g. customer is interested, already done by someone else, asked to message later…"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1.5">Free-text comment. Appended to the history when you save.</p>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose} disabled={busy}>Close</Button>
