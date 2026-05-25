@@ -123,7 +123,8 @@ function Inner() {
               {placed.map((a) => {
                 const active = isActive(a);
                 return (
-                  <div key={a.id}>
+                  <Fragment key={a.id}>
+
                     {visuals && (
                       <Circle
                         center={[a.latitude, a.longitude]}
