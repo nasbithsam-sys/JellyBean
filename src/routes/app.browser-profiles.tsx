@@ -8,14 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, RefreshCw, Download, Rocket, Link2, Trash2, Search, Globe } from "lucide-react";
+import { Loader2, RefreshCw, Download, Rocket, Link2, Trash2, Search, Globe, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
   launchIncognitonProfile,
-  fetchAllIncognitonProfiles,
+  fetchIncognitonProfilesByGroup,
+  pingIncogniton,
   INCOG_UNREACHABLE,
 } from "@/lib/incogniton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/app/browser-profiles")({ component: Page });
 
@@ -53,10 +55,13 @@ function Inner() {
   const qc = useQueryClient();
   const auth = useAuth();
   const [query, setQuery] = useState("");
-  const [groupFilter, setGroupFilter] = useState("__all__");
+  const [groupName, setGroupName] = useState("testing");
   const [syncing, setSyncing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [linkOpenFor, setLinkOpenFor] = useState<Profile | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<null | "ok" | "fail">(null);
 
   const profiles = useQuery({
     queryKey: ["incog_profiles"],
@@ -97,25 +102,26 @@ function Inner() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (profiles.data ?? []).filter((p) => {
-      if (groupFilter !== "__all__" && (p.group_name ?? "") !== groupFilter) return false;
       if (!q) return true;
       return (
         p.profile_name.toLowerCase().includes(q) ||
         (p.platform ?? "").toLowerCase().includes(q)
       );
     });
-  }, [profiles.data, query, groupFilter]);
+  }, [profiles.data, query]);
 
   async function sync() {
+    const g = groupName.trim();
+    if (!g) return toast.error("Enter a group name first");
     setSyncing(true);
     try {
-      const list = await fetchAllIncognitonProfiles();
+      const list = await fetchIncognitonProfilesByGroup(g);
       let upserted = 0;
       for (const p of list) {
         const id = p.profile_browser_id || p.profileID || p.id;
         if (!id) continue;
         const name = p.profileName || p.profile_name || p.name || `Profile ${String(id).slice(0, 6)}`;
-        const group = p.profileGroup || p.profile_group || p.group || null;
+        const group = p.profileGroup || p.profile_group || p.group || g;
         const { error } = await supabase
           .from("incogniton_profiles")
           .upsert(
@@ -130,14 +136,27 @@ function Inner() {
           );
         if (!error) upserted++;
       }
-      toast.success(`Synced ${upserted} profile${upserted === 1 ? "" : "s"} from Incogniton`);
+      if (upserted === 0) toast.warning(`No profiles found in group "${g}"`);
+      else toast.success(`Synced ${upserted} profile${upserted === 1 ? "" : "s"} from group "${g}"`);
       qc.invalidateQueries({ queryKey: ["incog_profiles"] });
     } catch (e) {
       const msg = (e as Error).message;
-      toast.error(msg === INCOG_UNREACHABLE ? INCOG_UNREACHABLE : `Sync failed: ${msg}`);
+      if (msg === INCOG_UNREACHABLE) {
+        toast.error(msg, { action: { label: "Fix it", onClick: () => setHelpOpen(true) } });
+      } else {
+        toast.error(`Sync failed: ${msg}`);
+      }
     } finally {
       setSyncing(false);
     }
+  }
+
+  async function testConnection() {
+    setTesting(true);
+    setTestResult(null);
+    const ok = await pingIncogniton();
+    setTestResult(ok ? "ok" : "fail");
+    setTesting(false);
   }
 
   async function launch(p: Profile) {
@@ -179,14 +198,27 @@ function Inner() {
             className="h-9 pl-9"
           />
         </div>
-        <Select value={groupFilter} onValueChange={setGroupFilter}>
-          <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="Group" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All groups</SelectItem>
-            {groups.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1.5">
+          <Label htmlFor="group-name" className="text-[12px] text-muted-foreground whitespace-nowrap">Group</Label>
+          <Input
+            id="group-name"
+            value={groupName}
+            onChange={(e) => setGroupName(e.target.value)}
+            placeholder="testing"
+            className="h-9 w-[140px]"
+          />
+        </div>
         <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" onClick={testConnection} disabled={testing}>
+            {testing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              : testResult === "ok" ? <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-success" />
+              : testResult === "fail" ? <XCircle className="h-3.5 w-3.5 mr-1.5 text-destructive" />
+              : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+            Test Connection
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => setHelpOpen(true)} title="Fix connection">
+            <HelpCircle className="h-4 w-4" />
+          </Button>
           <Button variant="outline" onClick={() => setExportOpen(true)}>
             <Download className="h-3.5 w-3.5 mr-1.5" /> Export Group
           </Button>
@@ -196,6 +228,13 @@ function Inner() {
           </Button>
         </div>
       </div>
+      {testResult && (
+        <div className={cn("text-[12px] px-2", testResult === "ok" ? "text-success" : "text-destructive")}>
+          {testResult === "ok"
+            ? "✅ Connected to Incogniton"
+            : <>❌ Connection failed — <button onClick={() => setHelpOpen(true)} className="underline">see fix instructions</button></>}
+        </div>
+      )}
 
       <div className="bg-card border rounded-lg overflow-hidden">
         <table className="crm-table">
@@ -266,6 +305,34 @@ function Inner() {
           }}
         />
       )}
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Allow Incogniton connection</DialogTitle>
+            <DialogDescription>
+              Your browser blocks HTTP requests from this HTTPS page to <code className="font-mono text-[12px]">http://localhost:35000</code> (mixed-content policy).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-[13px]">
+            <div>
+              <div className="font-medium mb-1">Option A — Chrome flag (permanent)</div>
+              <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                <li>Open <code className="font-mono">chrome://flags</code></li>
+                <li>Search "Insecure origins treated as secure"</li>
+                <li>Add this site's URL (e.g. <code className="font-mono">{typeof window !== "undefined" ? window.location.origin : ""}</code>)</li>
+                <li>Relaunch Chrome</li>
+              </ol>
+            </div>
+            <div>
+              <div className="font-medium mb-1">Option B — Per-site (quick)</div>
+              <p className="text-muted-foreground">
+                Click the shield / lock icon in the Chrome address bar → "Site settings" → set <em>Insecure content</em> to <strong>Allow</strong>, then reload.
+              </p>
+            </div>
+            <p className="text-[12px] text-muted-foreground">After applying, click <strong>Test Connection</strong> to confirm.</p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

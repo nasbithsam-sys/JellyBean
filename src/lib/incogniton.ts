@@ -1,8 +1,7 @@
 // Incogniton Anti-Detect Browser local REST API helpers.
-// All calls go to http://localhost:35000 on the user's PC. No auth required.
-
 const BASE = "http://localhost:35000";
-export const INCOG_UNREACHABLE = "Incogniton is not running. Please open the Incogniton app on this PC.";
+export const INCOG_UNREACHABLE =
+  "Cannot connect to Incogniton. If the app is already open, your browser is blocking the connection. Click here to fix it.";
 
 function wrapFetch(p: Promise<Response>): Promise<Response> {
   return p.catch((e) => {
@@ -18,20 +17,43 @@ export async function launchIncognitonProfile(profileId: string): Promise<void> 
   if (!res.ok) throw new Error(`Failed to launch profile (HTTP ${res.status})`);
 }
 
-// Returns array of profile objects from Incogniton. Shape varies — caller normalizes.
-export async function fetchAllIncognitonProfiles(): Promise<Array<Record<string, unknown> & {
+export async function pingIncogniton(): Promise<boolean> {
+  try {
+    const res = await wrapFetch(fetch(`${BASE}/api/v1/profile/list`, { method: "GET" }));
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchIncognitonProfilesByGroup(groupName: string): Promise<Array<Record<string, unknown> & {
   profileName?: string; profile_name?: string; name?: string;
   profileGroup?: string; profile_group?: string; group?: string;
   profile_browser_id?: string; profileID?: string; id?: string;
   platform?: string;
 }>> {
-  const res = await wrapFetch(fetch(`${BASE}/api/v1/profile/list`, { method: "GET" }));
-  if (!res.ok) throw new Error(`Failed to fetch profiles (HTTP ${res.status})`);
-  const json = await res.json();
-  // Common shapes: { profileData: [...] }, { data: [...] }, or [...] directly.
-  if (Array.isArray(json)) return json;
-  if (Array.isArray(json?.profileData)) return json.profileData;
-  if (Array.isArray(json?.data)) return json.data;
-  if (Array.isArray(json?.profiles)) return json.profiles;
-  return [];
+  // Try group-filtered endpoint first, fall back to full list and filter client-side.
+  let json: unknown;
+  try {
+    const res = await wrapFetch(
+      fetch(`${BASE}/api/v1/profile/list?groupName=${encodeURIComponent(groupName)}`, { method: "GET" }),
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    json = await res.json();
+  } catch {
+    const res = await wrapFetch(fetch(`${BASE}/api/v1/profile/list`, { method: "GET" }));
+    if (!res.ok) throw new Error(`Failed to fetch profiles (HTTP ${res.status})`);
+    json = await res.json();
+  }
+  const arr: any[] = Array.isArray(json)
+    ? json
+    : Array.isArray((json as any)?.profileData) ? (json as any).profileData
+    : Array.isArray((json as any)?.data) ? (json as any).data
+    : Array.isArray((json as any)?.profiles) ? (json as any).profiles
+    : [];
+  const target = groupName.trim().toLowerCase();
+  return arr.filter((p) => {
+    const g = (p.profileGroup || p.profile_group || p.group || "").toString().toLowerCase();
+    return g === target;
+  });
 }
