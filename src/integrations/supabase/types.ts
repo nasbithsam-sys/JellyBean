@@ -119,6 +119,50 @@ export type Database = {
         }
         Relationships: []
       }
+      incogniton_profiles: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          group_name: string | null
+          id: string
+          incogniton_profile_id: string
+          last_launched_at: string | null
+          linked_lead_id: string | null
+          platform: string | null
+          profile_name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          group_name?: string | null
+          id?: string
+          incogniton_profile_id: string
+          last_launched_at?: string | null
+          linked_lead_id?: string | null
+          platform?: string | null
+          profile_name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          group_name?: string | null
+          id?: string
+          incogniton_profile_id?: string
+          last_launched_at?: string | null
+          linked_lead_id?: string | null
+          platform?: string | null
+          profile_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incogniton_profiles_linked_lead_id_fkey"
+            columns: ["linked_lead_id"]
+            isOneToOne: false
+            referencedRelation: "qualified_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
