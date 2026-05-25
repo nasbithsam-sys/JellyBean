@@ -70,7 +70,7 @@ const GROUPS: Record<string, { statuses: string[]; tone: string }> = {
 
 function Inner() {
   const qc = useQueryClient();
-  const [group, setGroup] = useState<keyof typeof GROUPS>("Active");
+  const [group, setGroup] = useState<keyof typeof GROUPS>("To contact");
   const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<Lead | null>(null);
 
