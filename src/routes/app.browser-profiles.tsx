@@ -111,15 +111,17 @@ function Inner() {
   }, [profiles.data, query]);
 
   async function sync() {
+    const g = groupName.trim();
+    if (!g) return toast.error("Enter a group name first");
     setSyncing(true);
     try {
-      const list = await fetchAllIncognitonProfiles();
+      const list = await fetchIncognitonProfilesByGroup(g);
       let upserted = 0;
       for (const p of list) {
         const id = p.profile_browser_id || p.profileID || p.id;
         if (!id) continue;
         const name = p.profileName || p.profile_name || p.name || `Profile ${String(id).slice(0, 6)}`;
-        const group = p.profileGroup || p.profile_group || p.group || null;
+        const group = p.profileGroup || p.profile_group || p.group || g;
         const { error } = await supabase
           .from("incogniton_profiles")
           .upsert(
@@ -134,14 +136,27 @@ function Inner() {
           );
         if (!error) upserted++;
       }
-      toast.success(`Synced ${upserted} profile${upserted === 1 ? "" : "s"} from Incogniton`);
+      if (upserted === 0) toast.warning(`No profiles found in group "${g}"`);
+      else toast.success(`Synced ${upserted} profile${upserted === 1 ? "" : "s"} from group "${g}"`);
       qc.invalidateQueries({ queryKey: ["incog_profiles"] });
     } catch (e) {
       const msg = (e as Error).message;
-      toast.error(msg === INCOG_UNREACHABLE ? INCOG_UNREACHABLE : `Sync failed: ${msg}`);
+      if (msg === INCOG_UNREACHABLE) {
+        toast.error(msg, { action: { label: "Fix it", onClick: () => setHelpOpen(true) } });
+      } else {
+        toast.error(`Sync failed: ${msg}`);
+      }
     } finally {
       setSyncing(false);
     }
+  }
+
+  async function testConnection() {
+    setTesting(true);
+    setTestResult(null);
+    const ok = await pingIncogniton();
+    setTestResult(ok ? "ok" : "fail");
+    setTesting(false);
   }
 
   async function launch(p: Profile) {
