@@ -30,9 +30,13 @@ const STATUSES = Constants.public.Enums.cs_status;
 
 function Page() {
   const auth = useAuth();
+  const isCs = auth.primaryRole === "cs";
   return (
     <div>
-      <PageHeader title="CS Pipeline" description="Your inbox of qualified customer leads — call, follow-up, convert." />
+      <PageHeader
+        title={isCs ? "Dashboard" : "CS Pipeline"}
+        description="Qualified leads handed off to CS — reach out, log the outcome, and add a comment."
+      />
       <PageBody className="!pt-5">
         <RoleGate allow={["admin", "cs", "marketing"]} current={auth.primaryRole}>
           <Inner />
@@ -42,10 +46,26 @@ function Page() {
   );
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  new: "New (to contact)",
+  called: "Called",
+  messaged: "Messaged",
+  follow_up: "Follow-up",
+  interested: "Interested",
+  not_interested: "Not interested",
+  already_done: "Already done",
+  no_response: "No response",
+  converted: "Converted",
+  closed_won: "Closed (done)",
+  closed_lost: "Closed (lost)",
+};
+
 const GROUPS: Record<string, { statuses: string[]; tone: string }> = {
-  Active: { statuses: ["new", "called", "messaged", "follow_up", "interested"], tone: "bg-primary" },
-  Won: { statuses: ["converted", "closed_won"], tone: "bg-success" },
-  Lost: { statuses: ["closed_lost"], tone: "bg-destructive" },
+  "To contact": { statuses: ["new"], tone: "bg-primary" },
+  "Reached out": { statuses: ["called", "messaged", "follow_up", "no_response"], tone: "bg-warning" },
+  Interested: { statuses: ["interested"], tone: "bg-primary-glow" },
+  Done: { statuses: ["converted", "closed_won", "already_done"], tone: "bg-success" },
+  Dropped: { statuses: ["not_interested", "closed_lost"], tone: "bg-destructive" },
 };
 
 function Inner() {
