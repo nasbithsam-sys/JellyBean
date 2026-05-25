@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, ExternalLink, Phone, MapPin, MessageSquarePlus, ArrowRight, Search } from "lucide-react";
+import { Loader2, ExternalLink, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Constants } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
+import { launchIncognitonProfile, INCOG_UNREACHABLE } from "@/lib/incogniton";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
