@@ -20,6 +20,7 @@ import { Route as AppRawLeadsRouteImport } from './routes/app.raw-leads'
 import { Route as AppMapRouteImport } from './routes/app.map'
 import { Route as AppLogsRouteImport } from './routes/app.logs'
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
+import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
 import { Route as AppAccountsRouteImport } from './routes/app.accounts'
 
@@ -78,6 +79,11 @@ const AppCsLeadsRoute = AppCsLeadsRouteImport.update({
   path: '/cs-leads',
   getParentRoute: () => AppRoute,
 } as any)
+const AppBrowserProfilesRoute = AppBrowserProfilesRouteImport.update({
+  id: '/browser-profiles',
+  path: '/browser-profiles',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/mfa-setup': typeof MfaSetupRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/analytics': typeof AppAnalyticsRoute
+  '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/mfa-setup': typeof MfaSetupRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/analytics': typeof AppAnalyticsRoute
+  '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
@@ -126,6 +134,7 @@ export interface FileRoutesById {
   '/mfa-setup': typeof MfaSetupRoute
   '/app/accounts': typeof AppAccountsRoute
   '/app/analytics': typeof AppAnalyticsRoute
+  '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
@@ -143,6 +152,7 @@ export interface FileRouteTypes {
     | '/mfa-setup'
     | '/app/accounts'
     | '/app/analytics'
+    | '/app/browser-profiles'
     | '/app/cs-leads'
     | '/app/logs'
     | '/app/map'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/mfa-setup'
     | '/app/accounts'
     | '/app/analytics'
+    | '/app/browser-profiles'
     | '/app/cs-leads'
     | '/app/logs'
     | '/app/map'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/mfa-setup'
     | '/app/accounts'
     | '/app/analytics'
+    | '/app/browser-profiles'
     | '/app/cs-leads'
     | '/app/logs'
     | '/app/map'
@@ -267,6 +279,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCsLeadsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/browser-profiles': {
+      id: '/app/browser-profiles'
+      path: '/browser-profiles'
+      fullPath: '/app/browser-profiles'
+      preLoaderRoute: typeof AppBrowserProfilesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/analytics': {
       id: '/app/analytics'
       path: '/analytics'
@@ -287,6 +306,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAccountsRoute: typeof AppAccountsRoute
   AppAnalyticsRoute: typeof AppAnalyticsRoute
+  AppBrowserProfilesRoute: typeof AppBrowserProfilesRoute
   AppCsLeadsRoute: typeof AppCsLeadsRoute
   AppLogsRoute: typeof AppLogsRoute
   AppMapRoute: typeof AppMapRoute
@@ -299,6 +319,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAccountsRoute: AppAccountsRoute,
   AppAnalyticsRoute: AppAnalyticsRoute,
+  AppBrowserProfilesRoute: AppBrowserProfilesRoute,
   AppCsLeadsRoute: AppCsLeadsRoute,
   AppLogsRoute: AppLogsRoute,
   AppMapRoute: AppMapRoute,
@@ -319,3 +340,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
