@@ -16,39 +16,51 @@ export type Database = {
     Tables: {
       accounts: {
         Row: {
-          area: string
+          area: string | null
           created_at: string
           created_by: string | null
           id: string
+          imported_at: string | null
+          incogniton_profile_id: string | null
           last_opened_at: string | null
-          latitude: number
-          longitude: number
+          latitude: number | null
+          longitude: number | null
           name: string
           notes: string | null
+          profile_group: string | null
+          status: string
           updated_at: string
         }
         Insert: {
-          area: string
+          area?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          imported_at?: string | null
+          incogniton_profile_id?: string | null
           last_opened_at?: string | null
-          latitude: number
-          longitude: number
+          latitude?: number | null
+          longitude?: number | null
           name: string
           notes?: string | null
+          profile_group?: string | null
+          status?: string
           updated_at?: string
         }
         Update: {
-          area?: string
+          area?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          imported_at?: string | null
+          incogniton_profile_id?: string | null
           last_opened_at?: string | null
-          latitude?: number
-          longitude?: number
+          latitude?: number | null
+          longitude?: number | null
           name?: string
           notes?: string | null
+          profile_group?: string | null
+          status?: string
           updated_at?: string
         }
         Relationships: []
@@ -327,6 +339,9 @@ export type Database = {
         | "converted"
         | "closed_won"
         | "closed_lost"
+        | "not_interested"
+        | "already_done"
+        | "no_response"
       raw_lead_cancel_reason:
         | "not_a_lead"
         | "general_post"
@@ -472,6 +487,9 @@ export const Constants = {
         "converted",
         "closed_won",
         "closed_lost",
+        "not_interested",
+        "already_done",
+        "no_response",
       ],
       raw_lead_cancel_reason: [
         "not_a_lead",
