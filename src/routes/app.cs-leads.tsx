@@ -229,7 +229,38 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
   const [note, setNote] = useState("");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
   const notes = useMemo(() => Array.isArray(lead.cs_notes) ? lead.cs_notes : [], [lead.cs_notes]);
+
+  const linkedProfile = useQuery({
+    queryKey: ["incog_profile_for_lead", lead.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("incogniton_profiles")
+        .select("id, incogniton_profile_id, profile_name")
+        .eq("linked_lead_id", lead.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  async function launchProfile() {
+    if (!linkedProfile.data) {
+      setLinkOpen(true);
+      return;
+    }
+    try {
+      await launchIncognitonProfile(linkedProfile.data.incogniton_profile_id);
+      await supabase
+        .from("incogniton_profiles")
+        .update({ last_launched_at: new Date().toISOString() })
+        .eq("id", linkedProfile.data.id);
+      toast.success("Profile opened in Incogniton");
+    } catch (e) {
+      toast.error((e as Error).message || INCOG_UNREACHABLE);
+    }
+  }
 
   async function save() {
     setBusy(true);
