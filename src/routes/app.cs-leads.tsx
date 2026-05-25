@@ -198,14 +198,16 @@ function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
 
 function StatusBadge({ status }: { status: string }) {
   const tone =
-    status === "converted" || status === "closed_won" ? "bg-success/15 text-success border-success/30"
-      : status === "closed_lost" ? "bg-destructive/15 text-destructive border-destructive/30"
-        : status === "follow_up" || status === "interested" ? "bg-primary/15 text-primary border-primary/30"
-          : status === "called" || status === "messaged" ? "bg-warning/15 text-warning border-warning/30"
-            : "bg-muted text-muted-foreground border-border";
+    status === "converted" || status === "closed_won" || status === "already_done" ? "bg-success/15 text-success border-success/30"
+      : status === "closed_lost" || status === "not_interested" ? "bg-destructive/15 text-destructive border-destructive/30"
+        : status === "interested" ? "bg-primary/15 text-primary border-primary/30"
+          : status === "follow_up" ? "bg-primary-glow/15 text-primary-glow border-primary-glow/30"
+            : status === "called" || status === "messaged" ? "bg-warning/15 text-warning border-warning/30"
+              : status === "no_response" ? "bg-muted text-muted-foreground border-border"
+                : "bg-muted text-muted-foreground border-border";
   return (
-    <span className={cn("text-[10.5px] px-2 py-0.5 rounded-full capitalize border font-medium whitespace-nowrap", tone)}>
-      {status.replace(/_/g, " ")}
+    <span className={cn("text-[10.5px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap", tone)}>
+      {STATUS_LABEL[status] ?? status.replace(/_/g, " ")}
     </span>
   );
 }
