@@ -198,14 +198,27 @@ function Inner() {
             className="h-9 pl-9"
           />
         </div>
-        <Select value={groupFilter} onValueChange={setGroupFilter}>
-          <SelectTrigger className="h-9 w-[180px]"><SelectValue placeholder="Group" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All groups</SelectItem>
-            {groups.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-1.5">
+          <Label htmlFor="group-name" className="text-[12px] text-muted-foreground whitespace-nowrap">Group</Label>
+          <Input
+            id="group-name"
+            value={groupName}
+            onChange={(e) => setGroupName(e.target.value)}
+            placeholder="testing"
+            className="h-9 w-[140px]"
+          />
+        </div>
         <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" onClick={testConnection} disabled={testing}>
+            {testing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              : testResult === "ok" ? <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-success" />
+              : testResult === "fail" ? <XCircle className="h-3.5 w-3.5 mr-1.5 text-destructive" />
+              : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+            Test Connection
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => setHelpOpen(true)} title="Fix connection">
+            <HelpCircle className="h-4 w-4" />
+          </Button>
           <Button variant="outline" onClick={() => setExportOpen(true)}>
             <Download className="h-3.5 w-3.5 mr-1.5" /> Export Group
           </Button>
@@ -215,6 +228,13 @@ function Inner() {
           </Button>
         </div>
       </div>
+      {testResult && (
+        <div className={cn("text-[12px] px-2", testResult === "ok" ? "text-success" : "text-destructive")}>
+          {testResult === "ok"
+            ? "✅ Connected to Incogniton"
+            : <>❌ Connection failed — <button onClick={() => setHelpOpen(true)} className="underline">see fix instructions</button></>}
+        </div>
+      )}
 
       <div className="bg-card border rounded-lg overflow-hidden">
         <table className="crm-table">
