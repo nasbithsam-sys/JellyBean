@@ -310,6 +310,16 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
           </a>
         )}
 
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={launchProfile}>
+            <Globe className="h-3.5 w-3.5 mr-1.5" />
+            {linkedProfile.data ? "Launch Incogniton profile" : "Link & launch Incogniton profile"}
+          </Button>
+          {linkedProfile.data && (
+            <span className="text-[11px] text-muted-foreground">→ {linkedProfile.data.profile_name}</span>
+          )}
+        </div>
+
         <div className="border-t border-border pt-5 space-y-4">
           <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Status</Label>
