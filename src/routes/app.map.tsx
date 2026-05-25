@@ -147,7 +147,8 @@ function Inner() {
                         </div>
                       </Popup>
                     </Marker>
-                  </div>
+                  </Fragment>
+
                 );
               })}
             </MapContainer>
