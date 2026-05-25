@@ -305,6 +305,34 @@ function Inner() {
           }}
         />
       )}
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Allow Incogniton connection</DialogTitle>
+            <DialogDescription>
+              Your browser blocks HTTP requests from this HTTPS page to <code className="font-mono text-[12px]">http://localhost:35000</code> (mixed-content policy).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-[13px]">
+            <div>
+              <div className="font-medium mb-1">Option A — Chrome flag (permanent)</div>
+              <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                <li>Open <code className="font-mono">chrome://flags</code></li>
+                <li>Search "Insecure origins treated as secure"</li>
+                <li>Add this site's URL (e.g. <code className="font-mono">{typeof window !== "undefined" ? window.location.origin : ""}</code>)</li>
+                <li>Relaunch Chrome</li>
+              </ol>
+            </div>
+            <div>
+              <div className="font-medium mb-1">Option B — Per-site (quick)</div>
+              <p className="text-muted-foreground">
+                Click the shield / lock icon in the Chrome address bar → "Site settings" → set <em>Insecure content</em> to <strong>Allow</strong>, then reload.
+              </p>
+            </div>
+            <p className="text-[12px] text-muted-foreground">After applying, click <strong>Test Connection</strong> to confirm.</p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
