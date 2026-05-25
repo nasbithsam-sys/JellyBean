@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Table2, Building2, Map, BarChart3, LineChart,
-  ScrollText, Settings, Headphones, LogOut, Command,
+  ScrollText, Settings, Headphones, LogOut, Command, Globe,
 } from "lucide-react";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ const ADMIN: Item[] = [
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2, shortcut: "L" },
   { to: "/app/cs-leads", label: "CS Pipeline", icon: Headphones, shortcut: "P" },
   { to: "/app/accounts", label: "Accounts", icon: Building2, shortcut: "A" },
+  { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe, shortcut: "B" },
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/analytics", label: "Analytics", icon: LineChart, shortcut: "N" },
   { to: "/app/reports", label: "Reports", icon: BarChart3, shortcut: "R" },
@@ -23,6 +24,7 @@ const ADMIN: Item[] = [
 const MARKETING: Item[] = [
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2 },
   { to: "/app/accounts", label: "Accounts", icon: Building2 },
+  { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe },
 ];
 
 const CS: Item[] = [

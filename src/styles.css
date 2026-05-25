@@ -2,6 +2,7 @@
 @source "../src";
 @import "tw-animate-css";
 @import url("https://rsms.me/inter/inter.css");
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
 

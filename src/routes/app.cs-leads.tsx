@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, ExternalLink, Phone, MapPin, MessageSquarePlus, ArrowRight, Search } from "lucide-react";
+import { Loader2, ExternalLink, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Constants } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
+import { launchIncognitonProfile, INCOG_UNREACHABLE } from "@/lib/incogniton";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
@@ -125,6 +126,16 @@ function Inner() {
             className="w-full h-9 pl-9 pr-3 rounded-md bg-surface border border-border text-[13px] placeholder:text-muted-foreground/70 focus:outline-none"
           />
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 ml-auto"
+          onClick={() => qc.invalidateQueries({ queryKey: ["cs_leads"] })}
+          disabled={list.isFetching}
+        >
+          {list.isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+          Refresh
+        </Button>
       </div>
 
       {list.isLoading ? (
@@ -218,7 +229,38 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
   const [note, setNote] = useState("");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
   const notes = useMemo(() => Array.isArray(lead.cs_notes) ? lead.cs_notes : [], [lead.cs_notes]);
+
+  const linkedProfile = useQuery({
+    queryKey: ["incog_profile_for_lead", lead.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("incogniton_profiles")
+        .select("id, incogniton_profile_id, profile_name")
+        .eq("linked_lead_id", lead.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  async function launchProfile() {
+    if (!linkedProfile.data) {
+      setLinkOpen(true);
+      return;
+    }
+    try {
+      await launchIncognitonProfile(linkedProfile.data.incogniton_profile_id);
+      await supabase
+        .from("incogniton_profiles")
+        .update({ last_launched_at: new Date().toISOString() })
+        .eq("id", linkedProfile.data.id);
+      toast.success("Profile opened in Incogniton");
+    } catch (e) {
+      toast.error((e as Error).message || INCOG_UNREACHABLE);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -268,6 +310,16 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
           </a>
         )}
 
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={launchProfile}>
+            <Globe className="h-3.5 w-3.5 mr-1.5" />
+            {linkedProfile.data ? "Launch Incogniton profile" : "Link & launch Incogniton profile"}
+          </Button>
+          {linkedProfile.data && (
+            <span className="text-[11px] text-muted-foreground">→ {linkedProfile.data.profile_name}</span>
+          )}
+        </div>
+
         <div className="border-t border-border pt-5 space-y-4">
           <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Status</Label>
@@ -314,6 +366,102 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
           </div>
         )}
       </div>
+      {linkOpen && (
+        <LinkProfileModal
+          leadId={lead.id}
+          onClose={() => setLinkOpen(false)}
+          onLinked={async (profileId) => {
+            setLinkOpen(false);
+            await linkedProfile.refetch();
+            try {
+              await launchIncognitonProfile(profileId);
+              toast.success("Profile opened in Incogniton");
+            } catch (e) {
+              toast.error((e as Error).message || INCOG_UNREACHABLE);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function LinkProfileModal({ leadId, onClose, onLinked }: { leadId: string; onClose: () => void; onLinked: (profileId: string) => void }) {
+  const auth = useAuth();
+  const [profileId, setProfileId] = useState("");
+  const [name, setName] = useState("");
+  const [group, setGroup] = useState("");
+  const [platform, setPlatform] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const groups = useQuery({
+    queryKey: ["incog_groups"],
+    queryFn: async () => {
+      const { data } = await supabase.from("incogniton_profiles").select("group_name");
+      return Array.from(new Set((data ?? []).map((r) => r.group_name).filter((g): g is string => !!g))).sort();
+    },
+  });
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("incogniton_profiles").insert({
+        incogniton_profile_id: profileId.trim(),
+        profile_name: name.trim() || `Profile ${profileId.trim().slice(0, 6)}`,
+        group_name: group.trim() || null,
+        platform: platform.trim() || null,
+        linked_lead_id: leadId,
+        last_launched_at: new Date().toISOString(),
+        created_by: auth.user?.id,
+      });
+      if (error) throw error;
+      onLinked(profileId.trim());
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 grid place-items-center p-4" onClick={onClose}>
+      <form onSubmit={save} className="bg-card w-full max-w-md rounded-lg border p-6 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold">Link Incogniton profile</h2>
+        <p className="text-[12.5px] text-muted-foreground">
+          Find the profile in Incogniton, copy its ID, and link it to this lead. It will be launched right away.
+        </p>
+        <div>
+          <Label className="block mb-1.5">Incogniton Profile ID</Label>
+          <Input value={profileId} onChange={(e) => setProfileId(e.target.value)} required autoFocus className="font-mono text-[12.5px]" />
+        </div>
+        <div>
+          <Label className="block mb-1.5">Profile name (optional)</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Auto-generated if blank" />
+        </div>
+        <div>
+          <Label className="block mb-1.5">Group</Label>
+          <Input
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+            list="incog-group-suggestions"
+            placeholder="Type or pick existing"
+          />
+          <datalist id="incog-group-suggestions">
+            {(groups.data ?? []).map((g) => <option key={g} value={g} />)}
+          </datalist>
+        </div>
+        <div>
+          <Label className="block mb-1.5">Platform</Label>
+          <Input value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="e.g. Facebook, Instagram" />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" disabled={busy || !profileId.trim()}>
+            {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save & launch
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }
