@@ -366,6 +366,102 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
           </div>
         )}
       </div>
+      {linkOpen && (
+        <LinkProfileModal
+          leadId={lead.id}
+          onClose={() => setLinkOpen(false)}
+          onLinked={async (profileId) => {
+            setLinkOpen(false);
+            await linkedProfile.refetch();
+            try {
+              await launchIncognitonProfile(profileId);
+              toast.success("Profile opened in Incogniton");
+            } catch (e) {
+              toast.error((e as Error).message || INCOG_UNREACHABLE);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function LinkProfileModal({ leadId, onClose, onLinked }: { leadId: string; onClose: () => void; onLinked: (profileId: string) => void }) {
+  const auth = useAuth();
+  const [profileId, setProfileId] = useState("");
+  const [name, setName] = useState("");
+  const [group, setGroup] = useState("");
+  const [platform, setPlatform] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const groups = useQuery({
+    queryKey: ["incog_groups"],
+    queryFn: async () => {
+      const { data } = await supabase.from("incogniton_profiles").select("group_name");
+      return Array.from(new Set((data ?? []).map((r) => r.group_name).filter((g): g is string => !!g))).sort();
+    },
+  });
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("incogniton_profiles").insert({
+        incogniton_profile_id: profileId.trim(),
+        profile_name: name.trim() || `Profile ${profileId.trim().slice(0, 6)}`,
+        group_name: group.trim() || null,
+        platform: platform.trim() || null,
+        linked_lead_id: leadId,
+        last_launched_at: new Date().toISOString(),
+        created_by: auth.user?.id,
+      });
+      if (error) throw error;
+      onLinked(profileId.trim());
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 grid place-items-center p-4" onClick={onClose}>
+      <form onSubmit={save} className="bg-card w-full max-w-md rounded-lg border p-6 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold">Link Incogniton profile</h2>
+        <p className="text-[12.5px] text-muted-foreground">
+          Find the profile in Incogniton, copy its ID, and link it to this lead. It will be launched right away.
+        </p>
+        <div>
+          <Label className="block mb-1.5">Incogniton Profile ID</Label>
+          <Input value={profileId} onChange={(e) => setProfileId(e.target.value)} required autoFocus className="font-mono text-[12.5px]" />
+        </div>
+        <div>
+          <Label className="block mb-1.5">Profile name (optional)</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Auto-generated if blank" />
+        </div>
+        <div>
+          <Label className="block mb-1.5">Group</Label>
+          <Input
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+            list="incog-group-suggestions"
+            placeholder="Type or pick existing"
+          />
+          <datalist id="incog-group-suggestions">
+            {(groups.data ?? []).map((g) => <option key={g} value={g} />)}
+          </datalist>
+        </div>
+        <div>
+          <Label className="block mb-1.5">Platform</Label>
+          <Input value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="e.g. Facebook, Instagram" />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" disabled={busy || !profileId.trim()}>
+            {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save & launch
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }
