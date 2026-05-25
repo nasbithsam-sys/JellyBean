@@ -1,98 +1,71 @@
-## Scope
+# Plan
 
-Multiple changes across role-based navigation, Map page, Accounts page (Incogniton import), and reframing the CRM as a lead-routing (not closing) tool.
+## 1. Manual refresh on Raw Leads & CS Leads
+- Remove any auto-polling / realtime subscriptions on `app.raw-leads.tsx` and `app.cs-leads.tsx`.
+- Add a visible **Refresh** button (icon + label) that calls `queryClient.invalidateQueries`.
+- No interval timers; the page only updates when the user clicks Refresh or performs a mutation.
 
----
+## 2. Map page — real interactive map
+Replace the inline-SVG USA "drawing" in `app.map.tsx` with a real slippy map:
+- Use **react-leaflet + leaflet** (lightweight, no API key, OpenStreetMap tiles).
+- Default center: continental USA, zoom 4.
+- Keep the existing **Map visuals** toggle (off by default, persisted in localStorage):
+  - OFF → base tile map only with simple markers
+  - ON → markers + coverage circles + popups
+- Sidebar list of area coverage stays.
+- Install `leaflet` and `react-leaflet`; import `leaflet/dist/leaflet.css` in `styles.css`.
 
-## 1. Role-based navigation & page access
+## 3. Incogniton integration
 
-Update `src/components/app-shell.tsx` sidebar + `src/routes/app.tsx` access:
+### 3a. Schema (migration)
+New table `public.incogniton_profiles`:
+- `id uuid pk default gen_random_uuid()`
+- `profile_name text not null`
+- `incogniton_profile_id text not null unique`
+- `group_name text`
+- `platform text`
+- `linked_lead_id uuid` — FK to `qualified_leads(id) on delete set null`  ← I'm using `qualified_leads` as "leads" since this project's CS leads live there; raw_leads are pre-qualification feed
+- `last_launched_at timestamptz`
+- `created_at timestamptz default now()`
+- `created_by uuid`
 
-- **CS role**: only sees one item labeled **"Dashboard"** which routes to `/app/cs-leads` (the CS pipeline). No other sections visible.
-- **Marketing role**: only sees **Raw Leads** and **Accounts**. No dashboard, analytics, map, reports, logs, settings.
-- **Admin role**: sees everything (current full nav) plus Map and Settings.
-- Remove standalone **Users** entry from sidebar. Move user management into **Settings → Users** tab (admin-only).
+RLS: admin + marketing full access; cs read + update `last_launched_at` only (so CS can launch profiles from their pipeline).
 
-Update `RoleGate` usage on each route to reflect the new matrix. Redirect CS landing from `/app` → `/app/cs-leads`, Marketing → `/app/raw-leads`.
+### 3b. Launch button in CS Leads (`app.cs-leads.tsx`)
+- Add 🌐 Globe icon button in each lead's row / drawer actions.
+- On click:
+  1. Look up `incogniton_profiles` where `linked_lead_id = lead.id`.
+  2. If found → `POST http://localhost:35000/api/v1/profile/start/{id}` → toast success, update `last_launched_at`.
+  3. If not found → open **Link Profile** modal:
+     - Input: Incogniton Profile ID
+     - Dropdown: Group Name (distinct values from existing rows)
+     - Input: Platform
+     - Save → insert row linked to this lead → immediately launch.
+- Error: if `fetch` rejects ("Failed to fetch") → toast: *"Incogniton is not running. Please open the Incogniton app on this PC."*
 
----
+### 3c. New page `src/routes/app.browser-profiles.tsx`
+- Sidebar entry **Browser Profiles** (Globe icon), admin + marketing only.
+- Top bar:
+  - Search (profile name / platform)
+  - Group filter dropdown (All + distinct groups)
+  - **Sync from Incogniton** button → `GET /api/v1/profile/list` → upsert by `incogniton_profile_id`. Loading spinner while running.
+  - **Export Group** button → modal (group dropdown + CSV/JSON radio + Export → triggers blob download).
+- Table: Profile Name · Incogniton ID · Group · Platform · Linked Lead (joined name from `qualified_leads.customer_name`) · Status (`Active` if `last_launched_at` within last 30 min, else `Idle`) · Actions: 🚀 Launch · 🔗 Link to Lead (modal with searchable lead picker) · 🗑 Delete.
 
-## 2. CRM reframing (lead routing, not closing)
+### 3d. Sidebar (`app-shell.tsx`)
+- Add Browser Profiles nav for admin + marketing.
 
-The CS pipeline is a hand-off + follow-up tracker, not a sales closer. Update `src/routes/app.cs-leads.tsx`:
+## 4. Files
+- migration: new table + RLS + index on `group_name`
+- `src/routes/app.raw-leads.tsx` — remove auto-refresh, add Refresh button
+- `src/routes/app.cs-leads.tsx` — remove auto-refresh, add Refresh button + Launch action + LinkProfile modal
+- `src/routes/app.map.tsx` — rewrite with react-leaflet
+- `src/routes/app.browser-profiles.tsx` — new
+- `src/components/app-shell.tsx` — sidebar entry
+- `src/styles.css` — `@import "leaflet/dist/leaflet.css";`
+- `package.json` — add `leaflet`, `react-leaflet`, `@types/leaflet`
 
-- Rename pipeline statuses to reflect routing semantics. Use existing `cs_status` enum values but relabel in UI:
-  - `new` → "New (to contact)"
-  - statuses for: **Messaged**, **Interested**, **Not Interested**, **Already Done**, **No Response**, **Closed**
-- Each lead row gets a **manually-written comment field** (textarea) appended to `cs_notes` jsonb array with timestamp + author. No preset templates — free text only.
-- Quick-status buttons + a "Add comment" inline action.
-
-If current enum lacks values (Messaged / Interested / Already Done / No Response), add via migration extending the `cs_status` enum.
-
----
-
-## 3. Map page — USA map + visuals toggle
-
-Rewrite `src/routes/app.map.tsx`:
-
-- Default view: full continental USA SVG map (inline SVG of US states outline, no external lib).
-- **Visuals toggle** (Switch) at top: "Map visuals" — **OFF by default**.
-  - When OFF: render a lightweight placeholder (state outlines only, no pins/glows/coverage circles/grid). Keep area-coverage sidebar list.
-  - When ON: render pins, coverage circles, glow effects, grid, hover tooltips (current rich visuals).
-- Projection: simple equirectangular over USA bbox (lng -125..-66, lat 24..50). Clip pins to bbox; pins outside still shown but clamped with badge.
-- Persist toggle in `localStorage`.
-
----
-
-## 4. Accounts — Import from Incogniton
-
-### Schema migration
-
-Extend `accounts` table:
-- `incogniton_profile_id text unique` (nullable)
-- `profile_group text` (nullable)
-- `imported_at timestamptz` (nullable)
-- `status text default 'active'`
-
-### UI in `src/routes/app.accounts.tsx`
-
-Add **"Import from Incogniton"** button (admin + marketing). Opens modal:
-
-- Textarea: "Paste Incogniton Profile IDs (one per line)"
-- **Import** + **Cancel** buttons
-- Loading state per-profile
-- After import: result table inside modal showing per-ID status: Imported / Already Imported / Failed (with reason)
-
-### Fetch logic (client-side, browser → localhost)
-
-For each pasted ID:
-1. Check Supabase: if `incogniton_profile_id` already exists → mark "Already Imported", skip.
-2. Otherwise `GET http://localhost:35000/profile/get?profileID=<id>` (Incogniton Local API).
-3. Extract: profile name, profile group.
-4. Insert row into `accounts` with `name`, `incogniton_profile_id`, `profile_group`, `area=''`, `lat=0`, `lng=0`, `imported_at=now()`, `status='active'`, `created_by=auth.uid()`.
-5. User edits area/lat/lng later via existing edit dialog.
-
-No bulk `/profile/all` call. Only the pasted IDs are requested.
-
-Add columns to accounts table view: **Profile ID**, **Group**, **Status** alongside existing columns.
-
----
-
-## 5. Files touched
-
-- `src/components/app-shell.tsx` — role-filtered nav
-- `src/routes/app.tsx` — landing redirect per role
-- `src/routes/app.users.tsx` — delete (moved into settings)
-- `src/routes/app.settings.tsx` — add Users tab
-- `src/routes/app.map.tsx` — USA map + visuals toggle
-- `src/routes/app.accounts.tsx` — import modal + new columns
-- `src/routes/app.cs-leads.tsx` — relabel + manual comment field
-- DB migration: extend `accounts` columns; possibly extend `cs_status` enum
-
----
-
-## Open questions
-
-1. **Incogniton API endpoint shape** — I'll use `GET http://localhost:35000/profile/get?profileID=<id>` per their public docs. If the local API differs, the call will error and surface in the per-row result.
-2. **CS status values** — should I add `messaged`, `interested`, `not_interested`, `already_done`, `no_response`, `closed` to the existing `cs_status` enum? Need approval since this is a schema change.
-3. **Marketing access to Map** — your message says marketing sees only Raw Leads + Accounts (so no Map). Confirming Map becomes admin-only.
+## Notes / assumptions
+1. "Leads" in the spec = `qualified_leads` (the CS-facing pipeline). Linking to `raw_leads` instead would be trivial to swap — say the word.
+2. Incogniton path: spec lists both `/profile/get` (used by earlier import) and `/api/v1/profile/*`. The new endpoints use `/api/v1/` exactly as documented in this message.
+3. All Incogniton calls run in the browser (localhost-only) — no server proxy.
