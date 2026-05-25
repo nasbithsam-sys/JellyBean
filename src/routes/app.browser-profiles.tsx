@@ -55,10 +55,13 @@ function Inner() {
   const qc = useQueryClient();
   const auth = useAuth();
   const [query, setQuery] = useState("");
-  const [groupFilter, setGroupFilter] = useState("__all__");
+  const [groupName, setGroupName] = useState("testing");
   const [syncing, setSyncing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [linkOpenFor, setLinkOpenFor] = useState<Profile | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<null | "ok" | "fail">(null);
 
   const profiles = useQuery({
     queryKey: ["incog_profiles"],
