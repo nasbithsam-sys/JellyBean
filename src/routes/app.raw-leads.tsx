@@ -98,6 +98,8 @@ function Inner() {
       return Array.isArray(json.rows) ? json.rows : [];
     },
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
   });
 
   // Only rows captured at/after sync start.
