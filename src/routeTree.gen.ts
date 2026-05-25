@@ -22,7 +22,6 @@ import { Route as AppLogsRouteImport } from './routes/app.logs'
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
-import { Route as AppAccountsRouteImport } from './routes/app.accounts'
 
 const MfaSetupRoute = MfaSetupRouteImport.update({
   id: '/mfa-setup',
@@ -89,18 +88,12 @@ const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAccountsRoute = AppAccountsRouteImport.update({
-  id: '/accounts',
-  path: '/accounts',
-  getParentRoute: () => AppRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/mfa-setup': typeof MfaSetupRoute
-  '/app/accounts': typeof AppAccountsRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -115,7 +108,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/mfa-setup': typeof MfaSetupRoute
-  '/app/accounts': typeof AppAccountsRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -132,7 +124,6 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/mfa-setup': typeof MfaSetupRoute
-  '/app/accounts': typeof AppAccountsRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -150,7 +141,6 @@ export interface FileRouteTypes {
     | '/app'
     | '/login'
     | '/mfa-setup'
-    | '/app/accounts'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -165,7 +155,6 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/mfa-setup'
-    | '/app/accounts'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -181,7 +170,6 @@ export interface FileRouteTypes {
     | '/app'
     | '/login'
     | '/mfa-setup'
-    | '/app/accounts'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -293,18 +281,10 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAnalyticsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/accounts': {
-      id: '/app/accounts'
-      path: '/accounts'
-      fullPath: '/app/accounts'
-      preLoaderRoute: typeof AppAccountsRouteImport
-      parentRoute: typeof AppRoute
-    }
   }
 }
 
 interface AppRouteChildren {
-  AppAccountsRoute: typeof AppAccountsRoute
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppBrowserProfilesRoute: typeof AppBrowserProfilesRoute
   AppCsLeadsRoute: typeof AppCsLeadsRoute
@@ -317,7 +297,6 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAccountsRoute: AppAccountsRoute,
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppBrowserProfilesRoute: AppBrowserProfilesRoute,
   AppCsLeadsRoute: AppCsLeadsRoute,
