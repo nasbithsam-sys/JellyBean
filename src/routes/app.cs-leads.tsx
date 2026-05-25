@@ -283,8 +283,14 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
             <Input type="datetime-local" value={followup} onChange={(e) => setFollowup(e.target.value)} />
           </div>
           <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Add a note</Label>
-            <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Conversation summary, next steps…" />
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Comment</Label>
+            <Textarea
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Write what happened in your own words — e.g. customer is interested, already done by someone else, asked to message later…"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1.5">Free-text comment. Appended to the history when you save.</p>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose} disabled={busy}>Close</Button>
