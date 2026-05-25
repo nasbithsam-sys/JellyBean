@@ -126,6 +126,16 @@ function Inner() {
             className="w-full h-9 pl-9 pr-3 rounded-md bg-surface border border-border text-[13px] placeholder:text-muted-foreground/70 focus:outline-none"
           />
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 ml-auto"
+          onClick={() => qc.invalidateQueries({ queryKey: ["cs_leads"] })}
+          disabled={list.isFetching}
+        >
+          {list.isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+          Refresh
+        </Button>
       </div>
 
       {list.isLoading ? (
