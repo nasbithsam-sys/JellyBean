@@ -8,14 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, RefreshCw, Download, Rocket, Link2, Trash2, Search, Globe } from "lucide-react";
+import { Loader2, RefreshCw, Download, Rocket, Link2, Trash2, Search, Globe, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
   launchIncognitonProfile,
-  fetchAllIncognitonProfiles,
+  fetchIncognitonProfilesByGroup,
+  pingIncogniton,
   INCOG_UNREACHABLE,
 } from "@/lib/incogniton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/app/browser-profiles")({ component: Page });
 
