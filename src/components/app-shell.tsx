@@ -47,6 +47,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   const path = useRouterState({ select: (s) => s.location.pathname });
   const items = itemsForRole(auth.primaryRole);
   const displayName = auth.profile?.full_name || auth.user?.email || "—";
+  const { theme, toggle: toggleTheme } = useTheme();
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -122,6 +123,13 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                 {auth.primaryRole ?? "no role"}
               </div>
             </div>
+            <button
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+              className="h-7 w-7 grid place-items-center rounded-md text-sidebar-foreground/60 hover:text-foreground hover:bg-sidebar-accent transition-colors"
+            >
+              {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+            </button>
             <button
               onClick={() => void auth.signOut()}
               title="Sign out"
