@@ -44,6 +44,7 @@ const API_URL_KEY = "rawleads.apiUrl";
 const ACTIONS_KEY = "rawleads.actions.v2";
 const START_ROW_KEY = "rawleads.startRow"; // manually set floor
 const NEXT_ROW_KEY = "rawleads.nextRow"; // auto-advancing cursor
+const ROWS_KEY = "rawleads.rows.v1"; // accumulated rows cache
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Row = Record<string, string> & {
@@ -209,8 +210,16 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [qualifyFor, setQualifyFor] = useState<Row | null>(null);
 
-  // Accumulated rows across refreshes (kept in memory for the session)
-  const [allRows, setAllRows] = useState<Row[]>([]);
+  // Accumulated rows across refreshes (persisted to localStorage so tab-switches don't lose data)
+  const [allRows, setAllRows] = useState<Row[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(ROWS_KEY);
+      return raw ? (JSON.parse(raw) as Row[]) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const { isLoading, isFetching, refetch, error, data } = useQuery({
     queryKey: ["raw-leads-api", apiUrl, startRow],
@@ -228,7 +237,13 @@ function Inner() {
         // Deduplicate by keyFor
         const existing = new Set(prev.map(keyFor));
         const fresh = data.rows.filter((r) => !existing.has(keyFor(r)));
-        return [...prev, ...fresh];
+        const merged = [...prev, ...fresh];
+        try {
+          localStorage.setItem(ROWS_KEY, JSON.stringify(merged));
+        } catch {
+          /* quota — ignore */
+        }
+        return merged;
       });
     }
     // Save the next row so next manual Refresh or page load continues from here
@@ -294,6 +309,7 @@ function Inner() {
     localStorage.setItem(START_ROW_KEY, String(n));
     // Clear the auto-cursor so the manual value takes effect
     localStorage.removeItem(NEXT_ROW_KEY);
+    localStorage.removeItem(ROWS_KEY);
     setAllRows([]); // clear displayed rows since we're starting fresh
     setStartRow(n);
     nextRowRef.current = n;
