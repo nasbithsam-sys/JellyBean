@@ -207,7 +207,7 @@ function Inner() {
               <th>Group</th>
               <th>Platform</th>
               <th>Linked Lead</th>
-              <th>Status</th>
+              <th>Last Launched</th>
               <th className="text-right">Actions</th>
             </tr>
           </thead>
