@@ -232,33 +232,37 @@ function Inner() {
         </div>
       )}
 
-      {/* Table — fixed layout, no horizontal scroll */}
+      {/* Table — restored columns, modest horizontal scroll */}
       <div className="glass-card overflow-hidden">
-        <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
-          <table className="w-full table-fixed text-[12.5px]">
+        <div className="max-h-[calc(100vh-280px)] overflow-auto">
+          <table className="text-[12.5px] border-separate border-spacing-0" style={{ minWidth: 1320 }}>
             <colgroup>
-              <col className="w-[16%]" />
-              <col className="w-[14%]" />
-              <col />
-              <col className="w-[11%]" />
-              <col className="w-[18%]" />
-              <col className="w-[14%]" />
+              <col style={{ width: 170 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 320 }} />
+              <col style={{ width: 80 }} />
+              <col style={{ width: 150 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 220 }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface">
               <tr>
-                {["Account / Area", "Sub area", "Post", "Lead", "Phone", "Actions"].map((h) => (
-                  <th key={h} className="border-b border-border px-2.5 py-2 text-left font-medium text-[11px] uppercase tracking-wide text-muted-foreground">{h}</th>
+                {["Account / Area", "Sub area", "Posted", "Post", "Lead", "Phone", "Captured (UTC)", "Time", "Incog Account", "Actions"].map((h) => (
+                  <th key={h} className="border-b border-border px-2.5 py-2 text-left font-medium text-[11px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={6} className="text-center text-muted-foreground py-12">
+                <tr><td colSpan={10} className="text-center text-muted-foreground py-12">
                   <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Loading…
                 </td></tr>
               )}
               {!isLoading && visible.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">
+                <tr><td colSpan={10} className="text-center py-12 text-muted-foreground">
                   {tab === "new" ? "No new leads in this view." : "Nothing here yet."}
                 </td></tr>
               )}
@@ -274,6 +278,9 @@ function Inner() {
                     </td>
                     <td className="border-b border-border px-2.5 py-2 truncate" title={r["Sub Area / Neighborhood"]}>
                       {r["Sub Area / Neighborhood"] || <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground truncate" title={r["Posted Date & Time"]}>
+                      {r["Posted Date & Time"] || "—"}
                     </td>
                     <td className="border-b border-border px-2.5 py-2">
                       <div className="line-clamp-3 whitespace-pre-wrap" title={r["Post Text"]}>{r["Post Text"] || "—"}</div>
@@ -305,9 +312,18 @@ function Inner() {
                       <Input
                         value={a.phone ?? ""}
                         onChange={(e) => updateAction(k, { phone: e.target.value })}
-                        placeholder="Phone (comma for multiple)"
+                        placeholder="Phone (comma = multiple)"
                         className="h-7 text-[12px]"
                       />
+                    </td>
+                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
+                      {r["Captured Date (UTC)"] || "—"}
+                    </td>
+                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
+                      {r["Captured Time (UTC)"] || "—"}
+                    </td>
+                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] truncate" title={r["Incog Account"]}>
+                      {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="border-b border-border px-2.5 py-2">
                       <div className="flex flex-wrap items-center gap-1">
