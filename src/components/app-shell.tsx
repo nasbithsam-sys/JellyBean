@@ -1,8 +1,9 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Table2, Map, BarChart3, LineChart,
-  ScrollText, Settings, Headphones, LogOut, Command, Globe,
+  ScrollText, Settings, Headphones, LogOut, Command, Globe, Sun, Moon,
 } from "lucide-react";
+import { useTheme } from "@/hooks/use-theme";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
