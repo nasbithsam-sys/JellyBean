@@ -154,8 +154,8 @@ function Inner() {
   async function testConnection() {
     setTesting(true);
     setTestResult(null);
-    const ok = await pingIncogniton();
-    setTestResult(ok ? "ok" : "fail");
+    const r = await pingIncogniton();
+    setTestResult(r);
     setTesting(false);
   }
 
