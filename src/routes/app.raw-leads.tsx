@@ -29,7 +29,6 @@ import {
   Search,
   Settings as Gear,
   Send,
-  Send,
   BookmarkCheck,
   Eye,
   PhoneOff,
