@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -17,6 +17,30 @@ import { cn } from "@/lib/utils";
 import { launchIncognitonProfile, INCOG_UNREACHABLE } from "@/lib/incogniton";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
+
+function playNotificationBeep() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    const beep = (freq: number, start: number, dur: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur + 0.02);
+    };
+    beep(880, 0, 0.18);
+    beep(1175, 0.2, 0.22);
+    setTimeout(() => ctx.close(), 700);
+  } catch {
+    // ignore — autoplay may be blocked until user interacts
+  }
+}
 
 type Lead = {
   id: string; customer_name: string; customer_number: string;
@@ -106,6 +130,37 @@ function Inner() {
       return count ?? 0;
     },
   });
+
+  // ── New-lead sound notification (poll every 20s) ────────────────────────────
+  const lastSeenRef = useRef<string | null>(null);
+  const newLeadPoll = useQuery({
+    queryKey: ["cs_new_lead_ping"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("qualified_leads")
+        .select("id, customer_name, assigned_at")
+        .order("assigned_at", { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return data?.[0] ?? null;
+    },
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
+  });
+  useEffect(() => {
+    const latest = newLeadPoll.data;
+    if (!latest) return;
+    if (lastSeenRef.current === null) {
+      lastSeenRef.current = latest.assigned_at;
+      return;
+    }
+    if (latest.assigned_at > lastSeenRef.current) {
+      lastSeenRef.current = latest.assigned_at;
+      playNotificationBeep();
+      toast.success(`New lead: ${latest.customer_name}`);
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    }
+  }, [newLeadPoll.data, qc]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -328,21 +383,23 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
         </div>
         {lead.context && <Info label="Context" value={lead.context} multiline />}
         {lead.marketing_notes && <Info label="Marketing notes" value={lead.marketing_notes} multiline />}
-        {lead.original_lead_link && (
+        {auth.primaryRole !== "cs" && lead.original_lead_link && (
           <a href={lead.original_lead_link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm text-primary hover:text-primary-glow transition-colors">
             <ExternalLink className="h-3.5 w-3.5 mr-1.5" />Original post
           </a>
         )}
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={launchProfile}>
-            <Globe className="h-3.5 w-3.5 mr-1.5" />
-            {linkedProfile.data ? "Launch Incogniton profile" : "Link & launch Incogniton profile"}
-          </Button>
-          {linkedProfile.data && (
-            <span className="text-[11px] text-muted-foreground">→ {linkedProfile.data.profile_name}</span>
-          )}
-        </div>
+        {auth.primaryRole !== "cs" && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={launchProfile}>
+              <Globe className="h-3.5 w-3.5 mr-1.5" />
+              {linkedProfile.data ? "Launch Incogniton profile" : "Link & launch Incogniton profile"}
+            </Button>
+            {linkedProfile.data && (
+              <span className="text-[11px] text-muted-foreground">→ {linkedProfile.data.profile_name}</span>
+            )}
+          </div>
+        )}
 
         <div className="border-t border-border pt-5 space-y-4">
           <div>
