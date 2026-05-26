@@ -115,7 +115,7 @@ export async function pingIncogniton(): Promise<{ ok: boolean; error?: string; e
     }
   }
   const sawHttp = probes.some((p) => typeof p.status === "number");
-  const reachableNoCors = !sawHttp && await canReachLocalApiWithoutReading();
+  const reachableNoCors = !sawHttp && (await canReachLocalApiWithoutReading());
   return {
     ok: reachableNoCors,
     endpoint: reachableNoCors ? "local API reachable; response blocked by browser CORS" : undefined,
