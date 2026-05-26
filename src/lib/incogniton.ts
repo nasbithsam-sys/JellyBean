@@ -6,18 +6,26 @@
 //   - GET /profile/stop/<id>    or  /api/v1/profile/stop/<id>
 // We try both so the app works regardless of which Incogniton build is installed.
 
-const BASE = "http://localhost:35000";
+const BASES = ["http://127.0.0.1:35000", "http://localhost:35000"];
 
 export const INCOG_UNREACHABLE =
-  "Cannot reach Incogniton at http://localhost:35000. Make sure the Incogniton desktop app is running and that this site is allowed to load insecure content (see Fix Connection).";
+  "Cannot reach Incogniton at 127.0.0.1:35000 or localhost:35000. If Incogniton is open, the browser is likely blocking the local API or Incogniton's developer API is not listening on port 35000.";
 
 const LIST_PATHS = ["/profile/all", "/api/v1/profile/list"];
 const LAUNCH_PATHS = ["/profile/launch/", "/api/v1/profile/launch/"];
 const STOP_PATHS = ["/profile/stop/", "/api/v1/profile/stop/"];
+const STATUS_PATHS = ["/profile/status/", "/api/v1/profile/status/"];
 
-async function tryGet(path: string): Promise<Response> {
+type IncognitonEndpoint = { base: string; path: string };
+type IncognitonProbe = IncognitonEndpoint & { ok: boolean; status?: number; error?: string };
+
+function endpoints(paths: string[]): IncognitonEndpoint[] {
+  return BASES.flatMap((base) => paths.map((path) => ({ base, path })));
+}
+
+async function tryGet({ base, path }: IncognitonEndpoint): Promise<Response> {
   try {
-    return await fetch(`${BASE}${path}`, { method: "GET" });
+    return await fetch(`${base}${path}`, { method: "GET" });
   } catch (e) {
     if (e instanceof TypeError) throw new Error(INCOG_UNREACHABLE);
     throw e;
@@ -25,13 +33,20 @@ async function tryGet(path: string): Promise<Response> {
 }
 
 async function getFirstOk(paths: string[]): Promise<Response> {
-  let lastStatus = 0;
-  for (const p of paths) {
-    const res = await tryGet(p);
+  const failures: string[] = [];
+  for (const endpoint of endpoints(paths)) {
+    const url = `${endpoint.base}${endpoint.path}`;
+    let res: Response;
+    try {
+      res = await tryGet(endpoint);
+    } catch (e) {
+      failures.push(`${url}: ${(e as Error).message}`);
+      continue;
+    }
     if (res.ok) return res;
-    lastStatus = res.status;
+    failures.push(`${url}: HTTP ${res.status}`);
   }
-  throw new Error(`Incogniton API responded with HTTP ${lastStatus}`);
+  throw new Error(`Incogniton API did not respond OK. Tried ${failures.join(" | ")}`);
 }
 
 export async function launchIncognitonProfile(profileId: string): Promise<void> {
@@ -44,19 +59,33 @@ export async function stopIncognitonProfile(profileId: string): Promise<void> {
   await getFirstOk(STOP_PATHS.map((p) => `${p}${id}`));
 }
 
-export async function pingIncogniton(): Promise<{ ok: boolean; error?: string; endpoint?: string }> {
-  for (const p of LIST_PATHS) {
+export async function getIncognitonProfileStatus(profileId: string): Promise<string | null> {
+  const id = encodeURIComponent(profileId);
+  const res = await getFirstOk(STATUS_PATHS.map((p) => `${p}${id}`));
+  const json = await res.json().catch(() => null) as { status?: unknown } | null;
+  return typeof json?.status === "string" ? json.status : null;
+}
+
+export async function pingIncogniton(): Promise<{ ok: boolean; error?: string; endpoint?: string; probes?: IncognitonProbe[] }> {
+  const probes: IncognitonProbe[] = [];
+  for (const endpoint of endpoints(LIST_PATHS)) {
+    const url = `${endpoint.base}${endpoint.path}`;
     try {
-      const res = await fetch(`${BASE}${p}`, { method: "GET" });
-      if (res.ok) return { ok: true, endpoint: p };
+      const res = await fetch(url, { method: "GET" });
+      probes.push({ ...endpoint, ok: res.ok, status: res.status });
+      if (res.ok) return { ok: true, endpoint: url, probes };
     } catch (e) {
-      if (e instanceof TypeError) {
-        return { ok: false, error: INCOG_UNREACHABLE };
-      }
-      return { ok: false, error: (e as Error).message };
+      probes.push({ ...endpoint, ok: false, error: e instanceof TypeError ? "Browser blocked or connection refused" : (e as Error).message });
     }
   }
-  return { ok: false, error: "Incogniton is reachable but no known endpoint responded OK." };
+  const sawHttp = probes.some((p) => typeof p.status === "number");
+  return {
+    ok: false,
+    error: sawHttp
+      ? "Incogniton answered, but none of the known profile list endpoints returned OK. See diagnostics below."
+      : INCOG_UNREACHABLE,
+    probes,
+  };
 }
 
 type RawProfile = Record<string, unknown> & {
