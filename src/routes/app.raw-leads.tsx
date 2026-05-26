@@ -1,32 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Loader2,
-  ExternalLink,
-  RefreshCw,
-  Search,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown,
-} from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Loader2, ExternalLink, RefreshCw, Search, Settings as Gear, Send, X, Check, AlertTriangle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
-const API_URL =
+const DEFAULT_API_URL =
   "https://script.google.com/macros/s/AKfycbykybYjjrkdOMEC5M-mgFWIngGTY-g_jPdNL9mksND0jaoJ-ht8wspYAj88MCla8r2F2g/exec";
+const API_URL_KEY = "rawleads.apiUrl";
+const ACTIONS_KEY = "rawleads.actions.v2";
 
 type Row = Record<string, string> & {
   "Account Name"?: string;
@@ -41,18 +34,39 @@ type Row = Record<string, string> & {
   "Incog Account"?: string;
 };
 
-const COLUMNS: { key: keyof Row; label: string; width?: string; wrap?: boolean }[] = [
-  { key: "Account Name", label: "Account Name", width: "160px" },
-  { key: "Sub Area / Neighborhood", label: "Sub Area / Neighborhood", width: "200px" },
-  { key: "Posted Date & Time", label: "Posted Date & Time", width: "150px" },
-  { key: "Post Text", label: "Post Text", width: "420px", wrap: true },
-  { key: "Lead", label: "Lead", width: "120px" },
-  { key: "Lead Link", label: "Lead Link", width: "180px" },
-  { key: "Captured Date (UTC)", label: "Captured Date (UTC)", width: "170px" },
-  { key: "Captured Time (UTC)", label: "Captured Time (UTC)", width: "140px" },
-  { key: "Account Area", label: "Account Area", width: "140px" },
-  { key: "Incog Account", label: "Incog Account", width: "150px" },
-];
+type Category = "forwarded" | "not_found" | "wrong";
+type Action = { category?: Category; lead?: "yes" | "no"; phone?: string };
+type Actions = Record<string, Action>;
+
+function loadActions(): Actions {
+  try {
+    return JSON.parse(localStorage.getItem(ACTIONS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+function saveActions(a: Actions) {
+  localStorage.setItem(ACTIONS_KEY, JSON.stringify(a));
+}
+
+function keyFor(r: Row) {
+  return r["Lead Link"] || `${r["Account Name"] ?? ""}|${r["Posted Date & Time"] ?? ""}|${(r["Post Text"] ?? "").slice(0, 40)}`;
+}
+
+function parseCapturedAt(r: Row): number {
+  const d = r["Captured Date (UTC)"];
+  if (!d) return 0;
+  const t = Date.parse(d);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function leadValue(r: Row, a?: Action): "yes" | "no" | "" {
+  const raw = (r.Lead ?? "").trim().toLowerCase();
+  if (raw === "yes" || raw === "y" || raw === "true") return "yes";
+  if (raw === "no" || raw === "n" || raw === "false") return "no";
+  if (a?.lead === "yes" || a?.lead === "no") return a.lead;
+  return "";
+}
 
 function Page() {
   const auth = useAuth();
@@ -60,7 +74,7 @@ function Page() {
     <div>
       <PageHeader
         title="Raw Leads"
-        description="Live feed from the marketing capture sheet. Only leads captured after this session's sync start are shown."
+        description="Live feed from the marketing capture sheet. Newest first."
       />
       <PageBody className="!pt-5">
         <RoleGate allow={["admin", "marketing"]} current={auth.primaryRole}>
@@ -71,28 +85,36 @@ function Page() {
   );
 }
 
-function parseCapturedAt(r: Row): number {
-  const d = r["Captured Date (UTC)"];
-  if (!d) return 0;
-  const t = Date.parse(d);
-  return Number.isNaN(t) ? 0 : t;
-}
-
 function Inner() {
-  // Sync start: first time the dashboard opens this session.
+  const auth = useAuth();
   const syncStartRef = useRef<number>(Date.now());
+
+  const [apiUrl, setApiUrl] = useState<string>(() => {
+    if (typeof window === "undefined") return DEFAULT_API_URL;
+    return localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL;
+  });
+  const [apiUrlDraft, setApiUrlDraft] = useState(apiUrl);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const [actions, setActions] = useState<Actions>(() => (typeof window === "undefined" ? {} : loadActions()));
+  const updateAction = useCallback((k: string, patch: Partial<Action>) => {
+    setActions((prev) => {
+      const next = { ...prev, [k]: { ...prev[k], ...patch } };
+      saveActions(next);
+      return next;
+    });
+  }, []);
+
+  const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong">("new");
+  const [yesOnly, setYesOnly] = useState(false);
   const [query, setQuery] = useState("");
-  const [areaFilter, setAreaFilter] = useState<string>("__all__");
-  const [incogFilter, setIncogFilter] = useState<string>("__all__");
-  const [sortKey, setSortKey] = useState<keyof Row>("Captured Date (UTC)");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+
+  const [qualifyFor, setQualifyFor] = useState<Row | null>(null);
 
   const { data, isLoading, isFetching, refetch, error } = useQuery({
-    queryKey: ["raw-leads-api"],
+    queryKey: ["raw-leads-api", apiUrl],
     queryFn: async () => {
-      const res = await fetch(API_URL, { method: "GET" });
+      const res = await fetch(apiUrl, { method: "GET" });
       if (!res.ok) throw new Error(`API ${res.status}`);
       const json = (await res.json()) as { rows?: Row[] };
       return Array.isArray(json.rows) ? json.rows : [];
@@ -102,125 +124,103 @@ function Inner() {
     staleTime: Infinity,
   });
 
-  // Only rows captured at/after sync start.
+  // Show only rows captured at or after this session's sync start, like before.
   const fresh = useMemo(() => {
     const start = syncStartRef.current;
     return (data ?? []).filter((r) => parseCapturedAt(r) >= start);
   }, [data]);
 
-  const areaOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(fresh.map((r) => r["Account Area"]).filter((v): v is string => !!v && v.trim() !== "")),
-      ).sort(),
-    [fresh],
-  );
-  const incogOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(fresh.map((r) => r["Incog Account"]).filter((v): v is string => !!v && v.trim() !== "")),
-      ).sort(),
-    [fresh],
-  );
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return fresh.filter((r) => {
-      if (areaFilter !== "__all__" && (r["Account Area"] ?? "") !== areaFilter) return false;
-      if (incogFilter !== "__all__" && (r["Incog Account"] ?? "") !== incogFilter) return false;
-      if (!q) return true;
-      return COLUMNS.some((c) => (r[c.key] ?? "").toString().toLowerCase().includes(q));
-    });
-  }, [fresh, query, areaFilter, incogFilter]);
-
-  const sorted = useMemo(() => {
-    const arr = [...filtered];
-    arr.sort((a, b) => {
-      if (sortKey === "Captured Date (UTC)") {
-        return (parseCapturedAt(a) - parseCapturedAt(b)) * (sortDir === "asc" ? 1 : -1);
-      }
-      const av = (a[sortKey] ?? "").toString().toLowerCase();
-      const bv = (b[sortKey] ?? "").toString().toLowerCase();
-      if (av < bv) return sortDir === "asc" ? -1 : 1;
-      if (av > bv) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
-    return arr;
-  }, [filtered, sortKey, sortDir]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [query, areaFilter, incogFilter, pageSize]);
-
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
-
-  function toggleSort(k: keyof Row) {
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir("asc");
+  // Bucket by category (action.category overrides; otherwise it's "new")
+  const buckets = useMemo(() => {
+    const b: Record<"new" | "forwarded" | "not_found" | "wrong", Row[]> = {
+      new: [], forwarded: [], not_found: [], wrong: [],
+    };
+    for (const r of fresh) {
+      const k = keyFor(r);
+      const a = actions[k];
+      const cat = a?.category;
+      if (cat) b[cat].push(r);
+      else b.new.push(r);
     }
+    // newest first
+    for (const k of Object.keys(b) as Array<keyof typeof b>) {
+      b[k].sort((a, c) => parseCapturedAt(c) - parseCapturedAt(a));
+    }
+    return b;
+  }, [fresh, actions]);
+
+  const visible = useMemo(() => {
+    let rows = buckets[tab];
+    if (tab === "new" && yesOnly) {
+      rows = rows.filter((r) => leadValue(r, actions[keyFor(r)]) === "yes");
+    }
+    const q = query.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((r) =>
+        [r["Account Name"], r["Sub Area / Neighborhood"], r["Post Text"], r["Account Area"], r.Lead]
+          .some((v) => (v ?? "").toString().toLowerCase().includes(q)),
+      );
+    }
+    return rows;
+  }, [buckets, tab, yesOnly, query, actions]);
+
+  function saveApiUrl() {
+    const v = apiUrlDraft.trim();
+    if (!v) return;
+    localStorage.setItem(API_URL_KEY, v);
+    setApiUrl(v);
+    setSettingsOpen(false);
+    toast.success("Web App URL saved");
   }
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
+      {/* Tabs */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search any column…"
-            className="h-9 pl-9"
-          />
+        <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+          {([
+            ["new", "New", buckets.new.length],
+            ["forwarded", "Forwarded", buckets.forwarded.length],
+            ["not_found", "Number not found", buckets.not_found.length],
+            ["wrong", "Wrong posts", buckets.wrong.length],
+          ] as const).map(([k, label, n]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={cn(
+                "px-3 h-8 text-[12px] font-medium rounded-md transition-all",
+                tab === k ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+              <span className="ml-1.5 text-[10.5px] text-muted-foreground tabular-nums">{n}</span>
+            </button>
+          ))}
         </div>
 
-        <Select value={areaFilter} onValueChange={setAreaFilter}>
-          <SelectTrigger className="h-9 w-[170px]">
-            <SelectValue placeholder="Account Area" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All areas</SelectItem>
-            {areaOptions.map((o) => (
-              <SelectItem key={o} value={o}>
-                {o}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…" className="h-9 pl-9" />
+        </div>
 
-        <Select value={incogFilter} onValueChange={setIncogFilter}>
-          <SelectTrigger className="h-9 w-[170px]">
-            <SelectValue placeholder="Incog Account" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All incog</SelectItem>
-            {incogOptions.map((o) => (
-              <SelectItem key={o} value={o}>
-                {o}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="ml-auto flex items-center gap-2">
-          <div className="text-[12px] text-muted-foreground tabular-nums">
-            {sorted.length} new {sorted.length === 1 ? "lead" : "leads"}
-          </div>
+        {tab === "new" && (
           <Button
             size="sm"
-            variant="outline"
+            variant={yesOnly ? "default" : "outline"}
             className="h-9"
-            onClick={() => refetch()}
-            disabled={isFetching}
+            onClick={() => setYesOnly((v) => !v)}
           >
-            {isFetching ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-            )}
+            <Check className="h-3.5 w-3.5 mr-1.5" />
+            Yes only
+          </Button>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" variant="outline" className="h-9" onClick={() => setSettingsOpen(true)} title="Web App URL">
+            <Gear className="h-3.5 w-3.5 mr-1.5" /> Source
+          </Button>
+          <Button size="sm" variant="outline" className="h-9" onClick={() => refetch()} disabled={isFetching}>
+            {isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
             Refresh
           </Button>
         </div>
@@ -232,137 +232,228 @@ function Inner() {
         </div>
       )}
 
-      {/* Spreadsheet */}
+      {/* Table — fixed layout, no horizontal scroll */}
       <div className="glass-card overflow-hidden">
-        <div className="max-h-[calc(100vh-300px)] overflow-auto">
-          <table className="crm-table w-max min-w-full border-separate border-spacing-0 text-[12.5px]">
-            <thead className="sticky top-0 z-10">
+        <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
+          <table className="w-full table-fixed text-[12.5px]">
+            <colgroup>
+              <col className="w-[16%]" />
+              <col className="w-[14%]" />
+              <col />
+              <col className="w-[11%]" />
+              <col className="w-[18%]" />
+              <col className="w-[14%]" />
+            </colgroup>
+            <thead className="sticky top-0 z-10 bg-surface">
               <tr>
-                {COLUMNS.map((c) => (
-                  <th
-                    key={String(c.key)}
-                    style={{ width: c.width, minWidth: c.width }}
-                    className="border-b border-r border-border bg-surface px-3 py-2 text-left font-medium text-[11.5px] uppercase tracking-wide text-muted-foreground select-none"
-                  >
-                    <button
-                      className="inline-flex items-center gap-1 hover:text-foreground"
-                      onClick={() => toggleSort(c.key)}
-                    >
-                      {c.label}
-                      {sortKey === c.key ? (
-                        sortDir === "asc" ? (
-                          <ArrowUp className="h-3 w-3" />
-                        ) : (
-                          <ArrowDown className="h-3 w-3" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="h-3 w-3 opacity-40" />
-                      )}
-                    </button>
-                  </th>
+                {["Account / Area", "Sub area", "Post", "Lead", "Phone", "Actions"].map((h) => (
+                  <th key={h} className="border-b border-border px-2.5 py-2 text-left font-medium text-[11px] uppercase tracking-wide text-muted-foreground">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {isLoading && (
-                <tr>
-                  <td colSpan={COLUMNS.length} className="text-center text-muted-foreground py-12">
-                    <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Loading leads…
-                  </td>
-                </tr>
+                <tr><td colSpan={6} className="text-center text-muted-foreground py-12">
+                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Loading…
+                </td></tr>
               )}
-              {!isLoading && pageRows.length === 0 && (
-                <tr>
-                  <td colSpan={COLUMNS.length} className="text-center py-12 text-muted-foreground">
-                    No new leads since sync start.
-                  </td>
-                </tr>
+              {!isLoading && visible.length === 0 && (
+                <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">
+                  {tab === "new" ? "No new leads in this view." : "Nothing here yet."}
+                </td></tr>
               )}
-              {pageRows.map((r, i) => (
-                <tr
-                  key={i}
-                  className={cn(
-                    "hover:bg-accent/40 transition-colors",
-                    i % 2 === 0 ? "bg-transparent" : "bg-surface/40",
-                  )}
-                >
-                  {COLUMNS.map((c) => {
-                    const v = r[c.key] ?? "";
-                    const isLink = c.key === "Lead Link" && v;
-                    return (
-                      <td
-                        key={String(c.key)}
-                        style={{ width: c.width, minWidth: c.width }}
-                        className={cn(
-                          "border-b border-r border-border px-3 py-2 align-top text-foreground/90",
-                          c.wrap ? "whitespace-normal" : "whitespace-nowrap truncate",
-                        )}
-                        title={typeof v === "string" ? v : undefined}
-                      >
-                        {isLink ? (
-                          <a
-                            href={v}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            Open
-                          </a>
-                        ) : (
-                          v || <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+              {visible.map((r) => {
+                const k = keyFor(r);
+                const a = actions[k] || {};
+                const lv = leadValue(r, a);
+                return (
+                  <tr key={k} className="hover:bg-accent/40 transition-colors align-top">
+                    <td className="border-b border-border px-2.5 py-2">
+                      <div className="font-medium truncate" title={r["Account Name"]}>{r["Account Name"] || "—"}</div>
+                      <div className="text-[11px] text-muted-foreground truncate" title={r["Account Area"]}>{r["Account Area"] || "—"}</div>
+                    </td>
+                    <td className="border-b border-border px-2.5 py-2 truncate" title={r["Sub Area / Neighborhood"]}>
+                      {r["Sub Area / Neighborhood"] || <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="border-b border-border px-2.5 py-2">
+                      <div className="line-clamp-3 whitespace-pre-wrap" title={r["Post Text"]}>{r["Post Text"] || "—"}</div>
+                      {r["Lead Link"] && (
+                        <a href={r["Lead Link"]} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline text-[11px] mt-1">
+                          <ExternalLink className="h-3 w-3" /> Open post
+                        </a>
+                      )}
+                    </td>
+                    <td className="border-b border-border px-2.5 py-2">
+                      {lv === "yes" || lv === "no" ? (
+                        <span className={cn(
+                          "inline-flex px-2 py-0.5 rounded-full border text-[10.5px] font-medium",
+                          lv === "yes" ? "bg-success/15 text-success border-success/30" : "bg-destructive/15 text-destructive border-destructive/30",
+                        )}>
+                          {lv === "yes" ? "Yes" : "No"}
+                        </span>
+                      ) : (
+                        <Select value="" onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}>
+                          <SelectTrigger className="h-7 text-[11px]"><SelectValue placeholder="—" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="yes">Yes</SelectItem>
+                            <SelectItem value="no">No</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </td>
+                    <td className="border-b border-border px-2.5 py-2">
+                      <Input
+                        value={a.phone ?? ""}
+                        onChange={(e) => updateAction(k, { phone: e.target.value })}
+                        placeholder="Phone (comma for multiple)"
+                        className="h-7 text-[12px]"
+                      />
+                    </td>
+                    <td className="border-b border-border px-2.5 py-2">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Button
+                          size="sm"
+                          className="h-7 px-2 text-[11px]"
+                          disabled={!(a.phone ?? "").trim()}
+                          onClick={() => setQualifyFor(r)}
+                        >
+                          <Send className="h-3 w-3 mr-1" /> Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-[11px]"
+                          title="No phone number found"
+                          onClick={() => { updateAction(k, { category: "not_found" }); toast("Moved to Number not found"); }}
+                        >
+                          <AlertTriangle className="h-3 w-3 mr-1" /> Not found
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-[11px] text-muted-foreground"
+                          title="Mark as a wrong/no-lead post — moves to Wrong posts"
+                          onClick={() => { updateAction(k, { category: "wrong", lead: "no" }); toast("Moved to Wrong posts"); }}
+                        >
+                          <X className="h-3 w-3 mr-1" /> Wrong
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Pagination */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          Rows per page
-          <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-            <SelectTrigger className="h-8 w-[80px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[25, 50, 100, 200].map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
-            Previous
-          </Button>
-          <div className="text-[12px] text-muted-foreground tabular-nums">
-            Page {page} of {totalPages}
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-          >
-            Next
-          </Button>
-        </div>
+      <div className="text-[11.5px] text-muted-foreground">
+        {visible.length} {visible.length === 1 ? "row" : "rows"} · source: <span className="font-mono">{new URL(apiUrl).host}</span>
       </div>
+
+      {/* Settings (Web App URL) */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Web App URL (source)</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <Label className="text-[12px] text-muted-foreground">Google Apps Script Web App URL that returns {`{ rows: [...] }`}.</Label>
+            <Input value={apiUrlDraft} onChange={(e) => setApiUrlDraft(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" />
+            <p className="text-[11px] text-muted-foreground">Saved per browser. New extractions appear at the top automatically — newest first.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setApiUrlDraft(DEFAULT_API_URL); }}>Reset</Button>
+            <Button onClick={saveApiUrl}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Qualify popup */}
+      {qualifyFor && (
+        <QualifyDialog
+          row={qualifyFor}
+          phone={actions[keyFor(qualifyFor)]?.phone ?? ""}
+          actorId={auth.user?.id ?? null}
+          onClose={() => setQualifyFor(null)}
+          onSent={() => {
+            const k = keyFor(qualifyFor);
+            updateAction(k, { category: "forwarded" });
+            setQualifyFor(null);
+            toast.success("Forwarded to CS");
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function QualifyDialog({
+  row, phone, actorId, onClose, onSent,
+}: { row: Row; phone: string; actorId: string | null; onClose: () => void; onSent: () => void }) {
+  const [customerName, setCustomerName] = useState(row["Account Name"] ?? "");
+  const [customerNumber, setCustomerNumber] = useState(phone);
+  const [context, setContext] = useState(row["Post Text"] ?? "");
+  const [passItTo, setPassItTo] = useState("");
+  const [subArea, setSubArea] = useState(row["Sub Area / Neighborhood"] ?? "");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { setCustomerNumber(phone); }, [phone]);
+
+  async function send() {
+    if (!customerName.trim() || !customerNumber.trim()) {
+      toast.error("Customer name and number are required");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("qualified_leads").insert({
+        customer_name: customerName.trim(),
+        customer_number: customerNumber.trim(),
+        context: context.trim() || null,
+        pass_it_to: passItTo.trim() || null,
+        sub_area: subArea.trim() || null,
+        main_area: row["Account Area"]?.trim() || null,
+        original_lead_link: row["Lead Link"] || null,
+        assigned_by: actorId,
+      });
+      if (error) throw error;
+      onSent();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader><DialogTitle>Forward to CS</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Customer Name"><Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} /></Field>
+          <Field label="Customer Number"><Input value={customerNumber} onChange={(e) => setCustomerNumber(e.target.value)} placeholder="Multiple? separate with comma" /></Field>
+          <Field label="Sub Area"><Input value={subArea} onChange={(e) => setSubArea(e.target.value)} /></Field>
+          <Field label="Pass it to"><Input value={passItTo} onChange={(e) => setPassItTo(e.target.value)} placeholder="CS rep / team" /></Field>
+          <div className="col-span-2">
+            <Field label="Context"><Textarea rows={4} value={context} onChange={(e) => setContext(e.target.value)} /></Field>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={send} disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+            Send
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{label}</Label>
+      {children}
     </div>
   );
 }
