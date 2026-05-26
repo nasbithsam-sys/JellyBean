@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, ExternalLink, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw, Globe } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Constants } from "@/integrations/supabase/types";
+
 import { cn } from "@/lib/utils";
 import { launchIncognitonProfile, INCOG_UNREACHABLE } from "@/lib/incogniton";
 
@@ -51,7 +51,16 @@ type Lead = {
   followup_at: string | null; assigned_at: string;
 };
 
-const STATUSES = Constants.public.Enums.cs_status;
+// CS pipeline statuses surfaced in the UI (subset of the DB enum).
+const PIPELINE_STATUSES = [
+  "new",
+  "undeliver",
+  "wrong_number",
+  "already_got_someone",
+  "service_provider_himself",
+  "converted",
+  "need_follow_up",
+] as const;
 
 function Page() {
   const auth = useAuth();
@@ -73,6 +82,13 @@ function Page() {
 
 const STATUS_LABEL: Record<string, string> = {
   new: "New (to contact)",
+  undeliver: "Undeliver",
+  wrong_number: "Wrong Number",
+  already_got_someone: "Already Got Someone",
+  service_provider_himself: "Service Provider Himself",
+  converted: "Converted",
+  need_follow_up: "Need Follow Up",
+  // legacy values (kept so old rows still render)
   called: "Called",
   messaged: "Messaged",
   follow_up: "Follow-up",
@@ -80,17 +96,15 @@ const STATUS_LABEL: Record<string, string> = {
   not_interested: "Not interested",
   already_done: "Already done",
   no_response: "No response",
-  converted: "Converted",
   closed_won: "Closed (done)",
   closed_lost: "Closed (lost)",
 };
 
 const GROUPS: Record<string, { statuses: string[]; tone: string }> = {
   "To contact": { statuses: ["new"], tone: "bg-primary" },
-  "Reached out": { statuses: ["called", "messaged", "follow_up", "no_response"], tone: "bg-warning" },
-  Interested: { statuses: ["interested"], tone: "bg-primary-glow" },
-  Done: { statuses: ["converted", "closed_won", "already_done"], tone: "bg-success" },
-  Dropped: { statuses: ["not_interested", "closed_lost"], tone: "bg-destructive" },
+  "Need Follow Up": { statuses: ["need_follow_up", "follow_up"], tone: "bg-warning" },
+  Converted: { statuses: ["converted", "closed_won"], tone: "bg-success" },
+  Dropped: { statuses: ["undeliver", "wrong_number", "already_got_someone", "service_provider_himself", "not_interested", "closed_lost", "already_done"], tone: "bg-destructive" },
 };
 
 function Inner() {
@@ -237,7 +251,34 @@ function Inner() {
 }
 
 function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
+  const qc = useQueryClient();
+  const auth = useAuth();
+  const [status, setStatus] = useState(lead.cs_status);
+  const [saving, setSaving] = useState(false);
   const initials = (lead.customer_name || "?").split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+
+  async function changeStatus(next: string) {
+    const prev = status;
+    setStatus(next);
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("qualified_leads").update({ cs_status: next as never }).eq("id", lead.id);
+      if (error) throw error;
+      await supabase.from("activity_logs").insert({
+        actor_id: auth.user?.id, actor_name: auth.profile?.full_name, actor_role: auth.primaryRole,
+        action: "cs.status_changed", entity_type: "qualified_lead", entity_id: lead.id,
+        metadata: { status: next, from: "card" },
+      });
+      toast.success(`Status → ${STATUS_LABEL[next] ?? next}`);
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } catch (e) {
+      setStatus(prev);
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up" onClick={onOpen}>
       <div className="flex items-start gap-3">
@@ -247,7 +288,7 @@ function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-[13.5px] font-semibold truncate">{lead.customer_name}</h3>
-            <StatusBadge status={lead.cs_status} />
+            <StatusBadge status={status} />
           </div>
           <a
             href={`tel:${lead.customer_number}`}
@@ -272,6 +313,19 @@ function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
         </p>
       )}
 
+      <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+        <Select value={status} onValueChange={changeStatus} disabled={saving}>
+          <SelectTrigger className="h-8 text-[12px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PIPELINE_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>{STATUS_LABEL[s] ?? s.replace(/_/g, " ")}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11.5px] text-muted-foreground">
         <span className="tabular-nums">{formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}</span>
         {lead.followup_at && (
@@ -288,13 +342,12 @@ function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
 
 function StatusBadge({ status }: { status: string }) {
   const tone =
-    status === "converted" || status === "closed_won" || status === "already_done" ? "bg-success/15 text-success border-success/30"
-      : status === "closed_lost" || status === "not_interested" ? "bg-destructive/15 text-destructive border-destructive/30"
-        : status === "interested" ? "bg-primary/15 text-primary border-primary/30"
-          : status === "follow_up" ? "bg-primary-glow/15 text-primary-glow border-primary-glow/30"
+    status === "converted" || status === "closed_won" ? "bg-success/15 text-success border-success/30"
+      : status === "undeliver" || status === "wrong_number" || status === "already_got_someone" || status === "service_provider_himself" || status === "closed_lost" || status === "not_interested" || status === "already_done" ? "bg-destructive/15 text-destructive border-destructive/30"
+        : status === "need_follow_up" || status === "follow_up" ? "bg-warning/15 text-warning border-warning/30"
+          : status === "interested" ? "bg-primary/15 text-primary border-primary/30"
             : status === "called" || status === "messaged" ? "bg-warning/15 text-warning border-warning/30"
-              : status === "no_response" ? "bg-muted text-muted-foreground border-border"
-                : "bg-muted text-muted-foreground border-border";
+              : "bg-muted text-muted-foreground border-border";
   return (
     <span className={cn("text-[10.5px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap", tone)}>
       {STATUS_LABEL[status] ?? status.replace(/_/g, " ")}
@@ -407,7 +460,7 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABEL[s] ?? s.replace(/_/g, " ")}</SelectItem>)}
+                {PIPELINE_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABEL[s] ?? s.replace(/_/g, " ")}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

@@ -431,6 +431,11 @@ export type Database = {
         | "not_interested"
         | "already_done"
         | "no_response"
+        | "undeliver"
+        | "wrong_number"
+        | "already_got_someone"
+        | "service_provider_himself"
+        | "need_follow_up"
       raw_lead_cancel_reason:
         | "not_a_lead"
         | "general_post"
@@ -579,6 +584,11 @@ export const Constants = {
         "not_interested",
         "already_done",
         "no_response",
+        "undeliver",
+        "wrong_number",
+        "already_got_someone",
+        "service_provider_himself",
+        "need_follow_up",
       ],
       raw_lead_cancel_reason: [
         "not_a_lead",
