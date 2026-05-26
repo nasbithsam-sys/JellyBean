@@ -428,56 +428,69 @@ function Inner() {
           <DialogHeader>
             <DialogTitle>Connect Incogniton to this dashboard</DialogTitle>
             <DialogDescription>
-              The dashboard talks to the Incogniton desktop app at{" "}
-              <code className="font-mono text-[12px]">http://localhost:35000</code>. Two things must
-              be true.
+              The dashboard calls Incogniton's local API at{" "}
+              <code className="font-mono text-[12px]">http://localhost:35000</code>. Opening that
+              URL in a browser tab works because no CORS check applies. Reading it from JavaScript
+              on this HTTPS site does — and Incogniton does <strong>not</strong> send the{" "}
+              <code className="font-mono">Access-Control-Allow-Origin</code> header, so the browser
+              blocks the response.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 text-[13px]">
             <div>
               <div className="font-medium mb-1">1. Incogniton must be running</div>
               <p className="text-muted-foreground">
-                Open the Incogniton desktop app and leave it running in the background. Then click{" "}
-                <strong>Test Connection</strong>.
+                Open the Incogniton desktop app and leave it in the background.
               </p>
             </div>
             <div>
-              <div className="font-medium mb-1">2. Allow insecure content (HTTPS → localhost)</div>
+              <div className="font-medium mb-1">
+                2. Allow this site to read Incogniton's response (CORS)
+              </div>
               <p className="text-muted-foreground mb-2">
-                Because this page is HTTPS, Chrome blocks calls to{" "}
-                <code className="font-mono">http://localhost</code> by default.
+                Pick <strong>one</strong> of these. The Chrome “insecure content” flag does{" "}
+                <em>not</em> help — this is a CORS issue, not a mixed-content issue.
               </p>
-              <div className="font-medium text-[12.5px] mt-2">Permanent fix (recommended):</div>
+
+              <div className="font-medium text-[12.5px] mt-2">
+                Option A — CORS unblock extension (easiest)
+              </div>
               <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
                 <li>
-                  Open{" "}
-                  <code className="font-mono">
-                    chrome://flags/#unsafely-treat-insecure-origin-as-secure
-                  </code>
+                  Install a CORS extension such as{" "}
+                  <strong>“Allow CORS: Access-Control-Allow-Origin”</strong> or{" "}
+                  <strong>“CORS Unblock”</strong> from the Chrome Web Store.
                 </li>
+                <li>Enable it (toolbar icon → ON) on this tab, then reload.</li>
                 <li>
-                  Paste this site's origin:{" "}
-                  <code className="font-mono">
-                    {typeof window !== "undefined" ? window.location.origin : ""}
-                  </code>
-                </li>
-                <li>
-                  Set the flag to <strong>Enabled</strong> and relaunch Chrome.
+                  Click <strong>Test Connection</strong>. Disable the extension when you're done.
                 </li>
               </ol>
-              <div className="font-medium text-[12.5px] mt-3">Per-site (quick):</div>
-              <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
-                <li>
-                  Click the lock / tune icon in the address bar → <strong>Site settings</strong>.
-                </li>
-                <li>
-                  Scroll to <strong>Insecure content</strong> and set it to <strong>Allow</strong>.
-                </li>
-                <li>Reload the page.</li>
-              </ol>
+
+              <div className="font-medium text-[12.5px] mt-3">
+                Option B — Launch Chrome with web security off (advanced)
+              </div>
+              <p className="text-muted-foreground">
+                Quit Chrome, then start it from a terminal with a separate profile:
+              </p>
+              <pre className="font-mono text-[11px] bg-muted/40 p-2 rounded mt-1 overflow-x-auto">
+                chrome --disable-web-security --user-data-dir=/tmp/incog-chrome
+              </pre>
+              <p className="text-muted-foreground text-[12px] mt-1">
+                Use only for this app. Do not browse other sites in that window.
+              </p>
+
+              <div className="font-medium text-[12.5px] mt-3">
+                Option C — Skip sync, launch only
+              </div>
+              <p className="text-muted-foreground">
+                Even without CORS, the <strong>Launch</strong> button in CS Leads still works
+                (fire-and-forget). Only the <strong>Sync from Incogniton</strong> button on this
+                page needs CORS, because it has to read the profile list response.
+              </p>
             </div>
             <p className="text-[12px] text-muted-foreground">
-              After applying, click <strong>Test Connection</strong> to confirm.
+              After fixing, click <strong>Test Connection</strong>.
             </p>
           </div>
         </DialogContent>
