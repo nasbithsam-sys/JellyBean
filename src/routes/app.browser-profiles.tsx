@@ -36,6 +36,8 @@ type Profile = {
   platform: string | null;
   linked_lead_id: string | null;
   last_launched_at: string | null;
+  launched_by_name: string | null;
+  launched_by_email: string | null;
   created_at: string;
 };
 
