@@ -107,6 +107,37 @@ function Inner() {
     },
   });
 
+  // ── New-lead sound notification (poll every 20s) ────────────────────────────
+  const lastSeenRef = useRef<string | null>(null);
+  const newLeadPoll = useQuery({
+    queryKey: ["cs_new_lead_ping"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("qualified_leads")
+        .select("id, customer_name, assigned_at")
+        .order("assigned_at", { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return data?.[0] ?? null;
+    },
+    refetchInterval: 20_000,
+    refetchOnWindowFocus: true,
+  });
+  useEffect(() => {
+    const latest = newLeadPoll.data;
+    if (!latest) return;
+    if (lastSeenRef.current === null) {
+      lastSeenRef.current = latest.assigned_at;
+      return;
+    }
+    if (latest.assigned_at > lastSeenRef.current) {
+      lastSeenRef.current = latest.assigned_at;
+      playNotificationBeep();
+      toast.success(`New lead: ${latest.customer_name}`);
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    }
+  }, [newLeadPoll.data, qc]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return list.data ?? [];
