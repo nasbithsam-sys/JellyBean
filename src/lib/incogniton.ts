@@ -139,15 +139,36 @@ export async function pingIncogniton(): Promise<{
 }
 
 type RawProfile = Record<string, unknown> & {
+  profile_browser_id?: string;
+  profileID?: string;
+  id?: string;
   profile_name?: string;
+  profileName?: string;
+  name?: string;
   profile_group?: string;
+  profileGroup?: string;
+  group?: string;
   platform?: string;
 };
 
+type RawProfileInfo = {
+  profile_name?: string;
+  profile_group?: string;
+  simulated_operating_system?: string;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
 function normalizeList(json: unknown): RawProfile[] {
-  const root: any = json;
-  let arr: any = root;
-  if (root && typeof root === "object") {
+  const root = asRecord(json);
+  let arr: unknown = Array.isArray(json) ? json : root;
+  if (!Array.isArray(json)) {
     arr = root.profileData ?? root.data ?? root.profiles ?? root;
   }
   if (typeof arr === "string") {
@@ -158,13 +179,14 @@ function normalizeList(json: unknown): RawProfile[] {
     }
   }
   if (!Array.isArray(arr)) return [];
-  return arr.map((p: any) => {
-    const gpi = p?.general_profile_information ?? {};
+  return arr.map((item) => {
+    const p = asRecord(item) as RawProfile;
+    const gpi = asRecord(p.general_profile_information) as RawProfileInfo;
     return {
       ...p,
-      profile_name: p.profile_name ?? p.profileName ?? p.name ?? gpi.profile_name,
-      profile_group: p.profile_group ?? p.profileGroup ?? p.group ?? gpi.profile_group,
-      platform: p.platform ?? gpi.simulated_operating_system,
+      profile_name: optionalString(p.profile_name) ?? optionalString(p.profileName) ?? optionalString(p.name) ?? optionalString(gpi.profile_name),
+      profile_group: optionalString(p.profile_group) ?? optionalString(p.profileGroup) ?? optionalString(p.group) ?? optionalString(gpi.profile_group),
+      platform: optionalString(p.platform) ?? optionalString(gpi.simulated_operating_system),
     } as RawProfile;
   });
 }
