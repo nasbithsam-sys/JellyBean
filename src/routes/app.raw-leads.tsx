@@ -29,7 +29,7 @@ import {
   Search,
   Settings as Gear,
   Send,
-  Check,
+  Send,
   BookmarkCheck,
   Eye,
   PhoneOff,
