@@ -210,8 +210,16 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [qualifyFor, setQualifyFor] = useState<Row | null>(null);
 
-  // Accumulated rows across refreshes (kept in memory for the session)
-  const [allRows, setAllRows] = useState<Row[]>([]);
+  // Accumulated rows across refreshes (persisted to localStorage so tab-switches don't lose data)
+  const [allRows, setAllRows] = useState<Row[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(ROWS_KEY);
+      return raw ? (JSON.parse(raw) as Row[]) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const { isLoading, isFetching, refetch, error, data } = useQuery({
     queryKey: ["raw-leads-api", apiUrl, startRow],
@@ -229,7 +237,13 @@ function Inner() {
         // Deduplicate by keyFor
         const existing = new Set(prev.map(keyFor));
         const fresh = data.rows.filter((r) => !existing.has(keyFor(r)));
-        return [...prev, ...fresh];
+        const merged = [...prev, ...fresh];
+        try {
+          localStorage.setItem(ROWS_KEY, JSON.stringify(merged));
+        } catch {
+          /* quota — ignore */
+        }
+        return merged;
       });
     }
     // Save the next row so next manual Refresh or page load continues from here
