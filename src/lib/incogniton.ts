@@ -133,7 +133,10 @@ export async function pingIncogniton(): Promise<{
       probes.push({
         ...endpoint,
         ok: false,
-        error: e instanceof TypeError ? "Blocked by browser (Private Network Access / CORS)" : (e as Error).message,
+        error:
+          e instanceof TypeError
+            ? "Blocked by browser (Private Network Access / CORS)"
+            : (e as Error).message,
       });
     }
   }

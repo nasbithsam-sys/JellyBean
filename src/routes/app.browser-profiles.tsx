@@ -7,12 +7,24 @@ import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2, Download, Rocket, Link2, Trash2, Search, Globe, Plus, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { launchIncognitonProfile } from "@/lib/incogniton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/app/browser-profiles")({ component: Page });
 
@@ -87,7 +99,10 @@ function Inner() {
   }, [leads.data]);
 
   const groups = useMemo(
-    () => Array.from(new Set((profiles.data ?? []).map((p) => p.group_name).filter((g): g is string => !!g))).sort(),
+    () =>
+      Array.from(
+        new Set((profiles.data ?? []).map((p) => p.group_name).filter((g): g is string => !!g)),
+      ).sort(),
     [profiles.data],
   );
 
@@ -107,11 +122,16 @@ function Inner() {
     toast.loading("Launching profile…", { id: "launch" });
     try {
       await launchIncognitonProfile(p.incogniton_profile_id);
-      await supabase.from("incogniton_profiles").update({ last_launched_at: new Date().toISOString() }).eq("id", p.id);
+      await supabase
+        .from("incogniton_profiles")
+        .update({ last_launched_at: new Date().toISOString() })
+        .eq("id", p.id);
       qc.invalidateQueries({ queryKey: ["incog_profiles"] });
       toast.success("Profile launch sent to Incogniton ✓", { id: "launch" });
     } catch (e) {
-      toast.error("Could not reach Incogniton. Make sure Incogniton desktop app is open.", { id: "launch" });
+      toast.error("Could not reach Incogniton. Make sure Incogniton desktop app is open.", {
+        id: "launch",
+      });
     }
   }
 
@@ -134,9 +154,10 @@ function Inner() {
       <div className="text-[12px] bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-start gap-2">
         <Info className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
         <div>
-          <span className="font-medium">How launching works:</span> Click <strong>Add Profile</strong> below to save
-          your Incogniton profile ID and name. Then hit <strong>Launch</strong> — it sends the open command directly to
-          Incogniton on your PC. Make sure Incogniton is running. Not sure of your profile ID?{" "}
+          <span className="font-medium">How launching works:</span> Click{" "}
+          <strong>Add Profile</strong> below to save your Incogniton profile ID and name. Then hit{" "}
+          <strong>Launch</strong> — it sends the open command directly to Incogniton on your PC.
+          Make sure Incogniton is running. Not sure of your profile ID?{" "}
           <button className="underline text-primary" onClick={() => setHowToOpen(true)}>
             See how to find it.
           </button>
@@ -197,7 +218,9 @@ function Inner() {
               return (
                 <tr key={p.id}>
                   <td className="font-medium">{p.profile_name}</td>
-                  <td className="font-mono text-[11px] text-muted-foreground">{p.incogniton_profile_id}</td>
+                  <td className="font-mono text-[11px] text-muted-foreground">
+                    {p.incogniton_profile_id}
+                  </td>
                   <td className="text-[12.5px]">{p.group_name ?? "—"}</td>
                   <td className="text-[12.5px]">{p.platform ?? "—"}</td>
                   <td className="text-[12.5px]">
@@ -222,10 +245,20 @@ function Inner() {
                     </span>
                   </td>
                   <td className="text-right space-x-1.5 whitespace-nowrap">
-                    <Button size="sm" variant="default" onClick={() => launch(p)} title="Launch in Incogniton">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => launch(p)}
+                      title="Launch in Incogniton"
+                    >
                       <Rocket className="h-3.5 w-3.5 mr-1" /> Launch
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setLinkOpenFor(p)} title="Link to lead">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setLinkOpenFor(p)}
+                      title="Link to lead"
+                    >
                       <Link2 className="h-3.5 w-3.5" />
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => remove(p)} title="Delete">
@@ -250,7 +283,11 @@ function Inner() {
         />
       )}
       {exportOpen && (
-        <ExportDialog profiles={profiles.data ?? []} groups={groups} onClose={() => setExportOpen(false)} />
+        <ExportDialog
+          profiles={profiles.data ?? []}
+          groups={groups}
+          onClose={() => setExportOpen(false)}
+        />
       )}
       {linkOpenFor && (
         <LinkLeadDialog
@@ -301,8 +338,8 @@ function Inner() {
               </ol>
             </div>
             <div className="bg-muted/40 rounded p-3 text-[12px] text-muted-foreground">
-              <strong>Tip:</strong> The profile name is just a label for your CRM — it doesn't need to match the name in
-              Incogniton exactly, but keeping them the same avoids confusion.
+              <strong>Tip:</strong> The profile name is just a label for your CRM — it doesn't need
+              to match the name in Incogniton exactly, but keeping them the same avoids confusion.
             </div>
           </div>
         </DialogContent>
@@ -362,12 +399,17 @@ function AddProfileDialog({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-card w-full max-w-md rounded-lg border p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="bg-card w-full max-w-md rounded-lg border p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div>
           <h2 className="text-lg font-semibold">Add Incogniton Profile</h2>
           <p className="text-[12px] text-muted-foreground mt-1">
             Enter the profile details manually. Not sure of the ID?{" "}
-            <span className="text-primary">Open Incogniton → right-click profile → Profile Info.</span>
+            <span className="text-primary">
+              Open Incogniton → right-click profile → Profile Info.
+            </span>
           </p>
         </div>
 
@@ -389,10 +431,18 @@ function AddProfileDialog({
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Group (optional)">
-              <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. testing" />
+              <Input
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="e.g. testing"
+              />
             </Field>
             <Field label="Platform (optional)">
-              <Input value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="e.g. Facebook" />
+              <Input
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+                placeholder="e.g. Facebook"
+              />
             </Field>
           </div>
         </div>
@@ -413,14 +463,29 @@ function AddProfileDialog({
 
 // ── Export Dialog ─────────────────────────────────────────────────────────────
 
-function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; groups: string[]; onClose: () => void }) {
+function ExportDialog({
+  profiles,
+  groups,
+  onClose,
+}: {
+  profiles: Profile[];
+  groups: string[];
+  onClose: () => void;
+}) {
   const [group, setGroup] = useState(groups[0] ?? "__all__");
   const [format, setFormat] = useState<"csv" | "json">("csv");
 
   function download() {
-    const rows = group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
+    const rows =
+      group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
     if (rows.length === 0) return toast.error("No profiles in this group");
-    const fields = ["profile_name", "incogniton_profile_id", "group_name", "platform", "linked_lead_id"] as const;
+    const fields = [
+      "profile_name",
+      "incogniton_profile_id",
+      "group_name",
+      "platform",
+      "linked_lead_id",
+    ] as const;
     let blob: Blob;
     let filename: string;
     if (format === "csv") {
@@ -428,7 +493,10 @@ function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; grou
         const s = v ?? "";
         return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
       };
-      const csv = [fields.join(","), ...rows.map((r) => fields.map((f) => escape(r[f])).join(","))].join("\n");
+      const csv = [
+        fields.join(","),
+        ...rows.map((r) => fields.map((f) => escape(r[f])).join(",")),
+      ].join("\n");
       blob = new Blob([csv], { type: "text/csv" });
       filename = `incogniton-${group}.csv`;
     } else {
@@ -448,7 +516,10 @@ function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; grou
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-card w-full max-w-md rounded-lg border p-6" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="bg-card w-full max-w-md rounded-lg border p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-lg font-semibold mb-4">Export Profiles</h2>
         <div className="space-y-4">
           <div>
@@ -471,10 +542,16 @@ function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; grou
             <Label className="block mb-2">Format</Label>
             <div className="flex gap-4 text-sm">
               <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input type="radio" checked={format === "csv"} onChange={() => setFormat("csv")} /> CSV
+                <input type="radio" checked={format === "csv"} onChange={() => setFormat("csv")} />{" "}
+                CSV
               </label>
               <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input type="radio" checked={format === "json"} onChange={() => setFormat("json")} /> JSON
+                <input
+                  type="radio"
+                  checked={format === "json"}
+                  onChange={() => setFormat("json")}
+                />{" "}
+                JSON
               </label>
             </div>
           </div>
@@ -525,7 +602,10 @@ function LinkLeadDialog({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-card w-full max-w-md rounded-lg border p-6" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="bg-card w-full max-w-md rounded-lg border p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-lg font-semibold">Link "{profile.profile_name}" to a lead</h2>
         <p className="text-[12.5px] text-muted-foreground mt-1">
           Pick a qualified lead to associate this browser profile with.
@@ -538,7 +618,9 @@ function LinkLeadDialog({
           autoFocus
         />
         <div className="mt-3 max-h-72 overflow-y-auto border border-border rounded-md divide-y divide-border">
-          {filtered.length === 0 && <div className="p-3 text-[12.5px] text-muted-foreground">No matches</div>}
+          {filtered.length === 0 && (
+            <div className="p-3 text-[12.5px] text-muted-foreground">No matches</div>
+          )}
           {filtered.map((l) => (
             <button
               key={l.id}
@@ -550,7 +632,9 @@ function LinkLeadDialog({
               )}
             >
               {l.customer_name}
-              {profile.linked_lead_id === l.id && <span className="ml-2 text-[11px] text-primary">linked</span>}
+              {profile.linked_lead_id === l.id && (
+                <span className="ml-2 text-[11px] text-primary">linked</span>
+              )}
             </button>
           ))}
         </div>

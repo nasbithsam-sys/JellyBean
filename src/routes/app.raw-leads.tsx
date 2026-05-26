@@ -8,9 +8,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, ExternalLink, RefreshCw, Search, Settings as Gear, Send, Check, BookmarkCheck } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Loader2,
+  ExternalLink,
+  RefreshCw,
+  Search,
+  Settings as Gear,
+  Send,
+  Check,
+  BookmarkCheck,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -102,7 +123,10 @@ function leadValue(r: Row, a?: Action): "yes" | "no" | "" {
 // Your Apps Script should accept ?startRow=N and return:
 //   { rows: [...], nextRow: N }
 // If nextRow is missing, we advance by rows.length automatically.
-async function fetchSheetRows(apiUrl: string, startRow: number): Promise<{ rows: Row[]; nextRow: number }> {
+async function fetchSheetRows(
+  apiUrl: string,
+  startRow: number,
+): Promise<{ rows: Row[]; nextRow: number }> {
   const url = `${apiUrl}${apiUrl.includes("?") ? "&" : "?"}startRow=${startRow}`;
   let res: Response;
   try {
@@ -127,7 +151,8 @@ async function fetchSheetRows(apiUrl: string, startRow: number): Promise<{ rows:
   }
   const rows = Array.isArray(json.rows) ? json.rows : [];
   // If Apps Script tells us the next row, use it; otherwise advance ourselves
-  const nextRow = typeof json.nextRow === "number" && json.nextRow > 0 ? json.nextRow : startRow + rows.length;
+  const nextRow =
+    typeof json.nextRow === "number" && json.nextRow > 0 ? json.nextRow : startRow + rows.length;
   return { rows, nextRow };
 }
 
@@ -153,18 +178,24 @@ function Inner() {
   const auth = useAuth();
 
   const [apiUrl, setApiUrl] = useState<string>(() =>
-    typeof window === "undefined" ? DEFAULT_API_URL : localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL,
+    typeof window === "undefined"
+      ? DEFAULT_API_URL
+      : localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL,
   );
   const [apiUrlDraft, setApiUrlDraft] = useState(apiUrl);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Row offset state — what row to fetch from next
-  const [startRow, setStartRow] = useState<number>(() => (typeof window === "undefined" ? 1 : getEffectiveStartRow()));
+  const [startRow, setStartRow] = useState<number>(() =>
+    typeof window === "undefined" ? 1 : getEffectiveStartRow(),
+  );
   const [startRowDraft, setStartRowDraft] = useState<string>(String(startRow));
   // Track the nextRow returned by the last successful fetch so Refresh advances it
   const nextRowRef = useRef<number>(startRow);
 
-  const [actions, setActions] = useState<Actions>(() => (typeof window === "undefined" ? {} : loadActions()));
+  const [actions, setActions] = useState<Actions>(() =>
+    typeof window === "undefined" ? {} : loadActions(),
+  );
   const updateAction = useCallback((k: string, patch: Partial<Action>) => {
     setActions((prev) => {
       const next = { ...prev, [k]: { ...prev[k], ...patch } };
@@ -233,9 +264,13 @@ function Inner() {
     const q = query.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) =>
-        [r["Account Name"], r["Sub Area / Neighborhood"], r["Post Text"], r["Account Area"], r.Lead].some((v) =>
-          (v ?? "").toString().toLowerCase().includes(q),
-        ),
+        [
+          r["Account Name"],
+          r["Sub Area / Neighborhood"],
+          r["Post Text"],
+          r["Account Area"],
+          r.Lead,
+        ].some((v) => (v ?? "").toString().toLowerCase().includes(q)),
       );
     }
     return rows;
@@ -350,7 +385,12 @@ function Inner() {
 
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…" className="h-9 pl-9" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search…"
+            className="h-9 pl-9"
+          />
         </div>
 
         {tab === "new" && (
@@ -366,10 +406,22 @@ function Inner() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant="outline" className="h-9" onClick={() => setSettingsOpen(true)} title="Web App URL">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={() => setSettingsOpen(true)}
+            title="Web App URL"
+          >
             <Gear className="h-3.5 w-3.5 mr-1.5" /> Source
           </Button>
-          <Button size="sm" variant="outline" className="h-9" onClick={handleRefresh} disabled={isFetching}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={handleRefresh}
+            disabled={isFetching}
+          >
             {isFetching ? (
               <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
             ) : (
@@ -390,9 +442,12 @@ function Inner() {
             <ol className="list-decimal pl-4 mt-0.5 space-y-0.5">
               <li>In Apps Script → Deploy → Manage deployments → pencil icon</li>
               <li>
-                Set <strong>"Who has access"</strong> to <strong>"Anyone"</strong> (not "Anyone with Google account")
+                Set <strong>"Who has access"</strong> to <strong>"Anyone"</strong> (not "Anyone with
+                Google account")
               </li>
-              <li>Copy the new deployment URL and paste it in the Source settings (gear icon above)</li>
+              <li>
+                Copy the new deployment URL and paste it in the Source settings (gear icon above)
+              </li>
             </ol>
           </div>
         </div>
@@ -401,7 +456,10 @@ function Inner() {
       {/* Table */}
       <div className="glass-card overflow-hidden">
         <div className="max-h-[calc(100vh-340px)] overflow-auto">
-          <table className="text-[12px] border-separate border-spacing-0 table-fixed w-full" style={{ minWidth: 1180 }}>
+          <table
+            className="text-[12px] border-separate border-spacing-0 table-fixed w-full"
+            style={{ minWidth: 1180 }}
+          >
             <colgroup>
               <col style={{ width: 140 }} />
               <col style={{ width: 125 }} />
@@ -452,8 +510,13 @@ function Inner() {
                         {r["Account Name"] || "—"}
                       </div>
                     </td>
-                    <td className="border-b border-border px-2.5 py-2 truncate" title={r["Sub Area / Neighborhood"]}>
-                      {r["Sub Area / Neighborhood"] || <span className="text-muted-foreground">—</span>}
+                    <td
+                      className="border-b border-border px-2.5 py-2 truncate"
+                      title={r["Sub Area / Neighborhood"]}
+                    >
+                      {r["Sub Area / Neighborhood"] || (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td
                       className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground truncate"
@@ -479,7 +542,10 @@ function Inner() {
                           {lv === "yes" ? "Yes" : "No"}
                         </span>
                       ) : (
-                        <Select value="" onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}>
+                        <Select
+                          value=""
+                          onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
+                        >
                           <SelectTrigger className="h-7 text-[11px]">
                             <SelectValue placeholder="—" />
                           </SelectTrigger>
@@ -510,7 +576,10 @@ function Inner() {
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
                       {r["Captured Time (UTC)"] || "—"}
                     </td>
-                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] truncate" title={r["Account Area"]}>
+                    <td
+                      className="border-b border-border px-2.5 py-2 text-[11.5px] truncate"
+                      title={r["Account Area"]}
+                    >
                       {r["Account Area"] || <span className="text-muted-foreground">—</span>}
                     </td>
                     <td
@@ -528,8 +597,9 @@ function Inner() {
       </div>
 
       <div className="text-[11.5px] text-muted-foreground">
-        {visible.length} {visible.length === 1 ? "row" : "rows"} shown · {allRows.length} loaded this session · rows{" "}
-        {startRow}–{nextRowRef.current - 1 > startRow ? nextRowRef.current - 1 : "?"} from sheet
+        {visible.length} {visible.length === 1 ? "row" : "rows"} shown · {allRows.length} loaded
+        this session · rows {startRow}–
+        {nextRowRef.current - 1 > startRow ? nextRowRef.current - 1 : "?"} from sheet
       </div>
 
       {/* Source settings */}
@@ -540,7 +610,8 @@ function Inner() {
           </DialogHeader>
           <div className="space-y-3">
             <Label className="text-[12px] text-muted-foreground">
-              Google Apps Script Web App URL. Must return <code>{`{ rows: [...], nextRow: N }`}</code>.
+              Google Apps Script Web App URL. Must return{" "}
+              <code>{`{ rows: [...], nextRow: N }`}</code>.
             </Label>
             <Input
               value={apiUrlDraft}
@@ -548,7 +619,9 @@ function Inner() {
               placeholder="https://script.google.com/macros/s/.../exec"
             />
             <div className="text-[11px] text-muted-foreground space-y-1 bg-muted/40 rounded p-3">
-              <div className="font-medium text-foreground">Required Apps Script doGet() format:</div>
+              <div className="font-medium text-foreground">
+                Required Apps Script doGet() format:
+              </div>
               <pre className="text-[10px] overflow-x-auto whitespace-pre-wrap">{`function doGet(e) {
   var startRow = parseInt(e.parameter.startRow) || 1;
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
@@ -678,7 +751,11 @@ function QualifyDialog({
             <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} />
           </Field>
           <Field label="Pass it to">
-            <Input value={passItTo} onChange={(e) => setPassItTo(e.target.value)} placeholder="CS rep / team" />
+            <Input
+              value={passItTo}
+              onChange={(e) => setPassItTo(e.target.value)}
+              placeholder="CS rep / team"
+            />
           </Field>
           <div className="col-span-2">
             <Field label="Context">
@@ -691,7 +768,11 @@ function QualifyDialog({
             Cancel
           </Button>
           <Button onClick={send} disabled={busy}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Send className="h-4 w-4 mr-2" />
+            )}
             Send
           </Button>
         </DialogFooter>
