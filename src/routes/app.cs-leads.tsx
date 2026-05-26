@@ -70,6 +70,7 @@ const GROUPS: Record<string, { statuses: string[]; tone: string }> = {
 };
 
 function Inner() {
+  const auth = useAuth();
   const qc = useQueryClient();
   const [group, setGroup] = useState<keyof typeof GROUPS>("To contact");
   const [query, setQuery] = useState("");
@@ -86,6 +87,23 @@ function Inner() {
         .limit(300);
       if (error) throw error;
       return (data ?? []) as unknown as Lead[];
+    },
+  });
+
+  const todayStart = useMemo(() => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString();
+  }, []);
+  const sentToday = useQuery({
+    queryKey: ["cs_sent_today", auth.user?.id, todayStart],
+    enabled: !!auth.user?.id,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("qualified_leads")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_by", auth.user!.id)
+        .gte("assigned_at", todayStart);
+      if (error) throw error;
+      return count ?? 0;
     },
   });
 
@@ -126,16 +144,22 @@ function Inner() {
             className="w-full h-9 pl-9 pr-3 rounded-md bg-surface border border-border text-[13px] placeholder:text-muted-foreground/70 focus:outline-none"
           />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 ml-auto"
-          onClick={() => qc.invalidateQueries({ queryKey: ["cs_leads"] })}
-          disabled={list.isFetching}
-        >
-          {list.isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
-          Refresh
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px]">
+            <span className="text-muted-foreground">Sent today</span>
+            <span className="font-semibold tabular-nums">{sentToday.data ?? "—"}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => qc.invalidateQueries({ queryKey: ["cs_leads"] })}
+            disabled={list.isFetching}
+          >
+            {list.isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {list.isLoading ? (
