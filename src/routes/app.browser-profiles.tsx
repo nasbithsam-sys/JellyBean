@@ -124,14 +124,26 @@ function Inner() {
     toast.loading("Launching profile…", { id: "launch" });
     try {
       await launchIncognitonProfile(p.incogniton_profile_id);
+      const user = auth.user;
+      const launchedByName =
+        (user?.user_metadata?.full_name as string | undefined) ??
+        auth.profile?.full_name ??
+        user?.email?.split("@")[0] ??
+        "Unknown";
       await supabase
         .from("incogniton_profiles")
-        .update({ last_launched_at: new Date().toISOString() })
+        .update({
+          last_launched_at: new Date().toISOString(),
+          launched_by_name: launchedByName,
+          launched_by_email: user?.email ?? null,
+        } as never)
         .eq("id", p.id);
       qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-      toast.success("Profile launch sent to Incogniton ✓", { id: "launch" });
+      toast.success("Launch command sent ✓ — Incogniton should open the profile now.", {
+        id: "launch",
+      });
     } catch (e) {
-      toast.error("Could not reach Incogniton. Make sure Incogniton desktop app is open.", {
+      toast.error("Could not reach Incogniton. Make sure the Incogniton desktop app is open.", {
         id: "launch",
       });
     }
