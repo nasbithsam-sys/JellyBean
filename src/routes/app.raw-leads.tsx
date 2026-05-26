@@ -44,6 +44,7 @@ const API_URL_KEY = "rawleads.apiUrl";
 const ACTIONS_KEY = "rawleads.actions.v2";
 const START_ROW_KEY = "rawleads.startRow"; // manually set floor
 const NEXT_ROW_KEY = "rawleads.nextRow"; // auto-advancing cursor
+const ROWS_KEY = "rawleads.rows.v1"; // accumulated rows cache
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Row = Record<string, string> & {
