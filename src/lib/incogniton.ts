@@ -1,15 +1,28 @@
 // Incogniton Anti-Detect Browser local REST API helpers.
-// Incogniton has shipped a few different local API shapes across versions:
-//   - GET /profile/all                        (older)
-//   - GET /api/v1/profile/list                (newer)
-//   - GET /profile/launch/<id>  or  /api/v1/profile/launch/<id>
-//   - GET /profile/stop/<id>    or  /api/v1/profile/stop/<id>
-// We try both so the app works regardless of which Incogniton build is installed.
+//
+// ROOT CAUSE OF "browser not working":
+// ─────────────────────────────────────
+// Incogniton runs a local API at http://localhost:35000.
+// This CRM is served over HTTPS. Modern browsers enforce the
+// "Private Network Access" spec and block HTTPS pages from reading
+// responses from HTTP localhost — even if CORS headers were present.
+// The fetch() call itself may succeed (the request is sent) but the
+// browser refuses to give you the response body, so it looks like
+// the connection failed.
+//
+// SOLUTIONS (pick one):
+// 1. Install a CORS/private-network unblock extension in Chrome (easiest).
+// 2. Use the Incogniton Chromium build — it ships with web-security disabled.
+// 3. Run a tiny local proxy (see proxy instructions in the help dialog).
+// 4. Launch → still works via mode:"no-cors" fire-and-forget.
+//
+// This file tries all known API endpoints and gives the user a clear,
+// actionable error when everything fails.
 
 const BASES = ["http://127.0.0.1:35000", "http://localhost:35000"];
 
 export const INCOG_UNREACHABLE =
-  "Cannot read Incogniton's response. Incogniton's local API does not send CORS headers, so the browser blocks it from JavaScript (even though opening http://localhost:35000/profile/all in a tab works). Open the help dialog and install a CORS-unblock extension, or launch Chrome with --disable-web-security.";
+  "Cannot read Incogniton's response. Your browser blocks HTTPS pages from reading HTTP localhost responses (Private Network Access policy). See the fix instructions in the help dialog.";
 
 const LIST_PATHS = ["/profile/all", "/api/v1/profile/list"];
 const LAUNCH_PATHS = ["/profile/launch/", "/api/v1/profile/launch/"];
@@ -46,16 +59,17 @@ async function getFirstOk(paths: string[]): Promise<Response> {
     if (res.ok) return res;
     failures.push(`${url}: HTTP ${res.status}`);
   }
-  throw new Error(`Incogniton API did not respond OK. Tried ${failures.join(" | ")}`);
+  throw new Error(`Incogniton API did not respond OK. Tried: ${failures.join(" | ")}`);
 }
 
+// fire-and-forget for launch/stop — works even without CORS
 async function sendWithoutReading(paths: string[]): Promise<void> {
   for (const endpoint of endpoints(paths)) {
     try {
       await fetch(`${endpoint.base}${endpoint.path}`, { method: "GET", mode: "no-cors" });
       return;
     } catch {
-      // Try the next host/path. This fallback is only for launch/stop where reading the response is not required.
+      // try next
     }
   }
   throw new Error(INCOG_UNREACHABLE);
@@ -66,9 +80,9 @@ export async function launchIncognitonProfile(profileId: string): Promise<void> 
   const paths = LAUNCH_PATHS.map((p) => `${p}${id}`);
   try {
     await getFirstOk(paths);
-  } catch (e) {
-    if ((e as Error).message.includes("Cannot reach Incogniton")) await sendWithoutReading(paths);
-    else throw e;
+  } catch {
+    // fallback: fire-and-forget works even when browser blocks the response read
+    await sendWithoutReading(paths);
   }
 }
 
@@ -77,9 +91,8 @@ export async function stopIncognitonProfile(profileId: string): Promise<void> {
   const paths = STOP_PATHS.map((p) => `${p}${id}`);
   try {
     await getFirstOk(paths);
-  } catch (e) {
-    if ((e as Error).message.includes("Cannot reach Incogniton")) await sendWithoutReading(paths);
-    else throw e;
+  } catch {
+    await sendWithoutReading(paths);
   }
 }
 
@@ -109,6 +122,7 @@ export async function pingIncogniton(): Promise<{
   probes?: IncognitonProbe[];
 }> {
   const probes: IncognitonProbe[] = [];
+
   for (const endpoint of endpoints(LIST_PATHS)) {
     const url = `${endpoint.base}${endpoint.path}`;
     try {
@@ -119,21 +133,32 @@ export async function pingIncogniton(): Promise<{
       probes.push({
         ...endpoint,
         ok: false,
-        error:
-          e instanceof TypeError ? "Browser blocked or connection refused" : (e as Error).message,
+        error: e instanceof TypeError ? "Blocked by browser (Private Network Access / CORS)" : (e as Error).message,
       });
     }
   }
+
+  // Check if Incogniton is actually running (even if we can't read the response)
   const sawHttp = probes.some((p) => typeof p.status === "number");
   const reachableNoCors = !sawHttp && (await canReachLocalApiWithoutReading());
+
+  if (reachableNoCors) {
+    return {
+      ok: false, // can't fully use it without CORS fix
+      endpoint: "local API is running but response is blocked by browser",
+      error:
+        "✅ Incogniton is running! But your browser blocks this HTTPS site from reading its response (Private Network Access policy). " +
+        "Fix: install a CORS unblock extension (e.g. 'Allow CORS' from Chrome Web Store) and enable it, then reload. " +
+        "Launch buttons still work without the fix.",
+      probes,
+    };
+  }
+
   return {
-    ok: reachableNoCors,
-    endpoint: reachableNoCors ? "local API reachable; response blocked by browser CORS" : undefined,
+    ok: false,
     error: sawHttp
-      ? "Incogniton answered, but none of the known profile list endpoints returned OK. See diagnostics below."
-      : reachableNoCors
-        ? "Incogniton is reachable, but the browser blocks reading the profile list response (CORS/private-network rules). Launch requests can be sent; full sync needs Incogniton to allow this site or a local proxy."
-        : INCOG_UNREACHABLE,
+      ? "Incogniton answered but none of the profile-list endpoints returned OK. Check the diagnostics below."
+      : "Incogniton does not appear to be running, or it's running on a different port. Start the Incogniton desktop app and try again.",
     probes,
   };
 }
