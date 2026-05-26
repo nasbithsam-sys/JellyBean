@@ -93,7 +93,14 @@ function Inner() {
           </div>
         </div>
 
-        {accounts.isLoading || !LeafletMap ? (
+        {!visuals ? (
+          <div className="aspect-[16/10] w-full rounded-lg border border-dashed border-border bg-surface/40 grid place-items-center text-center px-6">
+            <div>
+              <div className="text-sm font-medium">Map visuals are off</div>
+              <div className="text-[12px] text-muted-foreground mt-1">Toggle "Map visuals" on to load and render the map.</div>
+            </div>
+          </div>
+        ) : accounts.isLoading || !LeafletMap ? (
           <div className="h-[480px] grid place-items-center text-muted-foreground">Loading…</div>
         ) : (
           <div className="aspect-[16/10] w-full rounded-lg overflow-hidden border border-border bg-surface">
