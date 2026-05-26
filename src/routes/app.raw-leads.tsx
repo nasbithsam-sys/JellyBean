@@ -8,9 +8,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, ExternalLink, RefreshCw, Search, Settings as Gear, Send, X, Check, AlertTriangle } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Loader2,
+  ExternalLink,
+  RefreshCw,
+  Search,
+  Settings as Gear,
+  Send,
+  X,
+  Check,
+  AlertTriangle,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -63,7 +85,10 @@ function saveActions(a: Actions) {
 }
 
 function keyFor(r: Row) {
-  return r["Lead Link"] || `${r["Account Name"] ?? ""}|${r["Posted Date & Time"] ?? ""}|${(r["Post Text"] ?? "").slice(0, 40)}`;
+  return (
+    r["Lead Link"] ||
+    `${r["Account Name"] ?? ""}|${r["Posted Date & Time"] ?? ""}|${(r["Post Text"] ?? "").slice(0, 40)}`
+  );
 }
 
 function parseCapturedAt(r: Row): number {
@@ -109,7 +134,9 @@ function Inner() {
   const [apiUrlDraft, setApiUrlDraft] = useState(apiUrl);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const [actions, setActions] = useState<Actions>(() => (typeof window === "undefined" ? {} : loadActions()));
+  const [actions, setActions] = useState<Actions>(() =>
+    typeof window === "undefined" ? {} : loadActions(),
+  );
   const updateAction = useCallback((k: string, patch: Partial<Action>) => {
     setActions((prev) => {
       const next = { ...prev, [k]: { ...prev[k], ...patch } };
@@ -146,7 +173,10 @@ function Inner() {
   // Bucket by category (action.category overrides; otherwise it's "new")
   const buckets = useMemo(() => {
     const b: Record<"new" | "forwarded" | "not_found" | "wrong", Row[]> = {
-      new: [], forwarded: [], not_found: [], wrong: [],
+      new: [],
+      forwarded: [],
+      not_found: [],
+      wrong: [],
     };
     for (const r of fresh) {
       const k = keyFor(r);
@@ -170,8 +200,13 @@ function Inner() {
     const q = query.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) =>
-        [r["Account Name"], r["Sub Area / Neighborhood"], r["Post Text"], r["Account Area"], r.Lead]
-          .some((v) => (v ?? "").toString().toLowerCase().includes(q)),
+        [
+          r["Account Name"],
+          r["Sub Area / Neighborhood"],
+          r["Post Text"],
+          r["Account Area"],
+          r.Lead,
+        ].some((v) => (v ?? "").toString().toLowerCase().includes(q)),
       );
     }
     return rows;
@@ -191,18 +226,22 @@ function Inner() {
       {/* Tabs */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
-          {([
-            ["new", "New", buckets.new.length],
-            ["forwarded", "Forwarded", buckets.forwarded.length],
-            ["not_found", "Number not found", buckets.not_found.length],
-            ["wrong", "Wrong posts", buckets.wrong.length],
-          ] as const).map(([k, label, n]) => (
+          {(
+            [
+              ["new", "New", buckets.new.length],
+              ["forwarded", "Forwarded", buckets.forwarded.length],
+              ["not_found", "Number not found", buckets.not_found.length],
+              ["wrong", "Wrong posts", buckets.wrong.length],
+            ] as const
+          ).map(([k, label, n]) => (
             <button
               key={k}
               onClick={() => setTab(k)}
               className={cn(
                 "px-3 h-8 text-[12px] font-medium rounded-md transition-all",
-                tab === k ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong" : "text-muted-foreground hover:text-foreground",
+                tab === k
+                  ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {label}
@@ -213,7 +252,12 @@ function Inner() {
 
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…" className="h-9 pl-9" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search…"
+            className="h-9 pl-9"
+          />
         </div>
 
         {tab === "new" && (
@@ -229,11 +273,27 @@ function Inner() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant="outline" className="h-9" onClick={() => setSettingsOpen(true)} title="Web App URL">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={() => setSettingsOpen(true)}
+            title="Web App URL"
+          >
             <Gear className="h-3.5 w-3.5 mr-1.5" /> Source
           </Button>
-          <Button size="sm" variant="outline" className="h-9" onClick={() => refetch()} disabled={isFetching}>
-            {isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            {isFetching ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+            )}
             Refresh
           </Button>
         </div>
@@ -248,7 +308,10 @@ function Inner() {
       {/* Table — exact raw sheet columns, compact scroll */}
       <div className="glass-card overflow-hidden">
         <div className="max-h-[calc(100vh-280px)] overflow-auto">
-          <table className="text-[12px] border-separate border-spacing-0 table-fixed w-full" style={{ minWidth: 1180 }}>
+          <table
+            className="text-[12px] border-separate border-spacing-0 table-fixed w-full"
+            style={{ minWidth: 1180 }}
+          >
             <colgroup>
               <col style={{ width: 140 }} />
               <col style={{ width: 125 }} />
@@ -264,20 +327,29 @@ function Inner() {
             <thead className="sticky top-0 z-10 bg-surface">
               <tr>
                 {RAW_LEAD_COLUMNS.map((h) => (
-                  <th key={h} className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">{h}</th>
+                  <th
+                    key={h}
+                    className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight"
+                  >
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={10} className="text-center text-muted-foreground py-12">
-                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Loading…
-                </td></tr>
+                <tr>
+                  <td colSpan={10} className="text-center text-muted-foreground py-12">
+                    <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Loading…
+                  </td>
+                </tr>
               )}
               {!isLoading && visible.length === 0 && (
-                <tr><td colSpan={10} className="text-center py-12 text-muted-foreground">
-                  {tab === "new" ? "No new leads in this view." : "Nothing here yet."}
-                </td></tr>
+                <tr>
+                  <td colSpan={10} className="text-center py-12 text-muted-foreground">
+                    {tab === "new" ? "No new leads in this view." : "Nothing here yet."}
+                  </td>
+                </tr>
               )}
               {visible.map((r) => {
                 const k = keyFor(r);
@@ -286,28 +358,49 @@ function Inner() {
                 return (
                   <tr key={k} className="hover:bg-accent/40 transition-colors align-top">
                     <td className="border-b border-border px-2.5 py-2">
-                      <div className="font-medium truncate" title={r["Account Name"]}>{r["Account Name"] || "—"}</div>
+                      <div className="font-medium truncate" title={r["Account Name"]}>
+                        {r["Account Name"] || "—"}
+                      </div>
                     </td>
-                    <td className="border-b border-border px-2.5 py-2 truncate" title={r["Sub Area / Neighborhood"]}>
-                      {r["Sub Area / Neighborhood"] || <span className="text-muted-foreground">—</span>}
+                    <td
+                      className="border-b border-border px-2.5 py-2 truncate"
+                      title={r["Sub Area / Neighborhood"]}
+                    >
+                      {r["Sub Area / Neighborhood"] || (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
-                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground truncate" title={r["Posted Date & Time"]}>
+                    <td
+                      className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground truncate"
+                      title={r["Posted Date & Time"]}
+                    >
                       {r["Posted Date & Time"] || "—"}
                     </td>
                     <td className="border-b border-border px-2.5 py-2">
-                      <div className="line-clamp-3 whitespace-pre-wrap" title={r["Post Text"]}>{r["Post Text"] || "—"}</div>
+                      <div className="line-clamp-3 whitespace-pre-wrap" title={r["Post Text"]}>
+                        {r["Post Text"] || "—"}
+                      </div>
                     </td>
                     <td className="border-b border-border px-2.5 py-2">
                       {lv === "yes" || lv === "no" ? (
-                        <span className={cn(
-                          "inline-flex px-2 py-0.5 rounded-full border text-[10.5px] font-medium",
-                          lv === "yes" ? "bg-success/15 text-success border-success/30" : "bg-destructive/15 text-destructive border-destructive/30",
-                        )}>
+                        <span
+                          className={cn(
+                            "inline-flex px-2 py-0.5 rounded-full border text-[10.5px] font-medium",
+                            lv === "yes"
+                              ? "bg-success/15 text-success border-success/30"
+                              : "bg-destructive/15 text-destructive border-destructive/30",
+                          )}
+                        >
                           {lv === "yes" ? "Yes" : "No"}
                         </span>
                       ) : (
-                        <Select value="" onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}>
-                          <SelectTrigger className="h-7 text-[11px]"><SelectValue placeholder="—" /></SelectTrigger>
+                        <Select
+                          value=""
+                          onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
+                        >
+                          <SelectTrigger className="h-7 text-[11px]">
+                            <SelectValue placeholder="—" />
+                          </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="yes">Yes</SelectItem>
                             <SelectItem value="no">No</SelectItem>
@@ -317,10 +410,17 @@ function Inner() {
                     </td>
                     <td className="border-b border-border px-2.5 py-2">
                       {r["Lead Link"] ? (
-                        <a href={r["Lead Link"]} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline text-[11px]">
+                        <a
+                          href={r["Lead Link"]}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline text-[11px]"
+                        >
                           <ExternalLink className="h-3 w-3" /> Open
                         </a>
-                      ) : <span className="text-muted-foreground">—</span>}
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
                       {r["Captured Date (UTC)"] || "—"}
@@ -328,10 +428,16 @@ function Inner() {
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
                       {r["Captured Time (UTC)"] || "—"}
                     </td>
-                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] truncate" title={r["Account Area"]}>
+                    <td
+                      className="border-b border-border px-2.5 py-2 text-[11.5px] truncate"
+                      title={r["Account Area"]}
+                    >
                       {r["Account Area"] || <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] truncate" title={r["Incog Account"]}>
+                    <td
+                      className="border-b border-border px-2.5 py-2 text-[11.5px] truncate"
+                      title={r["Incog Account"]}
+                    >
                       {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
                     </td>
                   </tr>
@@ -343,20 +449,38 @@ function Inner() {
       </div>
 
       <div className="text-[11.5px] text-muted-foreground">
-        {visible.length} {visible.length === 1 ? "row" : "rows"} · source: <span className="font-mono">{new URL(apiUrl).host}</span>
+        {visible.length} {visible.length === 1 ? "row" : "rows"} · source:{" "}
+        <span className="font-mono">{new URL(apiUrl).host}</span>
       </div>
 
       {/* Settings (Web App URL) */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Web App URL (source)</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Web App URL (source)</DialogTitle>
+          </DialogHeader>
           <div className="space-y-3">
-            <Label className="text-[12px] text-muted-foreground">Google Apps Script Web App URL that returns {`{ rows: [...] }`}.</Label>
-            <Input value={apiUrlDraft} onChange={(e) => setApiUrlDraft(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec" />
-            <p className="text-[11px] text-muted-foreground">Saved per browser. New extractions appear at the top automatically — newest first.</p>
+            <Label className="text-[12px] text-muted-foreground">
+              Google Apps Script Web App URL that returns {`{ rows: [...] }`}.
+            </Label>
+            <Input
+              value={apiUrlDraft}
+              onChange={(e) => setApiUrlDraft(e.target.value)}
+              placeholder="https://script.google.com/macros/s/.../exec"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Saved per browser. New extractions appear at the top automatically — newest first.
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setApiUrlDraft(DEFAULT_API_URL); }}>Reset</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setApiUrlDraft(DEFAULT_API_URL);
+              }}
+            >
+              Reset
+            </Button>
             <Button onClick={saveApiUrl}>Save</Button>
           </DialogFooter>
         </DialogContent>
@@ -382,8 +506,18 @@ function Inner() {
 }
 
 function QualifyDialog({
-  row, phone, actorId, onClose, onSent,
-}: { row: Row; phone: string; actorId: string | null; onClose: () => void; onSent: () => void }) {
+  row,
+  phone,
+  actorId,
+  onClose,
+  onSent,
+}: {
+  row: Row;
+  phone: string;
+  actorId: string | null;
+  onClose: () => void;
+  onSent: () => void;
+}) {
   const [customerName, setCustomerName] = useState(row["Account Name"] ?? "");
   const [customerNumber, setCustomerNumber] = useState(phone);
   const [context, setContext] = useState(row["Post Text"] ?? "");
@@ -391,7 +525,9 @@ function QualifyDialog({
   const [subArea, setSubArea] = useState(row["Sub Area / Neighborhood"] ?? "");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { setCustomerNumber(phone); }, [phone]);
+  useEffect(() => {
+    setCustomerNumber(phone);
+  }, [phone]);
 
   async function send() {
     if (!customerName.trim() || !customerNumber.trim()) {
@@ -422,20 +558,46 @@ function QualifyDialog({
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl">
-        <DialogHeader><DialogTitle>Forward to CS</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Forward to CS</DialogTitle>
+        </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Customer Name"><Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} /></Field>
-          <Field label="Customer Number"><Input value={customerNumber} onChange={(e) => setCustomerNumber(e.target.value)} placeholder="Multiple? separate with comma" /></Field>
-          <Field label="Sub Area"><Input value={subArea} onChange={(e) => setSubArea(e.target.value)} /></Field>
-          <Field label="Pass it to"><Input value={passItTo} onChange={(e) => setPassItTo(e.target.value)} placeholder="CS rep / team" /></Field>
+          <Field label="Customer Name">
+            <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+          </Field>
+          <Field label="Customer Number">
+            <Input
+              value={customerNumber}
+              onChange={(e) => setCustomerNumber(e.target.value)}
+              placeholder="Multiple? separate with comma"
+            />
+          </Field>
+          <Field label="Sub Area">
+            <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} />
+          </Field>
+          <Field label="Pass it to">
+            <Input
+              value={passItTo}
+              onChange={(e) => setPassItTo(e.target.value)}
+              placeholder="CS rep / team"
+            />
+          </Field>
           <div className="col-span-2">
-            <Field label="Context"><Textarea rows={4} value={context} onChange={(e) => setContext(e.target.value)} /></Field>
+            <Field label="Context">
+              <Textarea rows={4} value={context} onChange={(e) => setContext(e.target.value)} />
+            </Field>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
           <Button onClick={send} disabled={busy}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Send className="h-4 w-4 mr-2" />
+            )}
             Send
           </Button>
         </DialogFooter>
@@ -447,7 +609,9 @@ function QualifyDialog({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{label}</Label>
+      <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+        {label}
+      </Label>
       {children}
     </div>
   );

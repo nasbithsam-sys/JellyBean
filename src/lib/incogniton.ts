@@ -98,11 +98,16 @@ async function canReachLocalApiWithoutReading(): Promise<boolean> {
 export async function getIncognitonProfileStatus(profileId: string): Promise<string | null> {
   const id = encodeURIComponent(profileId);
   const res = await getFirstOk(STATUS_PATHS.map((p) => `${p}${id}`));
-  const json = await res.json().catch(() => null) as { status?: unknown } | null;
+  const json = (await res.json().catch(() => null)) as { status?: unknown } | null;
   return typeof json?.status === "string" ? json.status : null;
 }
 
-export async function pingIncogniton(): Promise<{ ok: boolean; error?: string; endpoint?: string; probes?: IncognitonProbe[] }> {
+export async function pingIncogniton(): Promise<{
+  ok: boolean;
+  error?: string;
+  endpoint?: string;
+  probes?: IncognitonProbe[];
+}> {
   const probes: IncognitonProbe[] = [];
   for (const endpoint of endpoints(LIST_PATHS)) {
     const url = `${endpoint.base}${endpoint.path}`;
@@ -111,7 +116,12 @@ export async function pingIncogniton(): Promise<{ ok: boolean; error?: string; e
       probes.push({ ...endpoint, ok: res.ok, status: res.status });
       if (res.ok) return { ok: true, endpoint: url, probes };
     } catch (e) {
-      probes.push({ ...endpoint, ok: false, error: e instanceof TypeError ? "Browser blocked or connection refused" : (e as Error).message });
+      probes.push({
+        ...endpoint,
+        ok: false,
+        error:
+          e instanceof TypeError ? "Browser blocked or connection refused" : (e as Error).message,
+      });
     }
   }
   const sawHttp = probes.some((p) => typeof p.status === "number");
@@ -122,8 +132,8 @@ export async function pingIncogniton(): Promise<{ ok: boolean; error?: string; e
     error: sawHttp
       ? "Incogniton answered, but none of the known profile list endpoints returned OK. See diagnostics below."
       : reachableNoCors
-      ? "Incogniton is reachable, but the browser blocks reading the profile list response (CORS/private-network rules). Launch requests can be sent; full sync needs Incogniton to allow this site or a local proxy."
-      : INCOG_UNREACHABLE,
+        ? "Incogniton is reachable, but the browser blocks reading the profile list response (CORS/private-network rules). Launch requests can be sent; full sync needs Incogniton to allow this site or a local proxy."
+        : INCOG_UNREACHABLE,
     probes,
   };
 }
@@ -141,7 +151,11 @@ function normalizeList(json: unknown): RawProfile[] {
     arr = root.profileData ?? root.data ?? root.profiles ?? root;
   }
   if (typeof arr === "string") {
-    try { arr = JSON.parse(arr); } catch { arr = []; }
+    try {
+      arr = JSON.parse(arr);
+    } catch {
+      arr = [];
+    }
   }
   if (!Array.isArray(arr)) return [];
   return arr.map((p: any) => {
