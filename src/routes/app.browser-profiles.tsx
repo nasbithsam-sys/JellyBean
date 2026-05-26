@@ -118,18 +118,18 @@ function Inner() {
       const list = await fetchIncognitonProfilesByGroup(g);
       let upserted = 0;
       for (const p of list) {
-        const id = p.profile_browser_id || p.profileID || p.id;
+        const id = (p as any).profile_browser_id || (p as any).profileID || (p as any).id;
         if (!id) continue;
-        const name = p.profileName || p.profile_name || p.name || `Profile ${String(id).slice(0, 6)}`;
-        const group = p.profileGroup || p.profile_group || p.group || g;
+        const name = (p as any).profile_name || `Profile ${String(id).slice(0, 6)}`;
+        const group = (p as any).profile_group || g;
         const { error } = await supabase
           .from("incogniton_profiles")
           .upsert(
             {
               incogniton_profile_id: String(id),
-              profile_name: name,
-              group_name: group,
-              platform: p.platform ?? null,
+              profile_name: String(name),
+              group_name: String(group),
+              platform: (p as any).platform ?? null,
               created_by: auth.user?.id,
             },
             { onConflict: "incogniton_profile_id", ignoreDuplicates: false },
@@ -308,26 +308,31 @@ function Inner() {
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Allow Incogniton connection</DialogTitle>
+            <DialogTitle>Connect Incogniton to this dashboard</DialogTitle>
             <DialogDescription>
-              Your browser blocks HTTP requests from this HTTPS page to <code className="font-mono text-[12px]">http://localhost:35000</code> (mixed-content policy).
+              The dashboard talks to the Incogniton desktop app at <code className="font-mono text-[12px]">http://localhost:35000</code>. Two things must be true.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 text-[13px]">
             <div>
-              <div className="font-medium mb-1">Option A — Chrome flag (permanent)</div>
-              <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
-                <li>Open <code className="font-mono">chrome://flags</code></li>
-                <li>Search "Insecure origins treated as secure"</li>
-                <li>Add this site's URL (e.g. <code className="font-mono">{typeof window !== "undefined" ? window.location.origin : ""}</code>)</li>
-                <li>Relaunch Chrome</li>
-              </ol>
+              <div className="font-medium mb-1">1. Incogniton must be running</div>
+              <p className="text-muted-foreground">Open the Incogniton desktop app and leave it running in the background. Then click <strong>Test Connection</strong>.</p>
             </div>
             <div>
-              <div className="font-medium mb-1">Option B — Per-site (quick)</div>
-              <p className="text-muted-foreground">
-                Click the shield / lock icon in the Chrome address bar → "Site settings" → set <em>Insecure content</em> to <strong>Allow</strong>, then reload.
-              </p>
+              <div className="font-medium mb-1">2. Allow insecure content (HTTPS → localhost)</div>
+              <p className="text-muted-foreground mb-2">Because this page is HTTPS, Chrome blocks calls to <code className="font-mono">http://localhost</code> by default.</p>
+              <div className="font-medium text-[12.5px] mt-2">Permanent fix (recommended):</div>
+              <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                <li>Open <code className="font-mono">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code></li>
+                <li>Paste this site's origin: <code className="font-mono">{typeof window !== "undefined" ? window.location.origin : ""}</code></li>
+                <li>Set the flag to <strong>Enabled</strong> and relaunch Chrome.</li>
+              </ol>
+              <div className="font-medium text-[12.5px] mt-3">Per-site (quick):</div>
+              <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                <li>Click the lock / tune icon in the address bar → <strong>Site settings</strong>.</li>
+                <li>Scroll to <strong>Insecure content</strong> and set it to <strong>Allow</strong>.</li>
+                <li>Reload the page.</li>
+              </ol>
             </div>
             <p className="text-[12px] text-muted-foreground">After applying, click <strong>Test Connection</strong> to confirm.</p>
           </div>
