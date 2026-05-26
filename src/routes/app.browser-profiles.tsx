@@ -7,42 +7,12 @@ import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Loader2,
-  RefreshCw,
-  Download,
-  Rocket,
-  Link2,
-  Trash2,
-  Search,
-  Globe,
-  CheckCircle2,
-  XCircle,
-  HelpCircle,
-} from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Download, Rocket, Link2, Trash2, Search, Globe, Plus, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import {
-  launchIncognitonProfile,
-  fetchIncognitonProfilesByGroup,
-  pingIncogniton,
-  INCOG_UNREACHABLE,
-  type IncognitonProbe,
-} from "@/lib/incogniton";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { launchIncognitonProfile } from "@/lib/incogniton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/app/browser-profiles")({ component: Page });
 
@@ -65,7 +35,7 @@ function Page() {
     <div>
       <PageHeader
         title="Browser Profiles"
-        description="Incogniton anti-detect browser profiles synced from your local PC."
+        description="Add your Incogniton profile IDs here and launch them with one click."
       />
       <PageBody className="!pt-5">
         <RoleGate allow={["admin", "marketing"]} current={auth.primaryRole}>
@@ -80,17 +50,10 @@ function Inner() {
   const qc = useQueryClient();
   const auth = useAuth();
   const [query, setQuery] = useState("");
-  const [groupName, setGroupName] = useState("testing");
-  const [syncing, setSyncing] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [linkOpenFor, setLinkOpenFor] = useState<Profile | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<
-    | null
-    | { ok: true; endpoint?: string; error?: string; probes?: IncognitonProbe[] }
-    | { ok: false; error: string; probes?: IncognitonProbe[] }
-  >(null);
+  const [howToOpen, setHowToOpen] = useState(false);
 
   const profiles = useQuery({
     queryKey: ["incog_profiles"],
@@ -124,10 +87,7 @@ function Inner() {
   }, [leads.data]);
 
   const groups = useMemo(
-    () =>
-      Array.from(
-        new Set((profiles.data ?? []).map((p) => p.group_name).filter((g): g is string => !!g)),
-      ).sort(),
+    () => Array.from(new Set((profiles.data ?? []).map((p) => p.group_name).filter((g): g is string => !!g))).sort(),
     [profiles.data],
   );
 
@@ -136,80 +96,27 @@ function Inner() {
     return (profiles.data ?? []).filter((p) => {
       if (!q) return true;
       return (
-        p.profile_name.toLowerCase().includes(q) || (p.platform ?? "").toLowerCase().includes(q)
+        p.profile_name.toLowerCase().includes(q) ||
+        p.incogniton_profile_id.toLowerCase().includes(q) ||
+        (p.platform ?? "").toLowerCase().includes(q)
       );
     });
   }, [profiles.data, query]);
 
-  async function sync() {
-    const g = groupName.trim();
-    if (!g) return toast.error("Enter a group name first");
-    setSyncing(true);
-    try {
-      const list = await fetchIncognitonProfilesByGroup(g);
-      let upserted = 0;
-      for (const p of list) {
-        const id = p.profile_browser_id || p.profileID || p.id;
-        if (!id) continue;
-        const name = p.profile_name || `Profile ${String(id).slice(0, 6)}`;
-        const group = p.profile_group || g;
-        const { error } = await supabase.from("incogniton_profiles").upsert(
-          {
-            incogniton_profile_id: String(id),
-            profile_name: String(name),
-            group_name: String(group),
-            platform: p.platform ?? null,
-            created_by: auth.user?.id,
-          },
-          { onConflict: "incogniton_profile_id", ignoreDuplicates: false },
-        );
-        if (!error) upserted++;
-      }
-      if (upserted === 0) toast.warning(`No profiles found in group "${g}"`);
-      else
-        toast.success(`Synced ${upserted} profile${upserted === 1 ? "" : "s"} from group "${g}"`);
-      qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-    } catch (e) {
-      const msg = (e as Error).message;
-      if (msg === INCOG_UNREACHABLE) {
-        toast.error(msg, { action: { label: "Fix it", onClick: () => setHelpOpen(true) } });
-      } else {
-        toast.error(`Sync failed: ${msg}`);
-      }
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  async function testConnection() {
-    setTesting(true);
-    setTestResult(null);
-    const r = await pingIncogniton();
-    setTestResult(
-      r.ok
-        ? { ok: true, endpoint: r.endpoint, error: r.error, probes: r.probes }
-        : { ok: false, error: r.error || "Unknown error", probes: r.probes },
-    );
-    setTesting(false);
-  }
-
   async function launch(p: Profile) {
+    toast.loading("Launching profile…", { id: "launch" });
     try {
       await launchIncognitonProfile(p.incogniton_profile_id);
-      await supabase
-        .from("incogniton_profiles")
-        .update({ last_launched_at: new Date().toISOString() })
-        .eq("id", p.id);
+      await supabase.from("incogniton_profiles").update({ last_launched_at: new Date().toISOString() }).eq("id", p.id);
       qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-      toast.success("Profile opened in Incogniton");
+      toast.success("Profile launch sent to Incogniton ✓", { id: "launch" });
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error("Could not reach Incogniton. Make sure Incogniton desktop app is open.", { id: "launch" });
     }
   }
 
   async function remove(p: Profile) {
-    if (!confirm(`Delete profile "${p.profile_name}"? This only removes the row from your CRM.`))
-      return;
+    if (!confirm(`Delete profile "${p.profile_name}"? This only removes it from this CRM.`)) return;
     const { error } = await supabase.from("incogniton_profiles").delete().eq("id", p.id);
     if (error) return toast.error(error.message);
     toast.success("Deleted");
@@ -223,110 +130,44 @@ function Inner() {
 
   return (
     <div className="space-y-4">
+      {/* How launch works — info banner */}
+      <div className="text-[12px] bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-start gap-2">
+        <Info className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
+        <div>
+          <span className="font-medium">How launching works:</span> Click <strong>Add Profile</strong> below to save
+          your Incogniton profile ID and name. Then hit <strong>Launch</strong> — it sends the open command directly to
+          Incogniton on your PC. Make sure Incogniton is running. Not sure of your profile ID?{" "}
+          <button className="underline text-primary" onClick={() => setHowToOpen(true)}>
+            See how to find it.
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search profile name or platform…"
+            placeholder="Search profile name or ID…"
             className="h-9 pl-9"
           />
         </div>
-        <div className="flex items-center gap-1.5">
-          <Label
-            htmlFor="group-name"
-            className="text-[12px] text-muted-foreground whitespace-nowrap"
-          >
-            Group
-          </Label>
-          <Input
-            id="group-name"
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            placeholder="testing"
-            className="h-9 w-[140px]"
-          />
-        </div>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" onClick={testConnection} disabled={testing}>
-            {testing ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-            ) : testResult?.ok ? (
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-success" />
-            ) : testResult && !testResult.ok ? (
-              <XCircle className="h-3.5 w-3.5 mr-1.5 text-destructive" />
-            ) : (
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-            )}
-            Test Connection
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setHelpOpen(true)}
-            title="Fix connection"
-          >
-            <HelpCircle className="h-4 w-4" />
-          </Button>
           <Button variant="outline" onClick={() => setExportOpen(true)}>
-            <Download className="h-3.5 w-3.5 mr-1.5" /> Export Group
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Export
           </Button>
-          <Button onClick={sync} disabled={syncing}>
-            {syncing ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-            )}
-            Sync from Incogniton
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Profile
           </Button>
         </div>
       </div>
-      {testResult && (
-        <div
-          className={cn(
-            "text-[12px] px-2 space-y-1",
-            testResult.ok ? "text-success" : "text-destructive",
-          )}
-        >
-          <div>
-            {testResult.ok ? (
-              <>
-                ✅ {testResult.error ? testResult.error : "Connected to Incogniton"}
-                {testResult.endpoint ? (
-                  <>
-                    {" "}
-                    via <code className="font-mono">{testResult.endpoint}</code>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>
-                ❌ {testResult.error} —{" "}
-                <button onClick={() => setHelpOpen(true)} className="underline">
-                  see fix instructions
-                </button>
-              </>
-            )}
-          </div>
-          {testResult.probes && testResult.probes.length > 0 && (
-            <div className="font-mono text-[10.5px] text-muted-foreground leading-relaxed">
-              {testResult.probes
-                .map(
-                  (p) =>
-                    `${p.base}${p.path}: ${p.status ? `HTTP ${p.status}` : (p.error ?? "blocked")}`,
-                )
-                .join(" · ")}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="bg-card border rounded-lg overflow-hidden">
         <table className="crm-table">
           <thead>
             <tr>
-              <th>Profile</th>
+              <th>Profile Name</th>
               <th>Profile ID</th>
               <th>Group</th>
               <th>Platform</th>
@@ -347,7 +188,7 @@ function Inner() {
               <tr>
                 <td colSpan={7} className="text-center py-10 text-muted-foreground">
                   <Globe className="h-5 w-5 inline mr-2 opacity-50" />
-                  No profiles yet. Click "Sync from Incogniton" to pull from your local app.
+                  No profiles yet. Click <strong>Add Profile</strong> to add your first one.
                 </td>
               </tr>
             )}
@@ -356,9 +197,7 @@ function Inner() {
               return (
                 <tr key={p.id}>
                   <td className="font-medium">{p.profile_name}</td>
-                  <td className="font-mono text-[11px] text-muted-foreground">
-                    {p.incogniton_profile_id}
-                  </td>
+                  <td className="font-mono text-[11px] text-muted-foreground">{p.incogniton_profile_id}</td>
                   <td className="text-[12.5px]">{p.group_name ?? "—"}</td>
                   <td className="text-[12.5px]">{p.platform ?? "—"}</td>
                   <td className="text-[12.5px]">
@@ -383,15 +222,10 @@ function Inner() {
                     </span>
                   </td>
                   <td className="text-right space-x-1.5 whitespace-nowrap">
-                    <Button size="sm" variant="outline" onClick={() => launch(p)} title="Launch">
-                      <Rocket className="h-3.5 w-3.5" />
+                    <Button size="sm" variant="default" onClick={() => launch(p)} title="Launch in Incogniton">
+                      <Rocket className="h-3.5 w-3.5 mr-1" /> Launch
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setLinkOpenFor(p)}
-                      title="Link to lead"
-                    >
+                    <Button size="sm" variant="outline" onClick={() => setLinkOpenFor(p)} title="Link to lead">
                       <Link2 className="h-3.5 w-3.5" />
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => remove(p)} title="Delete">
@@ -405,12 +239,18 @@ function Inner() {
         </table>
       </div>
 
-      {exportOpen && (
-        <ExportDialog
-          profiles={profiles.data ?? []}
-          groups={groups}
-          onClose={() => setExportOpen(false)}
+      {addOpen && (
+        <AddProfileDialog
+          userId={auth.user?.id ?? null}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => {
+            setAddOpen(false);
+            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+          }}
         />
+      )}
+      {exportOpen && (
+        <ExportDialog profiles={profiles.data ?? []} groups={groups} onClose={() => setExportOpen(false)} />
       )}
       {linkOpenFor && (
         <LinkLeadDialog
@@ -423,75 +263,47 @@ function Inner() {
           }}
         />
       )}
-      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+
+      {/* How to find profile ID */}
+      <Dialog open={howToOpen} onOpenChange={setHowToOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Connect Incogniton to this dashboard</DialogTitle>
+            <DialogTitle>How to find your Incogniton Profile ID</DialogTitle>
             <DialogDescription>
-              The dashboard calls Incogniton's local API at{" "}
-              <code className="font-mono text-[12px]">http://localhost:35000</code>. Opening that
-              URL in a browser tab works because no CORS check applies. Reading it from JavaScript
-              on this HTTPS site does — and Incogniton does <strong>not</strong> send the{" "}
-              <code className="font-mono">Access-Control-Allow-Origin</code> header, so the browser
-              blocks the response.
+              The Profile ID is the unique identifier Incogniton uses to open a profile.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 text-[13px]">
-            <div>
-              <div className="font-medium mb-1">1. Incogniton must be running</div>
-              <p className="text-muted-foreground">
-                Open the Incogniton desktop app and leave it in the background.
-              </p>
-            </div>
-            <div>
-              <div className="font-medium mb-1">
-                2. Allow this site to read Incogniton's response (CORS)
-              </div>
-              <p className="text-muted-foreground mb-2">
-                Pick <strong>one</strong> of these. The Chrome “insecure content” flag does{" "}
-                <em>not</em> help — this is a CORS issue, not a mixed-content issue.
-              </p>
-
-              <div className="font-medium text-[12.5px] mt-2">
-                Option A — CORS unblock extension (easiest)
-              </div>
+            <div className="space-y-2">
+              <div className="font-medium">Method 1 — From the Incogniton app (easiest)</div>
               <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                <li>Open the Incogniton desktop app.</li>
                 <li>
-                  Install a CORS extension such as{" "}
-                  <strong>“Allow CORS: Access-Control-Allow-Origin”</strong> or{" "}
-                  <strong>“CORS Unblock”</strong> from the Chrome Web Store.
+                  Right-click any profile → <strong>Profile Info</strong> or <strong>Edit</strong>.
                 </li>
-                <li>Enable it (toolbar icon → ON) on this tab, then reload.</li>
+                <li>Copy the ID shown at the top (looks like a long number or UUID).</li>
+              </ol>
+            </div>
+            <div className="space-y-2">
+              <div className="font-medium">Method 2 — From the local API</div>
+              <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                <li>Make sure Incogniton is running.</li>
                 <li>
-                  Click <strong>Test Connection</strong>. Disable the extension when you're done.
+                  Open this URL in your browser tab:{" "}
+                  <code className="font-mono text-[11px] bg-muted px-1 py-0.5 rounded">
+                    http://localhost:35000/profile/all
+                  </code>
+                </li>
+                <li>
+                  You'll see a JSON list. Find your profile and copy the{" "}
+                  <code className="font-mono text-[11px]">profile_browser_id</code> field.
                 </li>
               </ol>
-
-              <div className="font-medium text-[12.5px] mt-3">
-                Option B — Launch Chrome with web security off (advanced)
-              </div>
-              <p className="text-muted-foreground">
-                Quit Chrome, then start it from a terminal with a separate profile:
-              </p>
-              <pre className="font-mono text-[11px] bg-muted/40 p-2 rounded mt-1 overflow-x-auto">
-                chrome --disable-web-security --user-data-dir=/tmp/incog-chrome
-              </pre>
-              <p className="text-muted-foreground text-[12px] mt-1">
-                Use only for this app. Do not browse other sites in that window.
-              </p>
-
-              <div className="font-medium text-[12.5px] mt-3">
-                Option C — Skip sync, launch only
-              </div>
-              <p className="text-muted-foreground">
-                Even without CORS, the <strong>Launch</strong> button in CS Leads still works
-                (fire-and-forget). Only the <strong>Sync from Incogniton</strong> button on this
-                page needs CORS, because it has to read the profile list response.
-              </p>
             </div>
-            <p className="text-[12px] text-muted-foreground">
-              After fixing, click <strong>Test Connection</strong>.
-            </p>
+            <div className="bg-muted/40 rounded p-3 text-[12px] text-muted-foreground">
+              <strong>Tip:</strong> The profile name is just a label for your CRM — it doesn't need to match the name in
+              Incogniton exactly, but keeping them the same avoids confusion.
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -499,28 +311,116 @@ function Inner() {
   );
 }
 
-function ExportDialog({
-  profiles,
-  groups,
+// ── Add Profile Dialog (manual entry — works 100% without CORS/extensions) ───
+
+function AddProfileDialog({
+  userId,
   onClose,
+  onSaved,
 }: {
-  profiles: Profile[];
-  groups: string[];
+  userId: string | null;
   onClose: () => void;
+  onSaved: () => void;
 }) {
-  const [group, setGroup] = useState(groups[0] ?? "");
+  const [profileId, setProfileId] = useState("");
+  const [profileName, setProfileName] = useState("");
+  const [groupName, setGroupName] = useState("");
+  const [platform, setPlatform] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const id = profileId.trim();
+    const name = profileName.trim();
+    if (!id) {
+      toast.error("Profile ID is required");
+      return;
+    }
+    if (!name) {
+      toast.error("Profile name is required");
+      return;
+    }
+
+    setSaving(true);
+    const { error } = await supabase.from("incogniton_profiles").upsert(
+      {
+        incogniton_profile_id: id,
+        profile_name: name,
+        group_name: groupName.trim() || null,
+        platform: platform.trim() || null,
+        created_by: userId,
+      },
+      { onConflict: "incogniton_profile_id", ignoreDuplicates: false },
+    );
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Profile saved ✓");
+    onSaved();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
+      <div className="bg-card w-full max-w-md rounded-lg border p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div>
+          <h2 className="text-lg font-semibold">Add Incogniton Profile</h2>
+          <p className="text-[12px] text-muted-foreground mt-1">
+            Enter the profile details manually. Not sure of the ID?{" "}
+            <span className="text-primary">Open Incogniton → right-click profile → Profile Info.</span>
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <Field label="Profile ID *">
+            <Input
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
+              placeholder="e.g. 1234567890 or abc-def-123"
+              autoFocus
+            />
+          </Field>
+          <Field label="Profile Name *">
+            <Input
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="e.g. Account A – Facebook"
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Group (optional)">
+              <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. testing" />
+            </Field>
+            <Field label="Platform (optional)">
+              <Input value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="e.g. Facebook" />
+            </Field>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Save Profile
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Export Dialog ─────────────────────────────────────────────────────────────
+
+function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; groups: string[]; onClose: () => void }) {
+  const [group, setGroup] = useState(groups[0] ?? "__all__");
   const [format, setFormat] = useState<"csv" | "json">("csv");
 
   function download() {
-    const rows = profiles.filter((p) => (p.group_name ?? "") === group);
+    const rows = group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
     if (rows.length === 0) return toast.error("No profiles in this group");
-    const fields = [
-      "profile_name",
-      "incogniton_profile_id",
-      "group_name",
-      "platform",
-      "linked_lead_id",
-    ] as const;
+    const fields = ["profile_name", "incogniton_profile_id", "group_name", "platform", "linked_lead_id"] as const;
     let blob: Blob;
     let filename: string;
     if (format === "csv") {
@@ -528,10 +428,7 @@ function ExportDialog({
         const s = v ?? "";
         return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
       };
-      const csv = [
-        fields.join(","),
-        ...rows.map((r) => fields.map((f) => escape(r[f])).join(",")),
-      ].join("\n");
+      const csv = [fields.join(","), ...rows.map((r) => fields.map((f) => escape(r[f])).join(","))].join("\n");
       blob = new Blob([csv], { type: "text/csv" });
       filename = `incogniton-${group}.csv`;
     } else {
@@ -551,24 +448,17 @@ function ExportDialog({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div
-        className="bg-card w-full max-w-md rounded-lg border p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold mb-4">Export Group</h2>
+      <div className="bg-card w-full max-w-md rounded-lg border p-6" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold mb-4">Export Profiles</h2>
         <div className="space-y-4">
           <div>
             <Label className="block mb-1.5">Group</Label>
             <Select value={group} onValueChange={setGroup}>
               <SelectTrigger>
-                <SelectValue placeholder="Select group" />
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {groups.length === 0 && (
-                  <SelectItem value="__none__" disabled>
-                    No groups
-                  </SelectItem>
-                )}
+                <SelectItem value="__all__">All profiles</SelectItem>
                 {groups.map((g) => (
                   <SelectItem key={g} value={g}>
                     {g}
@@ -581,16 +471,10 @@ function ExportDialog({
             <Label className="block mb-2">Format</Label>
             <div className="flex gap-4 text-sm">
               <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input type="radio" checked={format === "csv"} onChange={() => setFormat("csv")} />{" "}
-                CSV
+                <input type="radio" checked={format === "csv"} onChange={() => setFormat("csv")} /> CSV
               </label>
               <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  checked={format === "json"}
-                  onChange={() => setFormat("json")}
-                />{" "}
-                JSON
+                <input type="radio" checked={format === "json"} onChange={() => setFormat("json")} /> JSON
               </label>
             </div>
           </div>
@@ -599,14 +483,14 @@ function ExportDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={download} disabled={!group}>
-            Export
-          </Button>
+          <Button onClick={download}>Export</Button>
         </div>
       </div>
     </div>
   );
 }
+
+// ── Link Lead Dialog ──────────────────────────────────────────────────────────
 
 function LinkLeadDialog({
   profile,
@@ -641,10 +525,7 @@ function LinkLeadDialog({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div
-        className="bg-card w-full max-w-md rounded-lg border p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="bg-card w-full max-w-md rounded-lg border p-6" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold">Link "{profile.profile_name}" to a lead</h2>
         <p className="text-[12.5px] text-muted-foreground mt-1">
           Pick a qualified lead to associate this browser profile with.
@@ -657,9 +538,7 @@ function LinkLeadDialog({
           autoFocus
         />
         <div className="mt-3 max-h-72 overflow-y-auto border border-border rounded-md divide-y divide-border">
-          {filtered.length === 0 && (
-            <div className="p-3 text-[12.5px] text-muted-foreground">No matches</div>
-          )}
+          {filtered.length === 0 && <div className="p-3 text-[12.5px] text-muted-foreground">No matches</div>}
           {filtered.map((l) => (
             <button
               key={l.id}
@@ -671,9 +550,7 @@ function LinkLeadDialog({
               )}
             >
               {l.customer_name}
-              {profile.linked_lead_id === l.id && (
-                <span className="ml-2 text-[11px] text-primary">linked</span>
-              )}
+              {profile.linked_lead_id === l.id && <span className="ml-2 text-[11px] text-primary">linked</span>}
             </button>
           ))}
         </div>
@@ -688,6 +565,15 @@ function LinkLeadDialog({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <Label className="block mb-1.5 text-[12px]">{label}</Label>
+      {children}
     </div>
   );
 }
