@@ -127,6 +127,8 @@ export type Database = {
           id: string
           incogniton_profile_id: string
           last_launched_at: string | null
+          launched_by_email: string | null
+          launched_by_name: string | null
           linked_lead_id: string | null
           platform: string | null
           profile_name: string
@@ -138,6 +140,8 @@ export type Database = {
           id?: string
           incogniton_profile_id: string
           last_launched_at?: string | null
+          launched_by_email?: string | null
+          launched_by_name?: string | null
           linked_lead_id?: string | null
           platform?: string | null
           profile_name: string
@@ -149,6 +153,8 @@ export type Database = {
           id?: string
           incogniton_profile_id?: string
           last_launched_at?: string | null
+          launched_by_email?: string | null
+          launched_by_name?: string | null
           linked_lead_id?: string | null
           platform?: string | null
           profile_name?: string
