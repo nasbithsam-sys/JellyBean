@@ -184,8 +184,16 @@ function normalizeList(json: unknown): RawProfile[] {
     const gpi = asRecord(p.general_profile_information) as RawProfileInfo;
     return {
       ...p,
-      profile_name: optionalString(p.profile_name) ?? optionalString(p.profileName) ?? optionalString(p.name) ?? optionalString(gpi.profile_name),
-      profile_group: optionalString(p.profile_group) ?? optionalString(p.profileGroup) ?? optionalString(p.group) ?? optionalString(gpi.profile_group),
+      profile_name:
+        optionalString(p.profile_name) ??
+        optionalString(p.profileName) ??
+        optionalString(p.name) ??
+        optionalString(gpi.profile_name),
+      profile_group:
+        optionalString(p.profile_group) ??
+        optionalString(p.profileGroup) ??
+        optionalString(p.group) ??
+        optionalString(gpi.profile_group),
       platform: optionalString(p.platform) ?? optionalString(gpi.simulated_operating_system),
     } as RawProfile;
   });
