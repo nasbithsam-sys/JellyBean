@@ -16,6 +16,7 @@ import {
   fetchIncognitonProfilesByGroup,
   pingIncogniton,
   INCOG_UNREACHABLE,
+  type IncognitonProbe,
 } from "@/lib/incogniton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
@@ -61,7 +62,7 @@ function Inner() {
   const [linkOpenFor, setLinkOpenFor] = useState<Profile | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<null | { ok: true; endpoint?: string } | { ok: false; error: string }>(null);
+  const [testResult, setTestResult] = useState<null | { ok: true; endpoint?: string; error?: string; probes?: IncognitonProbe[] } | { ok: false; error: string; probes?: IncognitonProbe[] }>(null);
 
   const profiles = useQuery({
     queryKey: ["incog_profiles"],
@@ -155,7 +156,7 @@ function Inner() {
     setTesting(true);
     setTestResult(null);
     const r = await pingIncogniton();
-    setTestResult(r.ok ? { ok: true, endpoint: r.endpoint } : { ok: false, error: r.error || "Unknown error" });
+    setTestResult(r.ok ? { ok: true, endpoint: r.endpoint, error: r.error, probes: r.probes } : { ok: false, error: r.error || "Unknown error", probes: r.probes });
     setTesting(false);
   }
 
@@ -229,10 +230,17 @@ function Inner() {
         </div>
       </div>
       {testResult && (
-        <div className={cn("text-[12px] px-2", testResult.ok ? "text-success" : "text-destructive")}>
-          {testResult.ok
-            ? <>✅ Connected to Incogniton{testResult.endpoint ? <> via <code className="font-mono">{testResult.endpoint}</code></> : null}</>
-            : <>❌ {testResult.error} — <button onClick={() => setHelpOpen(true)} className="underline">see fix instructions</button></>}
+        <div className={cn("text-[12px] px-2 space-y-1", testResult.ok ? "text-success" : "text-destructive")}>
+          <div>
+            {testResult.ok
+              ? <>✅ {testResult.error ? testResult.error : "Connected to Incogniton"}{testResult.endpoint ? <> via <code className="font-mono">{testResult.endpoint}</code></> : null}</>
+              : <>❌ {testResult.error} — <button onClick={() => setHelpOpen(true)} className="underline">see fix instructions</button></>}
+          </div>
+          {testResult.probes && testResult.probes.length > 0 && (
+            <div className="font-mono text-[10.5px] text-muted-foreground leading-relaxed">
+              {testResult.probes.map((p) => `${p.base}${p.path}: ${p.status ? `HTTP ${p.status}` : p.error ?? "blocked"}`).join(" · ")}
+            </div>
+          )}
         </div>
       )}
 
