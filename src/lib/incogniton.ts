@@ -9,7 +9,7 @@
 const BASES = ["http://127.0.0.1:35000", "http://localhost:35000"];
 
 export const INCOG_UNREACHABLE =
-  "Cannot reach Incogniton at 127.0.0.1:35000 or localhost:35000. If Incogniton is open, the browser is likely blocking the local API or Incogniton's developer API is not listening on port 35000.";
+  "Cannot read Incogniton's response. Incogniton's local API does not send CORS headers, so the browser blocks it from JavaScript (even though opening http://localhost:35000/profile/all in a tab works). Open the help dialog and install a CORS-unblock extension, or launch Chrome with --disable-web-security.";
 
 const LIST_PATHS = ["/profile/all", "/api/v1/profile/list"];
 const LAUNCH_PATHS = ["/profile/launch/", "/api/v1/profile/launch/"];
