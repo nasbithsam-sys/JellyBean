@@ -38,6 +38,19 @@ type Category = "forwarded" | "not_found" | "wrong";
 type Action = { category?: Category; lead?: "yes" | "no"; phone?: string };
 type Actions = Record<string, Action>;
 
+const RAW_LEAD_COLUMNS = [
+  "Account Name",
+  "Sub Area / Neighborhood",
+  "Posted Date & Time",
+  "Post Text",
+  "Lead",
+  "Lead Link",
+  "Captured Date (UTC)",
+  "Captured Time (UTC)",
+  "Account Area",
+  "Incog Account",
+] as const;
+
 function loadActions(): Actions {
   try {
     return JSON.parse(localStorage.getItem(ACTIONS_KEY) || "{}");
@@ -232,26 +245,26 @@ function Inner() {
         </div>
       )}
 
-      {/* Table — restored columns, modest horizontal scroll */}
+      {/* Table — exact raw sheet columns, compact scroll */}
       <div className="glass-card overflow-hidden">
         <div className="max-h-[calc(100vh-280px)] overflow-auto">
-          <table className="text-[12.5px] border-separate border-spacing-0" style={{ minWidth: 1320 }}>
+          <table className="text-[12px] border-separate border-spacing-0 table-fixed w-full" style={{ minWidth: 1180 }}>
             <colgroup>
-              <col style={{ width: 170 }} />
-              <col style={{ width: 130 }} />
+              <col style={{ width: 140 }} />
+              <col style={{ width: 125 }} />
+              <col style={{ width: 125 }} />
+              <col style={{ width: 230 }} />
+              <col style={{ width: 72 }} />
+              <col style={{ width: 86 }} />
               <col style={{ width: 120 }} />
-              <col style={{ width: 320 }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 150 }} />
-              <col style={{ width: 110 }} />
-              <col style={{ width: 90 }} />
+              <col style={{ width: 96 }} />
               <col style={{ width: 120 }} />
-              <col style={{ width: 220 }} />
+              <col style={{ width: 140 }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface">
               <tr>
-                {["Account / Area", "Sub area", "Posted", "Post", "Lead", "Phone", "Captured (UTC)", "Time", "Incog Account", "Actions"].map((h) => (
-                  <th key={h} className="border-b border-border px-2.5 py-2 text-left font-medium text-[11px] uppercase tracking-wide text-muted-foreground whitespace-nowrap">{h}</th>
+                {RAW_LEAD_COLUMNS.map((h) => (
+                  <th key={h} className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -274,7 +287,6 @@ function Inner() {
                   <tr key={k} className="hover:bg-accent/40 transition-colors align-top">
                     <td className="border-b border-border px-2.5 py-2">
                       <div className="font-medium truncate" title={r["Account Name"]}>{r["Account Name"] || "—"}</div>
-                      <div className="text-[11px] text-muted-foreground truncate" title={r["Account Area"]}>{r["Account Area"] || "—"}</div>
                     </td>
                     <td className="border-b border-border px-2.5 py-2 truncate" title={r["Sub Area / Neighborhood"]}>
                       {r["Sub Area / Neighborhood"] || <span className="text-muted-foreground">—</span>}
@@ -284,11 +296,6 @@ function Inner() {
                     </td>
                     <td className="border-b border-border px-2.5 py-2">
                       <div className="line-clamp-3 whitespace-pre-wrap" title={r["Post Text"]}>{r["Post Text"] || "—"}</div>
-                      {r["Lead Link"] && (
-                        <a href={r["Lead Link"]} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline text-[11px] mt-1">
-                          <ExternalLink className="h-3 w-3" /> Open post
-                        </a>
-                      )}
                     </td>
                     <td className="border-b border-border px-2.5 py-2">
                       {lv === "yes" || lv === "no" ? (
@@ -309,12 +316,11 @@ function Inner() {
                       )}
                     </td>
                     <td className="border-b border-border px-2.5 py-2">
-                      <Input
-                        value={a.phone ?? ""}
-                        onChange={(e) => updateAction(k, { phone: e.target.value })}
-                        placeholder="Phone (comma = multiple)"
-                        className="h-7 text-[12px]"
-                      />
+                      {r["Lead Link"] ? (
+                        <a href={r["Lead Link"]} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline text-[11px]">
+                          <ExternalLink className="h-3 w-3" /> Open
+                        </a>
+                      ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
                       {r["Captured Date (UTC)"] || "—"}
@@ -322,38 +328,11 @@ function Inner() {
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
                       {r["Captured Time (UTC)"] || "—"}
                     </td>
+                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] truncate" title={r["Account Area"]}>
+                      {r["Account Area"] || <span className="text-muted-foreground">—</span>}
+                    </td>
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] truncate" title={r["Incog Account"]}>
                       {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="border-b border-border px-2.5 py-2">
-                      <div className="flex flex-wrap items-center gap-1">
-                        <Button
-                          size="sm"
-                          className="h-7 px-2 text-[11px]"
-                          disabled={!(a.phone ?? "").trim()}
-                          onClick={() => setQualifyFor(r)}
-                        >
-                          <Send className="h-3 w-3 mr-1" /> Save
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-[11px]"
-                          title="No phone number found"
-                          onClick={() => { updateAction(k, { category: "not_found" }); toast("Moved to Number not found"); }}
-                        >
-                          <AlertTriangle className="h-3 w-3 mr-1" /> Not found
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-[11px] text-muted-foreground"
-                          title="Mark as a wrong/no-lead post — moves to Wrong posts"
-                          onClick={() => { updateAction(k, { category: "wrong", lead: "no" }); toast("Moved to Wrong posts"); }}
-                        >
-                          <X className="h-3 w-3 mr-1" /> Wrong
-                        </Button>
-                      </div>
                     </td>
                   </tr>
                 );
