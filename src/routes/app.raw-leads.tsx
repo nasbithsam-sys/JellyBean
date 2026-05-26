@@ -303,9 +303,6 @@ function Inner() {
 
   const visible = useMemo(() => {
     let list = buckets[tab];
-    if (tab === "new" && yesOnly) {
-      list = list.filter((e) => effectiveLead(e.data, actions[e.row_key]) === "yes");
-    }
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((e) =>
