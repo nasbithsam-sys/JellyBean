@@ -17,7 +17,7 @@ const STOP_PATHS = ["/profile/stop/", "/api/v1/profile/stop/"];
 const STATUS_PATHS = ["/profile/status/", "/api/v1/profile/status/"];
 
 type IncognitonEndpoint = { base: string; path: string };
-type IncognitonProbe = IncognitonEndpoint & { ok: boolean; status?: number; error?: string };
+export type IncognitonProbe = IncognitonEndpoint & { ok: boolean; status?: number; error?: string };
 
 function endpoints(paths: string[]): IncognitonEndpoint[] {
   return BASES.flatMap((base) => paths.map((path) => ({ base, path })));
@@ -49,14 +49,50 @@ async function getFirstOk(paths: string[]): Promise<Response> {
   throw new Error(`Incogniton API did not respond OK. Tried ${failures.join(" | ")}`);
 }
 
+async function sendWithoutReading(paths: string[]): Promise<void> {
+  for (const endpoint of endpoints(paths)) {
+    try {
+      await fetch(`${endpoint.base}${endpoint.path}`, { method: "GET", mode: "no-cors" });
+      return;
+    } catch {
+      // Try the next host/path. This fallback is only for launch/stop where reading the response is not required.
+    }
+  }
+  throw new Error(INCOG_UNREACHABLE);
+}
+
 export async function launchIncognitonProfile(profileId: string): Promise<void> {
   const id = encodeURIComponent(profileId);
-  await getFirstOk(LAUNCH_PATHS.map((p) => `${p}${id}`));
+  const paths = LAUNCH_PATHS.map((p) => `${p}${id}`);
+  try {
+    await getFirstOk(paths);
+  } catch (e) {
+    if ((e as Error).message.includes("Cannot reach Incogniton")) await sendWithoutReading(paths);
+    else throw e;
+  }
 }
 
 export async function stopIncognitonProfile(profileId: string): Promise<void> {
   const id = encodeURIComponent(profileId);
-  await getFirstOk(STOP_PATHS.map((p) => `${p}${id}`));
+  const paths = STOP_PATHS.map((p) => `${p}${id}`);
+  try {
+    await getFirstOk(paths);
+  } catch (e) {
+    if ((e as Error).message.includes("Cannot reach Incogniton")) await sendWithoutReading(paths);
+    else throw e;
+  }
+}
+
+async function canReachLocalApiWithoutReading(): Promise<boolean> {
+  for (const endpoint of endpoints(LIST_PATHS)) {
+    try {
+      await fetch(`${endpoint.base}${endpoint.path}`, { method: "GET", mode: "no-cors" });
+      return true;
+    } catch {
+      // keep probing
+    }
+  }
+  return false;
 }
 
 export async function getIncognitonProfileStatus(profileId: string): Promise<string | null> {
@@ -79,10 +115,14 @@ export async function pingIncogniton(): Promise<{ ok: boolean; error?: string; e
     }
   }
   const sawHttp = probes.some((p) => typeof p.status === "number");
+  const reachableNoCors = !sawHttp && await canReachLocalApiWithoutReading();
   return {
-    ok: false,
+    ok: reachableNoCors,
+    endpoint: reachableNoCors ? "local API reachable; response blocked by browser CORS" : undefined,
     error: sawHttp
       ? "Incogniton answered, but none of the known profile list endpoints returned OK. See diagnostics below."
+      : reachableNoCors
+      ? "Incogniton is reachable, but the browser blocks reading the profile list response (CORS/private-network rules). Launch requests can be sent; full sync needs Incogniton to allow this site or a local proxy."
       : INCOG_UNREACHABLE,
     probes,
   };
