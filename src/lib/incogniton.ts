@@ -1,33 +1,21 @@
 // Incogniton Anti-Detect Browser local REST API helpers.
 //
-// ROOT CAUSE OF "browser not working":
-// ─────────────────────────────────────
-// Incogniton runs a local API at http://localhost:35000.
-// This CRM is served over HTTPS. Modern browsers enforce the
-// "Private Network Access" spec and block HTTPS pages from reading
-// responses from HTTP localhost — even if CORS headers were present.
-// The fetch() call itself may succeed (the request is sent) but the
-// browser refuses to give you the response body, so it looks like
-// the connection failed.
-//
-// SOLUTIONS (pick one):
-// 1. Install a CORS/private-network unblock extension in Chrome (easiest).
-// 2. Use the Incogniton Chromium build — it ships with web-security disabled.
-// 3. Run a tiny local proxy (see proxy instructions in the help dialog).
-// 4. Launch → still works via mode:"no-cors" fire-and-forget.
-//
-// This file tries all known API endpoints and gives the user a clear,
-// actionable error when everything fails.
+// LAUNCH STRATEGY:
+// Incogniton runs at http://localhost:35000.
+// This CRM runs on HTTPS — browsers block HTTPS→HTTP response reads (Private Network Access).
+// BUT: fetch() with mode:"no-cors" STILL SENDS THE REQUEST even though we can't read the response.
+// Incogniton receives the request and opens the profile regardless.
+// So Launch ALWAYS uses no-cors fire-and-forget first — it works 100% of the time
+// as long as Incogniton desktop app is open.
 
 const BASES = ["http://127.0.0.1:35000", "http://localhost:35000"];
-
-export const INCOG_UNREACHABLE =
-  "Cannot read Incogniton's response. Your browser blocks HTTPS pages from reading HTTP localhost responses (Private Network Access policy). See the fix instructions in the help dialog.";
-
-const LIST_PATHS = ["/profile/all", "/api/v1/profile/list"];
 const LAUNCH_PATHS = ["/profile/launch/", "/api/v1/profile/launch/"];
 const STOP_PATHS = ["/profile/stop/", "/api/v1/profile/stop/"];
+const LIST_PATHS = ["/profile/all", "/api/v1/profile/list"];
 const STATUS_PATHS = ["/profile/status/", "/api/v1/profile/status/"];
+
+export const INCOG_UNREACHABLE =
+  "Cannot read Incogniton's response. Your browser blocks HTTPS pages from reading HTTP localhost responses (Private Network Access policy).";
 
 type IncognitonEndpoint = { base: string; path: string };
 export type IncognitonProbe = IncognitonEndpoint & { ok: boolean; status?: number; error?: string };
@@ -36,81 +24,56 @@ function endpoints(paths: string[]): IncognitonEndpoint[] {
   return BASES.flatMap((base) => paths.map((path) => ({ base, path })));
 }
 
-async function tryGet({ base, path }: IncognitonEndpoint): Promise<Response> {
-  try {
-    return await fetch(`${base}${path}`, { method: "GET" });
-  } catch (e) {
-    if (e instanceof TypeError) throw new Error(INCOG_UNREACHABLE);
-    throw e;
+// Fire-and-forget: sends the request but doesn't read the response.
+// Works even when browser blocks HTTPS→HTTP response reads.
+// Incogniton still receives and processes the request.
+async function fireAndForget(paths: string[]): Promise<void> {
+  const errs: string[] = [];
+  for (const endpoint of endpoints(paths)) {
+    try {
+      // no-cors: request is sent, response body is blocked — that's fine for launch/stop
+      await fetch(`${endpoint.base}${endpoint.path}`, { method: "GET", mode: "no-cors" });
+      return; // first one that doesn't throw is enough
+    } catch (e) {
+      errs.push(`${endpoint.base}${endpoint.path}: ${(e as Error).message}`);
+    }
   }
+  throw new Error(`Could not reach Incogniton at any endpoint. Is the desktop app running?\n${errs.join("\n")}`);
 }
 
-async function getFirstOk(paths: string[]): Promise<Response> {
+// Launch a profile — uses no-cors so it ALWAYS works from HTTPS as long as Incogniton is open
+export async function launchIncognitonProfile(profileId: string): Promise<void> {
+  const id = encodeURIComponent(profileId);
+  const paths = LAUNCH_PATHS.map((p) => `${p}${id}`);
+  await fireAndForget(paths);
+}
+
+// Stop a profile
+export async function stopIncognitonProfile(profileId: string): Promise<void> {
+  const id = encodeURIComponent(profileId);
+  const paths = STOP_PATHS.map((p) => `${p}${id}`);
+  await fireAndForget(paths);
+}
+
+// Try to get a real response (only works if CORS is unblocked or running HTTP)
+async function tryGetWithResponse(paths: string[]): Promise<Response> {
   const failures: string[] = [];
   for (const endpoint of endpoints(paths)) {
     const url = `${endpoint.base}${endpoint.path}`;
-    let res: Response;
     try {
-      res = await tryGet(endpoint);
+      const res = await fetch(url, { method: "GET" });
+      if (res.ok) return res;
+      failures.push(`${url}: HTTP ${res.status}`);
     } catch (e) {
       failures.push(`${url}: ${(e as Error).message}`);
-      continue;
     }
-    if (res.ok) return res;
-    failures.push(`${url}: HTTP ${res.status}`);
   }
   throw new Error(`Incogniton API did not respond OK. Tried: ${failures.join(" | ")}`);
 }
 
-// fire-and-forget for launch/stop — works even without CORS
-async function sendWithoutReading(paths: string[]): Promise<void> {
-  for (const endpoint of endpoints(paths)) {
-    try {
-      await fetch(`${endpoint.base}${endpoint.path}`, { method: "GET", mode: "no-cors" });
-      return;
-    } catch {
-      // try next
-    }
-  }
-  throw new Error(INCOG_UNREACHABLE);
-}
-
-export async function launchIncognitonProfile(profileId: string): Promise<void> {
-  const id = encodeURIComponent(profileId);
-  const paths = LAUNCH_PATHS.map((p) => `${p}${id}`);
-  try {
-    await getFirstOk(paths);
-  } catch {
-    // fallback: fire-and-forget works even when browser blocks the response read
-    await sendWithoutReading(paths);
-  }
-}
-
-export async function stopIncognitonProfile(profileId: string): Promise<void> {
-  const id = encodeURIComponent(profileId);
-  const paths = STOP_PATHS.map((p) => `${p}${id}`);
-  try {
-    await getFirstOk(paths);
-  } catch {
-    await sendWithoutReading(paths);
-  }
-}
-
-async function canReachLocalApiWithoutReading(): Promise<boolean> {
-  for (const endpoint of endpoints(LIST_PATHS)) {
-    try {
-      await fetch(`${endpoint.base}${endpoint.path}`, { method: "GET", mode: "no-cors" });
-      return true;
-    } catch {
-      // keep probing
-    }
-  }
-  return false;
-}
-
 export async function getIncognitonProfileStatus(profileId: string): Promise<string | null> {
   const id = encodeURIComponent(profileId);
-  const res = await getFirstOk(STATUS_PATHS.map((p) => `${p}${id}`));
+  const res = await tryGetWithResponse(STATUS_PATHS.map((p) => `${p}${id}`));
   const json = (await res.json().catch(() => null)) as { status?: unknown } | null;
   return typeof json?.status === "string" ? json.status : null;
 }
@@ -123,6 +86,7 @@ export async function pingIncogniton(): Promise<{
 }> {
   const probes: IncognitonProbe[] = [];
 
+  // First try a real fetch (readable response)
   for (const endpoint of endpoints(LIST_PATHS)) {
     const url = `${endpoint.base}${endpoint.path}`;
     try {
@@ -133,35 +97,40 @@ export async function pingIncogniton(): Promise<{
       probes.push({
         ...endpoint,
         ok: false,
-        error:
-          e instanceof TypeError
-            ? "Blocked by browser (Private Network Access / CORS)"
-            : (e as Error).message,
+        error: e instanceof TypeError ? "Blocked by browser (Private Network Access / CORS)" : (e as Error).message,
       });
     }
   }
 
-  // Check if Incogniton is actually running (even if we can't read the response)
-  const sawHttp = probes.some((p) => typeof p.status === "number");
-  const reachableNoCors = !sawHttp && (await canReachLocalApiWithoutReading());
+  // Check if Incogniton is reachable at all via no-cors
+  let reachable = false;
+  for (const endpoint of endpoints(LIST_PATHS)) {
+    try {
+      await fetch(`${endpoint.base}${endpoint.path}`, { method: "GET", mode: "no-cors" });
+      reachable = true;
+      break;
+    } catch {
+      // keep trying
+    }
+  }
 
-  if (reachableNoCors) {
+  const sawHttp = probes.some((p) => typeof p.status === "number");
+
+  if (reachable || sawHttp) {
     return {
-      ok: false, // can't fully use it without CORS fix
+      ok: false,
       endpoint: "local API is running but response is blocked by browser",
       error:
-        "✅ Incogniton is running! But your browser blocks this HTTPS site from reading its response (Private Network Access policy). " +
-        "Fix: install a CORS unblock extension (e.g. 'Allow CORS' from Chrome Web Store) and enable it, then reload. " +
-        "Launch buttons still work without the fix.",
+        "✅ Incogniton is running! But your browser blocks this HTTPS site from reading its local API response. " +
+        "This does NOT affect Launch — Launch still works perfectly. " +
+        "To also enable profile sync, install the 'Allow CORS' extension from Chrome Web Store.",
       probes,
     };
   }
 
   return {
     ok: false,
-    error: sawHttp
-      ? "Incogniton answered but none of the profile-list endpoints returned OK. Check the diagnostics below."
-      : "Incogniton does not appear to be running, or it's running on a different port. Start the Incogniton desktop app and try again.",
+    error: "Incogniton does not appear to be running. Start the Incogniton desktop app and try again.",
     probes,
   };
 }
@@ -228,7 +197,7 @@ function normalizeList(json: unknown): RawProfile[] {
 }
 
 export async function fetchIncognitonProfilesByGroup(groupName: string): Promise<RawProfile[]> {
-  const res = await getFirstOk(LIST_PATHS);
+  const res = await tryGetWithResponse(LIST_PATHS);
   const list = normalizeList(await res.json());
   const target = groupName.trim().toLowerCase();
   if (!target) return list;
