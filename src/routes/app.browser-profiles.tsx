@@ -246,17 +246,34 @@ function Inner() {
                         ))
                       : "—"}
                   </td>
-                  <td>
-                    <span
-                      className={cn(
-                        "text-[10.5px] px-2 py-0.5 rounded-full border",
-                        status === "Active"
-                          ? "bg-success/10 text-success border-success/30"
-                          : "bg-muted text-muted-foreground border-border",
-                      )}
-                    >
-                      {status}
-                    </span>
+                  <td className="text-[12px]">
+                    {p.last_launched_at ? (
+                      <div className="flex flex-col leading-tight">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 self-start text-[10.5px] px-2 py-0.5 rounded-full border",
+                            status === "Active"
+                              ? "bg-success/10 text-success border-success/30"
+                              : "bg-muted text-muted-foreground border-border",
+                          )}
+                        >
+                          {status}
+                        </span>
+                        <span className="mt-1 font-medium text-foreground">
+                          {p.launched_by_name ?? p.launched_by_email ?? "Unknown"}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {new Date(p.last_launched_at).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">Never launched</span>
+                    )}
                   </td>
                   <td className="text-right space-x-1.5 whitespace-nowrap">
                     <Button
