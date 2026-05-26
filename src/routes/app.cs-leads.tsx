@@ -18,6 +18,30 @@ import { launchIncognitonProfile, INCOG_UNREACHABLE } from "@/lib/incogniton";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
+function playNotificationBeep() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    const beep = (freq: number, start: number, dur: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur + 0.02);
+    };
+    beep(880, 0, 0.18);
+    beep(1175, 0.2, 0.22);
+    setTimeout(() => ctx.close(), 700);
+  } catch {
+    // ignore — autoplay may be blocked until user interacts
+  }
+}
+
 type Lead = {
   id: string; customer_name: string; customer_number: string;
   context: string | null; pass_it_to: string | null;
