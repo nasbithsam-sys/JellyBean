@@ -328,21 +328,23 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
         </div>
         {lead.context && <Info label="Context" value={lead.context} multiline />}
         {lead.marketing_notes && <Info label="Marketing notes" value={lead.marketing_notes} multiline />}
-        {lead.original_lead_link && (
+        {auth.primaryRole !== "cs" && lead.original_lead_link && (
           <a href={lead.original_lead_link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm text-primary hover:text-primary-glow transition-colors">
             <ExternalLink className="h-3.5 w-3.5 mr-1.5" />Original post
           </a>
         )}
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={launchProfile}>
-            <Globe className="h-3.5 w-3.5 mr-1.5" />
-            {linkedProfile.data ? "Launch Incogniton profile" : "Link & launch Incogniton profile"}
-          </Button>
-          {linkedProfile.data && (
-            <span className="text-[11px] text-muted-foreground">→ {linkedProfile.data.profile_name}</span>
-          )}
-        </div>
+        {auth.primaryRole !== "cs" && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={launchProfile}>
+              <Globe className="h-3.5 w-3.5 mr-1.5" />
+              {linkedProfile.data ? "Launch Incogniton profile" : "Link & launch Incogniton profile"}
+            </Button>
+            {linkedProfile.data && (
+              <span className="text-[11px] text-muted-foreground">→ {linkedProfile.data.profile_name}</span>
+            )}
+          </div>
+        )}
 
         <div className="border-t border-border pt-5 space-y-4">
           <div>
