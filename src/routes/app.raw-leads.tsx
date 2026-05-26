@@ -309,6 +309,7 @@ function Inner() {
     localStorage.setItem(START_ROW_KEY, String(n));
     // Clear the auto-cursor so the manual value takes effect
     localStorage.removeItem(NEXT_ROW_KEY);
+    localStorage.removeItem(ROWS_KEY);
     setAllRows([]); // clear displayed rows since we're starting fresh
     setStartRow(n);
     nextRowRef.current = n;
