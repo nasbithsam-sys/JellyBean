@@ -224,7 +224,6 @@ function Inner() {
   const nextRowRef = useRef<number>(startRow);
 
   const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong">("new");
-  const [yesOnly, setYesOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
