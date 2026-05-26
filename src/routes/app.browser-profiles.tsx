@@ -61,7 +61,7 @@ function Inner() {
   const [linkOpenFor, setLinkOpenFor] = useState<Profile | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<null | "ok" | "fail">(null);
+  const [testResult, setTestResult] = useState<null | { ok: true; endpoint?: string } | { ok: false; error: string }>(null);
 
   const profiles = useQuery({
     queryKey: ["incog_profiles"],
