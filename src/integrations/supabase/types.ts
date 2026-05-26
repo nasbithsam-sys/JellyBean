@@ -270,6 +270,45 @@ export type Database = {
           },
         ]
       }
+      raw_lead_cache: {
+        Row: {
+          captured_at: string | null
+          category: string | null
+          created_at: string
+          data: Json
+          id: string
+          lead: string | null
+          lead_link: string | null
+          phone: string | null
+          row_key: string
+          updated_at: string
+        }
+        Insert: {
+          captured_at?: string | null
+          category?: string | null
+          created_at?: string
+          data: Json
+          id?: string
+          lead?: string | null
+          lead_link?: string | null
+          phone?: string | null
+          row_key: string
+          updated_at?: string
+        }
+        Update: {
+          captured_at?: string | null
+          category?: string | null
+          created_at?: string
+          data?: Json
+          id?: string
+          lead?: string | null
+          lead_link?: string | null
+          phone?: string | null
+          row_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       raw_leads: {
         Row: {
           account_area: string | null
