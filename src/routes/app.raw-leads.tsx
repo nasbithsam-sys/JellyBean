@@ -232,7 +232,12 @@ function Inner() {
   const cacheQuery = useQuery({
     queryKey: ["raw-lead-cache"],
     queryFn: loadCache,
-    staleTime: 30_000,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
   });
 
   // Build action map keyed by row_key for fast lookup
