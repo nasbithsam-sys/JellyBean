@@ -149,16 +149,16 @@ function Inner() {
       const list = await fetchIncognitonProfilesByGroup(g);
       let upserted = 0;
       for (const p of list) {
-        const id = (p as any).profile_browser_id || (p as any).profileID || (p as any).id;
+        const id = p.profile_browser_id || p.profileID || p.id;
         if (!id) continue;
-        const name = (p as any).profile_name || `Profile ${String(id).slice(0, 6)}`;
-        const group = (p as any).profile_group || g;
+        const name = p.profile_name || `Profile ${String(id).slice(0, 6)}`;
+        const group = p.profile_group || g;
         const { error } = await supabase.from("incogniton_profiles").upsert(
           {
             incogniton_profile_id: String(id),
             profile_name: String(name),
             group_name: String(group),
-            platform: (p as any).platform ?? null,
+            platform: p.platform ?? null,
             created_by: auth.user?.id,
           },
           { onConflict: "incogniton_profile_id", ignoreDuplicates: false },
