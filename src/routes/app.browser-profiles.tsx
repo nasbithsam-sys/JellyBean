@@ -155,7 +155,7 @@ function Inner() {
     setTesting(true);
     setTestResult(null);
     const r = await pingIncogniton();
-    setTestResult(r);
+    setTestResult(r.ok ? { ok: true, endpoint: r.endpoint } : { ok: false, error: r.error || "Unknown error" });
     setTesting(false);
   }
 
