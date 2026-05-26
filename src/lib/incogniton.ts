@@ -1,54 +1,71 @@
 // Incogniton Anti-Detect Browser local REST API helpers.
-// Official endpoints (per https://incogniton.com/api/):
-//   GET http://localhost:35000/profile/all                 -> list profiles
-//   GET http://localhost:35000/profile/launch/<profileID>  -> launch
-//   GET http://localhost:35000/profile/stop/<profileID>    -> stop
+// Incogniton has shipped a few different local API shapes across versions:
+//   - GET /profile/all                        (older)
+//   - GET /api/v1/profile/list                (newer)
+//   - GET /profile/launch/<id>  or  /api/v1/profile/launch/<id>
+//   - GET /profile/stop/<id>    or  /api/v1/profile/stop/<id>
+// We try both so the app works regardless of which Incogniton build is installed.
+
 const BASE = "http://localhost:35000";
 
 export const INCOG_UNREACHABLE =
-  "Cannot reach Incogniton at http://localhost:35000. Make sure the Incogniton desktop app is running and your browser allows insecure content for this site.";
+  "Cannot reach Incogniton at http://localhost:35000. Make sure the Incogniton desktop app is running and that this site is allowed to load insecure content (see Fix Connection).";
 
-function wrapFetch(p: Promise<Response>): Promise<Response> {
-  return p.catch((e) => {
+const LIST_PATHS = ["/profile/all", "/api/v1/profile/list"];
+const LAUNCH_PATHS = ["/profile/launch/", "/api/v1/profile/launch/"];
+const STOP_PATHS = ["/profile/stop/", "/api/v1/profile/stop/"];
+
+async function tryGet(path: string): Promise<Response> {
+  try {
+    return await fetch(`${BASE}${path}`, { method: "GET" });
+  } catch (e) {
     if (e instanceof TypeError) throw new Error(INCOG_UNREACHABLE);
     throw e;
-  });
-}
-
-export async function launchIncognitonProfile(profileId: string): Promise<void> {
-  const res = await wrapFetch(
-    fetch(`${BASE}/profile/launch/${encodeURIComponent(profileId)}`, { method: "GET" }),
-  );
-  if (!res.ok) throw new Error(`Failed to launch profile (HTTP ${res.status})`);
-}
-
-export async function stopIncognitonProfile(profileId: string): Promise<void> {
-  const res = await wrapFetch(
-    fetch(`${BASE}/profile/stop/${encodeURIComponent(profileId)}`, { method: "GET" }),
-  );
-  if (!res.ok) throw new Error(`Failed to stop profile (HTTP ${res.status})`);
-}
-
-export async function pingIncogniton(): Promise<boolean> {
-  try {
-    const res = await wrapFetch(fetch(`${BASE}/profile/all`, { method: "GET" }));
-    return res.ok;
-  } catch {
-    return false;
   }
 }
 
+async function getFirstOk(paths: string[]): Promise<Response> {
+  let lastStatus = 0;
+  for (const p of paths) {
+    const res = await tryGet(p);
+    if (res.ok) return res;
+    lastStatus = res.status;
+  }
+  throw new Error(`Incogniton API responded with HTTP ${lastStatus}`);
+}
+
+export async function launchIncognitonProfile(profileId: string): Promise<void> {
+  const id = encodeURIComponent(profileId);
+  await getFirstOk(LAUNCH_PATHS.map((p) => `${p}${id}`));
+}
+
+export async function stopIncognitonProfile(profileId: string): Promise<void> {
+  const id = encodeURIComponent(profileId);
+  await getFirstOk(STOP_PATHS.map((p) => `${p}${id}`));
+}
+
+export async function pingIncogniton(): Promise<{ ok: boolean; error?: string; endpoint?: string }> {
+  for (const p of LIST_PATHS) {
+    try {
+      const res = await fetch(`${BASE}${p}`, { method: "GET" });
+      if (res.ok) return { ok: true, endpoint: p };
+    } catch (e) {
+      if (e instanceof TypeError) {
+        return { ok: false, error: INCOG_UNREACHABLE };
+      }
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+  return { ok: false, error: "Incogniton is reachable but no known endpoint responded OK." };
+}
+
 type RawProfile = Record<string, unknown> & {
-  profileName?: string; profile_name?: string; name?: string;
-  profileGroup?: string; profile_group?: string; group?: string;
-  profile_browser_id?: string; profileID?: string; id?: string;
+  profile_name?: string;
+  profile_group?: string;
   platform?: string;
-  general_profile_information?: { profile_name?: string; profile_group?: string; simulated_operating_system?: string };
 };
 
 function normalizeList(json: unknown): RawProfile[] {
-  // Incogniton sometimes returns { status: 'ok', profileData: "[{...}]" } (string!)
-  // or { profileData: [...] }, or { data: [...] }, or a raw array.
   const root: any = json;
   let arr: any = root;
   if (root && typeof root === "object") {
@@ -70,8 +87,7 @@ function normalizeList(json: unknown): RawProfile[] {
 }
 
 export async function fetchIncognitonProfilesByGroup(groupName: string): Promise<RawProfile[]> {
-  const res = await wrapFetch(fetch(`${BASE}/profile/all`, { method: "GET" }));
-  if (!res.ok) throw new Error(`Failed to fetch profiles (HTTP ${res.status})`);
+  const res = await getFirstOk(LIST_PATHS);
   const list = normalizeList(await res.json());
   const target = groupName.trim().toLowerCase();
   if (!target) return list;

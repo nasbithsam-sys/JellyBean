@@ -61,7 +61,7 @@ function Inner() {
   const [linkOpenFor, setLinkOpenFor] = useState<Profile | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<null | "ok" | "fail">(null);
+  const [testResult, setTestResult] = useState<null | { ok: true; endpoint?: string } | { ok: false; error: string }>(null);
 
   const profiles = useQuery({
     queryKey: ["incog_profiles"],
@@ -154,8 +154,8 @@ function Inner() {
   async function testConnection() {
     setTesting(true);
     setTestResult(null);
-    const ok = await pingIncogniton();
-    setTestResult(ok ? "ok" : "fail");
+    const r = await pingIncogniton();
+    setTestResult(r.ok ? { ok: true, endpoint: r.endpoint } : { ok: false, error: r.error || "Unknown error" });
     setTesting(false);
   }
 
@@ -211,8 +211,8 @@ function Inner() {
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" onClick={testConnection} disabled={testing}>
             {testing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              : testResult === "ok" ? <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-success" />
-              : testResult === "fail" ? <XCircle className="h-3.5 w-3.5 mr-1.5 text-destructive" />
+              : testResult?.ok ? <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-success" />
+              : testResult && !testResult.ok ? <XCircle className="h-3.5 w-3.5 mr-1.5 text-destructive" />
               : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
             Test Connection
           </Button>
@@ -229,10 +229,10 @@ function Inner() {
         </div>
       </div>
       {testResult && (
-        <div className={cn("text-[12px] px-2", testResult === "ok" ? "text-success" : "text-destructive")}>
-          {testResult === "ok"
-            ? "✅ Connected to Incogniton"
-            : <>❌ Connection failed — <button onClick={() => setHelpOpen(true)} className="underline">see fix instructions</button></>}
+        <div className={cn("text-[12px] px-2", testResult.ok ? "text-success" : "text-destructive")}>
+          {testResult.ok
+            ? <>✅ Connected to Incogniton{testResult.endpoint ? <> via <code className="font-mono">{testResult.endpoint}</code></> : null}</>
+            : <>❌ {testResult.error} — <button onClick={() => setHelpOpen(true)} className="underline">see fix instructions</button></>}
         </div>
       )}
 
