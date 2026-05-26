@@ -434,12 +434,37 @@ function Inner() {
         {tab === "new" && (
           <Button
             size="sm"
-            variant={yesOnly ? "default" : "outline"}
+            variant="outline"
             className="h-9"
-            onClick={() => setYesOnly((v) => !v)}
+            onClick={async () => {
+              const targets = buckets.new.filter(
+                (e) => effectiveLead(e.data, actions[e.row_key]) === "no",
+              );
+              if (targets.length === 0) {
+                toast.info("No 'No' leads to move.");
+                return;
+              }
+              const keys = targets.map((e) => e.row_key);
+              qc.setQueryData<CacheEntry[]>(["raw-lead-cache"], (prev) =>
+                (prev ?? []).map((e) =>
+                  keys.includes(e.row_key) ? { ...e, category: "wrong" } : e,
+                ),
+              );
+              try {
+                const { error } = await sb
+                  .from(TABLE)
+                  .update({ category: "wrong" })
+                  .in("row_key", keys);
+                if (error) throw error;
+                toast.success(`Moved ${targets.length} "No" lead${targets.length === 1 ? "" : "s"} to Wrong posts`);
+              } catch (e) {
+                toast.error((e as Error).message);
+                cacheQuery.refetch();
+              }
+            }}
           >
-            <Check className="h-3.5 w-3.5 mr-1.5" />
-            Yes only
+            <PhoneOff className="h-3.5 w-3.5 mr-1.5" />
+            Move "No" → Wrong posts
           </Button>
         )}
 
