@@ -51,7 +51,16 @@ type Lead = {
   followup_at: string | null; assigned_at: string;
 };
 
-const STATUSES = Constants.public.Enums.cs_status;
+// CS pipeline statuses surfaced in the UI (subset of the DB enum).
+const PIPELINE_STATUSES = [
+  "new",
+  "undeliver",
+  "wrong_number",
+  "already_got_someone",
+  "service_provider_himself",
+  "converted",
+  "need_follow_up",
+] as const;
 
 function Page() {
   const auth = useAuth();
@@ -73,6 +82,13 @@ function Page() {
 
 const STATUS_LABEL: Record<string, string> = {
   new: "New (to contact)",
+  undeliver: "Undeliver",
+  wrong_number: "Wrong Number",
+  already_got_someone: "Already Got Someone",
+  service_provider_himself: "Service Provider Himself",
+  converted: "Converted",
+  need_follow_up: "Need Follow Up",
+  // legacy values (kept so old rows still render)
   called: "Called",
   messaged: "Messaged",
   follow_up: "Follow-up",
@@ -80,17 +96,15 @@ const STATUS_LABEL: Record<string, string> = {
   not_interested: "Not interested",
   already_done: "Already done",
   no_response: "No response",
-  converted: "Converted",
   closed_won: "Closed (done)",
   closed_lost: "Closed (lost)",
 };
 
 const GROUPS: Record<string, { statuses: string[]; tone: string }> = {
   "To contact": { statuses: ["new"], tone: "bg-primary" },
-  "Reached out": { statuses: ["called", "messaged", "follow_up", "no_response"], tone: "bg-warning" },
-  Interested: { statuses: ["interested"], tone: "bg-primary-glow" },
-  Done: { statuses: ["converted", "closed_won", "already_done"], tone: "bg-success" },
-  Dropped: { statuses: ["not_interested", "closed_lost"], tone: "bg-destructive" },
+  "Need Follow Up": { statuses: ["need_follow_up", "follow_up"], tone: "bg-warning" },
+  Converted: { statuses: ["converted", "closed_won"], tone: "bg-success" },
+  Dropped: { statuses: ["undeliver", "wrong_number", "already_got_someone", "service_provider_himself", "not_interested", "closed_lost", "already_done"], tone: "bg-destructive" },
 };
 
 function Inner() {
