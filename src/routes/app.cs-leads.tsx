@@ -421,7 +421,7 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABEL[s] ?? s.replace(/_/g, " ")}</SelectItem>)}
+                {PIPELINE_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABEL[s] ?? s.replace(/_/g, " ")}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
