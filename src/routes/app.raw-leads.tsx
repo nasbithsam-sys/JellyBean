@@ -316,7 +316,7 @@ function Inner() {
       );
     }
     return list;
-  }, [buckets, tab, yesOnly, query, actions]);
+  }, [buckets, tab, query]);
 
   function saveApiUrl() {
     const v = apiUrlDraft.trim();
