@@ -125,10 +125,10 @@ function Inner() {
       //  but the request IS sent and Incogniton processes it.)
       toast.success("Launch command sent ✓ — Incogniton should open the profile now.", { id: "launch" });
     } catch (e) {
-      // Only reaches here if Incogniton is genuinely not running (fetch itself throws)
-      toast.error("Could not reach Incogniton. Make sure the Incogniton desktop app is open and running.", {
-        id: "launch",
-      });
+      toast.error(
+        "Could not launch. Make sure: (1) Incogniton is open, (2) the Bridge is installed on this PC. See README.txt in the bridge folder.",
+        { id: "launch", duration: 6000 },
+      );
     }
   }
 
