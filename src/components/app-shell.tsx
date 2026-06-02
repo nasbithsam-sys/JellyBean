@@ -4,6 +4,7 @@ import {
   ScrollText, Settings, Headphones, LogOut, Command, Globe, Sun, Moon,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
+import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +49,8 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   const items = itemsForRole(auth.primaryRole);
   const displayName = auth.profile?.full_name || auth.user?.email || "—";
   const { theme, toggle: toggleTheme } = useTheme();
+  useRealtimeSync(Boolean(auth.user));
+
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
