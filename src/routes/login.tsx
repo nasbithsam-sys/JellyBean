@@ -187,63 +187,7 @@ function LoginPage() {
             </p>
           </form>
         )}
-        <BootstrapPanel />
       </div>
-    </div>
-  );
-}
-
-function BootstrapPanel() {
-  const [needs, setNeeds] = useState<boolean | null>(null);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ fullName: "", email: "", username: "", password: "" });
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    void (async () => {
-      const { count } = await supabase.from("profiles").select("id", { count: "exact", head: true });
-      setNeeds((count ?? 0) === 0);
-    })();
-  }, []);
-
-  if (!needs) return null;
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const { bootstrapFirstAdmin } = await import("@/lib/admin-users.functions");
-      await bootstrapFirstAdmin({ data: { ...form, role: "admin", isActive: true } });
-      toast.success("Admin created. You can now sign in.");
-      setOpen(false);
-      setNeeds(false);
-    } catch (err) {
-      toast.error((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="mt-6 bg-card border border-dashed rounded-lg p-4">
-      <div className="text-xs text-muted-foreground">
-        No users exist yet. Create the first admin to get started.
-      </div>
-      {!open ? (
-        <Button variant="outline" className="w-full mt-3" onClick={() => setOpen(true)}>
-          Create first admin
-        </Button>
-      ) : (
-        <form onSubmit={submit} className="mt-3 space-y-2">
-          <Input placeholder="Full name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />
-          <Input placeholder="Username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required />
-          <Input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-          <Input type="password" placeholder="Password (8+ chars)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} />
-          <Button type="submit" className="w-full" disabled={busy}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Create admin
-          </Button>
-        </form>
-      )}
     </div>
   );
 }
