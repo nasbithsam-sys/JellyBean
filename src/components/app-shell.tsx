@@ -49,6 +49,8 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   const items = itemsForRole(auth.primaryRole);
   const displayName = auth.profile?.full_name || auth.user?.email || "—";
   const { theme, toggle: toggleTheme } = useTheme();
+  useRealtimeSync(Boolean(auth.user));
+
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
