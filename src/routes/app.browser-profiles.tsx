@@ -421,7 +421,7 @@ function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; grou
   function download() {
     const rows = group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
     if (rows.length === 0) return toast.error("No profiles in this group");
-    const fields = ["profile_name", "incogniton_profile_id", "group_name", "platform", "linked_lead_id"] as const;
+    const fields = ["profile_name", "incogniton_profile_id", "group_name", "account_area"] as const;
     let blob: Blob;
     let filename: string;
     if (format === "csv") {
@@ -491,84 +491,8 @@ function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; grou
   );
 }
 
-// ── Link Lead Dialog ──────────────────────────────────────────────────────────
 
-function LinkLeadDialog({
-  profile,
-  leads,
-  onClose,
-  onSaved,
-}: {
-  profile: Profile;
-  leads: Lead[];
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [q, setQ] = useState("");
-  const [busy, setBusy] = useState(false);
-  const filtered = useMemo(() => {
-    const s = q.toLowerCase().trim();
-    if (!s) return leads.slice(0, 50);
-    return leads.filter((l) => l.customer_name.toLowerCase().includes(s)).slice(0, 50);
-  }, [leads, q]);
 
-  async function save(leadId: string | null) {
-    setBusy(true);
-    const { error } = await supabase
-      .from("incogniton_profiles")
-      .update({ linked_lead_id: leadId })
-      .eq("id", profile.id);
-    setBusy(false);
-    if (error) return toast.error(error.message);
-    toast.success(leadId ? "Linked" : "Unlinked");
-    onSaved();
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-card w-full max-w-md rounded-lg border p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold">Link "{profile.profile_name}" to a lead</h2>
-        <p className="text-[12.5px] text-muted-foreground mt-1">
-          Pick a qualified lead to associate this browser profile with.
-        </p>
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search leads…"
-          className="mt-4"
-          autoFocus
-        />
-        <div className="mt-3 max-h-72 overflow-y-auto border border-border rounded-md divide-y divide-border">
-          {filtered.length === 0 && <div className="p-3 text-[12.5px] text-muted-foreground">No matches</div>}
-          {filtered.map((l) => (
-            <button
-              key={l.id}
-              onClick={() => save(l.id)}
-              disabled={busy}
-              className={cn(
-                "w-full text-left px-3 py-2 text-[13px] hover:bg-accent transition-colors",
-                profile.linked_lead_id === l.id && "bg-accent/60",
-              )}
-            >
-              {l.customer_name}
-              {profile.linked_lead_id === l.id && <span className="ml-2 text-[11px] text-primary">linked</span>}
-            </button>
-          ))}
-        </div>
-        <div className="flex justify-between gap-2 pt-4">
-          {profile.linked_lead_id && (
-            <Button variant="outline" onClick={() => save(null)} disabled={busy}>
-              Unlink
-            </Button>
-          )}
-          <Button variant="outline" onClick={onClose} className="ml-auto">
-            Close
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
