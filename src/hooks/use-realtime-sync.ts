@@ -29,8 +29,7 @@ export function useRealtimeSync(enabled: boolean) {
     const channel = supabase.channel("crm-realtime-sync");
 
     for (const table of Object.keys(TABLE_QUERY_KEYS)) {
-      channel.on(
-        // @ts-expect-error - supabase-js types for postgres_changes payload
+      (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
         "postgres_changes",
         { event: "*", schema: "public", table },
         () => {
