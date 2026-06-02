@@ -299,6 +299,7 @@ export type Database = {
           lead_link: string | null
           phone: string | null
           row_key: string
+          sheet_row: number | null
           updated_at: string
         }
         Insert: {
@@ -311,6 +312,7 @@ export type Database = {
           lead_link?: string | null
           phone?: string | null
           row_key: string
+          sheet_row?: number | null
           updated_at?: string
         }
         Update: {
@@ -323,6 +325,7 @@ export type Database = {
           lead_link?: string | null
           phone?: string | null
           row_key?: string
+          sheet_row?: number | null
           updated_at?: string
         }
         Relationships: []
