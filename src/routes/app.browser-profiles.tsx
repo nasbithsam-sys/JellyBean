@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Download, Rocket, Link2, Trash2, Search, Globe, Plus, Info } from "lucide-react";
+import { Loader2, Download, Rocket, Trash2, Search, Globe, Plus, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { launchIncognitonProfile } from "@/lib/incogniton";
@@ -16,20 +16,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 
 export const Route = createFileRoute("/app/browser-profiles")({ component: Page });
 
+type LaunchHistoryEntry = { at: string; by: string | null };
+
 type Profile = {
   id: string;
   profile_name: string;
   incogniton_profile_id: string;
   group_name: string | null;
-  platform: string | null;
-  linked_lead_id: string | null;
   last_launched_at: string | null;
   launched_by_name: string | null;
   launched_by_email: string | null;
   created_at: string;
+  latitude: number | null;
+  longitude: number | null;
+  account_area: string | null;
+  launch_history: LaunchHistoryEntry[] | null;
 };
-
-type Lead = { id: string; customer_name: string };
 
 function Page() {
   const auth = useAuth();
@@ -54,7 +56,7 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [linkOpenFor, setLinkOpenFor] = useState<Profile | null>(null);
+  const [historyFor, setHistoryFor] = useState<Profile | null>(null);
   const [howToOpen, setHowToOpen] = useState(false);
 
   const profiles = useQuery({
@@ -65,28 +67,9 @@ function Inner() {
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Profile[];
+      return (data ?? []) as unknown as Profile[];
     },
   });
-
-  const leads = useQuery({
-    queryKey: ["qualified_leads_min"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("qualified_leads")
-        .select("id, customer_name")
-        .order("assigned_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return (data ?? []) as Lead[];
-    },
-  });
-
-  const leadMap = useMemo(() => {
-    const m = new Map<string, string>();
-    (leads.data ?? []).forEach((l) => m.set(l.id, l.customer_name));
-    return m;
-  }, [leads.data]);
 
   const groups = useMemo(
     () => Array.from(new Set((profiles.data ?? []).map((p) => p.group_name).filter((g): g is string => !!g))).sort(),
@@ -100,7 +83,7 @@ function Inner() {
       return (
         p.profile_name.toLowerCase().includes(q) ||
         p.incogniton_profile_id.toLowerCase().includes(q) ||
-        (p.platform ?? "").toLowerCase().includes(q)
+        (p.account_area ?? "").toLowerCase().includes(q)
       );
     });
   }, [profiles.data, query]);
@@ -109,20 +92,21 @@ function Inner() {
     toast.loading("Launching profile…", { id: "launch" });
     try {
       await launchIncognitonProfile(p.incogniton_profile_id);
-      // Update last launched timestamp + who launched it (best-effort)
       const user = auth.user;
+      const who = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Unknown";
+      const nowIso = new Date().toISOString();
+      const prevHistory = Array.isArray(p.launch_history) ? p.launch_history : [];
+      const nextHistory = [{ at: nowIso, by: who }, ...prevHistory].slice(0, 5);
       supabase
         .from("incogniton_profiles")
         .update({
-          last_launched_at: new Date().toISOString(),
-          launched_by_name: user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Unknown",
+          last_launched_at: nowIso,
+          launched_by_name: who,
           launched_by_email: user?.email ?? null,
+          launch_history: nextHistory as never,
         })
         .eq("id", p.id)
         .then(() => qc.invalidateQueries({ queryKey: ["incog_profiles"] }));
-      // Launch command was sent — Incogniton should open the profile now.
-      // (We can't confirm it opened because the browser blocks reading localhost responses from HTTPS,
-      //  but the request IS sent and Incogniton processes it.)
       toast.success("Launch command sent ✓ — Incogniton should open the profile now.", { id: "launch" });
     } catch (e) {
       toast.error(
@@ -187,19 +171,15 @@ function Inner() {
               <th>Profile Name</th>
               <th>Profile ID</th>
               <th>Group</th>
-              <th>Platform</th>
-              <th>Linked Lead</th>
+              <th>Account Area</th>
+              <th>Geo</th>
               <th>Last Launched</th>
               <th className="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {profiles.isLoading && (
-              <tr>
-                <td colSpan={7} className="text-center py-6 text-muted-foreground">
-                  Loading…
-                </td>
-              </tr>
+              <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">Loading…</td></tr>
             )}
             {!profiles.isLoading && filtered.length === 0 && (
               <tr>
@@ -216,41 +196,31 @@ function Inner() {
                   <td className="font-medium">{p.profile_name}</td>
                   <td className="font-mono text-[11px] text-muted-foreground">{p.incogniton_profile_id}</td>
                   <td className="text-[12.5px]">{p.group_name ?? "—"}</td>
-                  <td className="text-[12.5px]">{p.platform ?? "—"}</td>
-                  <td className="text-[12.5px]">
-                    {p.linked_lead_id
-                      ? (leadMap.get(p.linked_lead_id) ?? (
-                          <span className="text-muted-foreground/70 font-mono text-[11px]">
-                            {p.linked_lead_id.slice(0, 8)}…
-                          </span>
-                        ))
+                  <td className="text-[12.5px]">{p.account_area ?? "—"}</td>
+                  <td className="text-[11.5px] font-mono text-muted-foreground">
+                    {p.latitude != null && p.longitude != null
+                      ? `${p.latitude.toFixed(3)}, ${p.longitude.toFixed(3)}`
                       : "—"}
                   </td>
                   <td>
                     {p.last_launched_at ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span
-                          className={cn(
-                            "text-[10.5px] px-2 py-0.5 rounded-full border w-fit",
-                            status === "Active"
-                              ? "bg-success/10 text-success border-success/30"
-                              : "bg-muted text-muted-foreground border-border",
-                          )}
-                        >
-                          {status}
-                        </span>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryFor(p)}
+                        className="flex flex-col gap-0.5 text-left hover:opacity-80"
+                        title="View last 5 launches"
+                      >
+                        <span className={cn(
+                          "text-[10.5px] px-2 py-0.5 rounded-full border w-fit",
+                          status === "Active" ? "bg-success/10 text-success border-success/30" : "bg-muted text-muted-foreground border-border",
+                        )}>{status}</span>
                         <span className="text-[11px] font-medium text-foreground pl-0.5">
                           {p.launched_by_name ?? p.launched_by_email ?? "Unknown"}
                         </span>
                         <span className="text-[10px] text-muted-foreground pl-0.5">
-                          {new Date(p.last_launched_at).toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {new Date(p.last_launched_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                         </span>
-                      </div>
+                      </button>
                     ) : (
                       <span className="text-[11px] text-muted-foreground/50 italic">Never launched</span>
                     )}
@@ -258,9 +228,6 @@ function Inner() {
                   <td className="text-right space-x-1.5 whitespace-nowrap">
                     <Button size="sm" variant="default" onClick={() => launch(p)} title="Launch in Incogniton">
                       <Rocket className="h-3.5 w-3.5 mr-1" /> Launch
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setLinkOpenFor(p)} title="Link to lead">
-                      <Link2 className="h-3.5 w-3.5" />
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => remove(p)} title="Delete">
                       <Trash2 className="h-3.5 w-3.5" />
@@ -277,25 +244,30 @@ function Inner() {
         <AddProfileDialog
           userId={auth.user?.id ?? null}
           onClose={() => setAddOpen(false)}
-          onSaved={() => {
-            setAddOpen(false);
-            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-          }}
+          onSaved={() => { setAddOpen(false); qc.invalidateQueries({ queryKey: ["incog_profiles"] }); }}
         />
       )}
       {exportOpen && (
         <ExportDialog profiles={profiles.data ?? []} groups={groups} onClose={() => setExportOpen(false)} />
       )}
-      {linkOpenFor && (
-        <LinkLeadDialog
-          profile={linkOpenFor}
-          leads={leads.data ?? []}
-          onClose={() => setLinkOpenFor(null)}
-          onSaved={() => {
-            setLinkOpenFor(null);
-            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-          }}
-        />
+      {historyFor && (
+        <Dialog open onOpenChange={(o) => !o && setHistoryFor(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Last 5 launches · {historyFor.profile_name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              {(historyFor.launch_history ?? []).length === 0 ? (
+                <div className="text-[12.5px] text-muted-foreground">No history yet.</div>
+              ) : (historyFor.launch_history ?? []).slice(0, 5).map((h, i) => (
+                <div key={i} className="flex justify-between text-[12.5px] bg-muted/30 rounded px-3 py-2">
+                  <span className="font-medium">{h.by ?? "Unknown"}</span>
+                  <span className="text-muted-foreground tabular-nums">{new Date(h.at).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* How to find profile ID */}
@@ -359,37 +331,36 @@ function AddProfileDialog({
   const [profileId, setProfileId] = useState("");
   const [profileName, setProfileName] = useState("");
   const [groupName, setGroupName] = useState("");
-  const [platform, setPlatform] = useState("");
+  const [accountArea, setAccountArea] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function save() {
     const id = profileId.trim();
     const name = profileName.trim();
-    if (!id) {
-      toast.error("Profile ID is required");
-      return;
+    if (!id) { toast.error("Profile ID is required"); return; }
+    if (!name) { toast.error("Profile name is required"); return; }
+    const lat = latitude.trim() ? parseFloat(latitude) : null;
+    const lng = longitude.trim() ? parseFloat(longitude) : null;
+    if ((lat !== null && Number.isNaN(lat)) || (lng !== null && Number.isNaN(lng))) {
+      toast.error("Latitude and longitude must be numbers"); return;
     }
-    if (!name) {
-      toast.error("Profile name is required");
-      return;
-    }
-
     setSaving(true);
     const { error } = await supabase.from("incogniton_profiles").upsert(
       {
         incogniton_profile_id: id,
         profile_name: name,
         group_name: groupName.trim() || null,
-        platform: platform.trim() || null,
+        account_area: accountArea.trim() || null,
+        latitude: lat,
+        longitude: lng,
         created_by: userId,
-      },
+      } as never,
       { onConflict: "incogniton_profile_id", ignoreDuplicates: false },
     );
     setSaving(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    if (error) { toast.error(error.message); return; }
     toast.success("Profile saved ✓");
     onSaved();
   }
@@ -400,41 +371,37 @@ function AddProfileDialog({
         <div>
           <h2 className="text-lg font-semibold">Add Incogniton Profile</h2>
           <p className="text-[12px] text-muted-foreground mt-1">
-            Enter the profile details manually. Not sure of the ID?{" "}
-            <span className="text-primary">Open Incogniton → right-click profile → Profile Info.</span>
+            Enter the profile details. Geo coordinates (optional) will plot the profile on the map with a 50-mile radius.
           </p>
         </div>
 
         <div className="space-y-3">
           <Field label="Profile ID *">
-            <Input
-              value={profileId}
-              onChange={(e) => setProfileId(e.target.value)}
-              placeholder="e.g. 1234567890 or abc-def-123"
-              autoFocus
-            />
+            <Input value={profileId} onChange={(e) => setProfileId(e.target.value)} placeholder="e.g. 1234567890 or abc-def-123" autoFocus />
           </Field>
           <Field label="Profile Name *">
-            <Input
-              value={profileName}
-              onChange={(e) => setProfileName(e.target.value)}
-              placeholder="e.g. Account A – Facebook"
-            />
+            <Input value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="e.g. Account A – Facebook" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Group (optional)">
               <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. testing" />
             </Field>
-            <Field label="Platform (optional)">
-              <Input value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="e.g. Facebook" />
+            <Field label="Account Area (optional)">
+              <Input value={accountArea} onChange={(e) => setAccountArea(e.target.value)} placeholder="e.g. CA · Fountain Valley" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Latitude (optional)">
+              <Input value={latitude} onChange={(e) => setLatitude(e.target.value)} placeholder="e.g. 33.7092" inputMode="decimal" />
+            </Field>
+            <Field label="Longitude (optional)">
+              <Input value={longitude} onChange={(e) => setLongitude(e.target.value)} placeholder="e.g. -117.9536" inputMode="decimal" />
             </Field>
           </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button onClick={save} disabled={saving}>
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             Save Profile

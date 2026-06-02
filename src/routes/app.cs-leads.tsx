@@ -10,11 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, ExternalLink, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw, Globe } from "lucide-react";
+import { Loader2, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 import { cn } from "@/lib/utils";
-import { launchIncognitonProfile, INCOG_UNREACHABLE } from "@/lib/incogniton";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
@@ -100,29 +99,30 @@ const STATUS_LABEL: Record<string, string> = {
   closed_lost: "Closed (lost)",
 };
 
-const GROUPS: Record<string, { statuses: string[]; tone: string }> = {
-  "To contact": { statuses: ["new"], tone: "bg-primary" },
-  "Need Follow Up": { statuses: ["need_follow_up", "follow_up"], tone: "bg-warning" },
-  Converted: { statuses: ["converted", "closed_won"], tone: "bg-success" },
-  Dropped: { statuses: ["undeliver", "wrong_number", "already_got_someone", "service_provider_himself", "not_interested", "closed_lost", "already_done"], tone: "bg-destructive" },
+const STATUS_TONE: Record<string, string> = {
+  new: "bg-primary",
+  undeliver: "bg-destructive",
+  wrong_number: "bg-destructive",
+  already_got_someone: "bg-destructive",
+  service_provider_himself: "bg-destructive",
+  converted: "bg-success",
+  need_follow_up: "bg-warning",
 };
 
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
-  const [group, setGroup] = useState<keyof typeof GROUPS>("To contact");
   const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<Lead | null>(null);
 
   const list = useQuery({
-    queryKey: ["cs_leads", group],
+    queryKey: ["cs_leads"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select("*")
-        .in("cs_status", GROUPS[group].statuses as never)
         .order("assigned_at", { ascending: false })
-        .limit(300);
+        .limit(1000);
       if (error) throw error;
       return (data ?? []) as unknown as Lead[];
     },
@@ -184,26 +184,16 @@ function Inner() {
     );
   }, [list.data, query]);
 
+  const sections = useMemo(() => {
+    return PIPELINE_STATUSES.map((s) => ({
+      status: s,
+      leads: filtered.filter((l) => l.cs_status === s),
+    }));
+  }, [filtered]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
-          {Object.entries(GROUPS).map(([name, g]) => (
-            <button
-              key={name}
-              onClick={() => setGroup(name as keyof typeof GROUPS)}
-              className={cn(
-                "relative px-3 h-8 text-[12.5px] font-medium rounded-md transition-all flex items-center gap-2",
-                group === name
-                  ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <span className={cn("h-1.5 w-1.5 rounded-full", g.tone)} />
-              {name}
-            </button>
-          ))}
-        </div>
         <div className="relative flex-1 min-w-[240px] max-w-md">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
@@ -235,13 +225,24 @@ function Inner() {
         <div className="glass-card p-16 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="glass-card p-16 text-center">
-          <div className="text-sm text-muted-foreground">No leads in this view.</div>
-        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpened(l)} />)}
+        <div className="space-y-6">
+          {sections.map(({ status, leads }) => (
+            <section key={status}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className={cn("h-2 w-2 rounded-full", STATUS_TONE[status] ?? "bg-muted-foreground")} />
+                <h3 className="text-[13px] font-semibold tracking-tight">{STATUS_LABEL[status] ?? status}</h3>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{leads.length}</span>
+              </div>
+              {leads.length === 0 ? (
+                <div className="glass-card p-6 text-center text-[12px] text-muted-foreground">No leads.</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {leads.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpened(l)} />)}
+                </div>
+              )}
+            </section>
+          ))}
         </div>
       )}
 
@@ -361,38 +362,7 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
   const [note, setNote] = useState("");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
-  const [linkOpen, setLinkOpen] = useState(false);
   const notes = useMemo(() => Array.isArray(lead.cs_notes) ? lead.cs_notes : [], [lead.cs_notes]);
-
-  const linkedProfile = useQuery({
-    queryKey: ["incog_profile_for_lead", lead.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("incogniton_profiles")
-        .select("id, incogniton_profile_id, profile_name")
-        .eq("linked_lead_id", lead.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  async function launchProfile() {
-    if (!linkedProfile.data) {
-      setLinkOpen(true);
-      return;
-    }
-    try {
-      await launchIncognitonProfile(linkedProfile.data.incogniton_profile_id);
-      await supabase
-        .from("incogniton_profiles")
-        .update({ last_launched_at: new Date().toISOString() })
-        .eq("id", linkedProfile.data.id);
-      toast.success("Profile opened in Incogniton");
-    } catch (e) {
-      toast.error((e as Error).message || INCOG_UNREACHABLE);
-    }
-  }
 
   async function save() {
     setBusy(true);
@@ -436,23 +406,6 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
         </div>
         {lead.context && <Info label="Context" value={lead.context} multiline />}
         {lead.marketing_notes && <Info label="Marketing notes" value={lead.marketing_notes} multiline />}
-        {auth.primaryRole !== "cs" && lead.original_lead_link && (
-          <a href={lead.original_lead_link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm text-primary hover:text-primary-glow transition-colors">
-            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />Original post
-          </a>
-        )}
-
-        {auth.primaryRole !== "cs" && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={launchProfile}>
-              <Globe className="h-3.5 w-3.5 mr-1.5" />
-              {linkedProfile.data ? "Launch Incogniton profile" : "Link & launch Incogniton profile"}
-            </Button>
-            {linkedProfile.data && (
-              <span className="text-[11px] text-muted-foreground">→ {linkedProfile.data.profile_name}</span>
-            )}
-          </div>
-        )}
 
         <div className="border-t border-border pt-5 space-y-4">
           <div>
@@ -500,105 +453,10 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
           </div>
         )}
       </div>
-      {linkOpen && (
-        <LinkProfileModal
-          leadId={lead.id}
-          onClose={() => setLinkOpen(false)}
-          onLinked={async (profileId) => {
-            setLinkOpen(false);
-            await linkedProfile.refetch();
-            try {
-              await launchIncognitonProfile(profileId);
-              toast.success("Profile opened in Incogniton");
-            } catch (e) {
-              toast.error((e as Error).message || INCOG_UNREACHABLE);
-            }
-          }}
-        />
-      )}
     </div>
   );
 }
 
-function LinkProfileModal({ leadId, onClose, onLinked }: { leadId: string; onClose: () => void; onLinked: (profileId: string) => void }) {
-  const auth = useAuth();
-  const [profileId, setProfileId] = useState("");
-  const [name, setName] = useState("");
-  const [group, setGroup] = useState("");
-  const [platform, setPlatform] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const groups = useQuery({
-    queryKey: ["incog_groups"],
-    queryFn: async () => {
-      const { data } = await supabase.from("incogniton_profiles").select("group_name");
-      return Array.from(new Set((data ?? []).map((r) => r.group_name).filter((g): g is string => !!g))).sort();
-    },
-  });
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const { error } = await supabase.from("incogniton_profiles").insert({
-        incogniton_profile_id: profileId.trim(),
-        profile_name: name.trim() || `Profile ${profileId.trim().slice(0, 6)}`,
-        group_name: group.trim() || null,
-        platform: platform.trim() || null,
-        linked_lead_id: leadId,
-        last_launched_at: new Date().toISOString(),
-        created_by: auth.user?.id,
-      });
-      if (error) throw error;
-      onLinked(profileId.trim());
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[60] bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <form onSubmit={save} className="bg-card w-full max-w-md rounded-lg border p-6 space-y-3" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold">Link Incogniton profile</h2>
-        <p className="text-[12.5px] text-muted-foreground">
-          Find the profile in Incogniton, copy its ID, and link it to this lead. It will be launched right away.
-        </p>
-        <div>
-          <Label className="block mb-1.5">Incogniton Profile ID</Label>
-          <Input value={profileId} onChange={(e) => setProfileId(e.target.value)} required autoFocus className="font-mono text-[12.5px]" />
-        </div>
-        <div>
-          <Label className="block mb-1.5">Profile name (optional)</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Auto-generated if blank" />
-        </div>
-        <div>
-          <Label className="block mb-1.5">Group</Label>
-          <Input
-            value={group}
-            onChange={(e) => setGroup(e.target.value)}
-            list="incog-group-suggestions"
-            placeholder="Type or pick existing"
-          />
-          <datalist id="incog-group-suggestions">
-            {(groups.data ?? []).map((g) => <option key={g} value={g} />)}
-          </datalist>
-        </div>
-        <div>
-          <Label className="block mb-1.5">Platform</Label>
-          <Input value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="e.g. Facebook, Instagram" />
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" disabled={busy || !profileId.trim()}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save & launch
-          </Button>
-        </div>
-      </form>
-    </div>
-  );
-}
 
 function Info({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
   return (

@@ -121,41 +121,53 @@ export type Database = {
       }
       incogniton_profiles: {
         Row: {
+          account_area: string | null
           created_at: string
           created_by: string | null
           group_name: string | null
           id: string
           incogniton_profile_id: string
           last_launched_at: string | null
+          latitude: number | null
+          launch_history: Json
           launched_by_email: string | null
           launched_by_name: string | null
           linked_lead_id: string | null
+          longitude: number | null
           platform: string | null
           profile_name: string
         }
         Insert: {
+          account_area?: string | null
           created_at?: string
           created_by?: string | null
           group_name?: string | null
           id?: string
           incogniton_profile_id: string
           last_launched_at?: string | null
+          latitude?: number | null
+          launch_history?: Json
           launched_by_email?: string | null
           launched_by_name?: string | null
           linked_lead_id?: string | null
+          longitude?: number | null
           platform?: string | null
           profile_name: string
         }
         Update: {
+          account_area?: string | null
           created_at?: string
           created_by?: string | null
           group_name?: string | null
           id?: string
           incogniton_profile_id?: string
           last_launched_at?: string | null
+          latitude?: number | null
+          launch_history?: Json
           launched_by_email?: string | null
           launched_by_name?: string | null
           linked_lead_id?: string | null
+          longitude?: number | null
           platform?: string | null
           profile_name?: string
         }
