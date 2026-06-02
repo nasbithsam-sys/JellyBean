@@ -100,11 +100,14 @@ const STATUS_LABEL: Record<string, string> = {
   closed_lost: "Closed (lost)",
 };
 
-const GROUPS: Record<string, { statuses: string[]; tone: string }> = {
-  "To contact": { statuses: ["new"], tone: "bg-primary" },
-  "Need Follow Up": { statuses: ["need_follow_up", "follow_up"], tone: "bg-warning" },
-  Converted: { statuses: ["converted", "closed_won"], tone: "bg-success" },
-  Dropped: { statuses: ["undeliver", "wrong_number", "already_got_someone", "service_provider_himself", "not_interested", "closed_lost", "already_done"], tone: "bg-destructive" },
+const STATUS_TONE: Record<string, string> = {
+  new: "bg-primary",
+  undeliver: "bg-destructive",
+  wrong_number: "bg-destructive",
+  already_got_someone: "bg-destructive",
+  service_provider_himself: "bg-destructive",
+  converted: "bg-success",
+  need_follow_up: "bg-warning",
 };
 
 function Inner() {
