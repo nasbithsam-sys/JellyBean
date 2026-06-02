@@ -191,7 +191,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   const createUser = useServerFn(adminCreateUser);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
-    fullName: "", email: "", username: "", password: "",
+    fullName: "", email: "", password: "",
     role: "marketing" as "admin" | "marketing" | "cs", isActive: true,
   });
   async function submit(e: React.FormEvent) {
@@ -209,11 +209,28 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
       <div className="bg-card w-full max-w-md rounded-lg border p-6" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold mb-4">Create user</h2>
         <form onSubmit={submit} className="space-y-3">
-          <Field label="Full name"><Input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required /></Field>
-          <Field label="Username"><Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required /></Field>
+          <Field label="Name"><Input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required /></Field>
           <Field label="Email"><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></Field>
           <Field label="Password"><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} /></Field>
           <Field label="Role">
+            <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as typeof form.role })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="marketing">Marketing</SelectItem>
+                <SelectItem value="cs">CS</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+            <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Create</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
             <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as typeof form.role })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
