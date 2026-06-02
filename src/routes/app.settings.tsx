@@ -231,24 +231,6 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     </div>
   );
 }
-            <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as typeof form.role })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="marketing">Marketing</SelectItem>
-                <SelectItem value="cs">CS</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
-            <Button type="submit" disabled={submitting}>{submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Create</Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><Label className="block mb-1.5">{label}</Label>{children}</div>;
