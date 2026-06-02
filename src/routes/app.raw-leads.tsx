@@ -42,8 +42,7 @@ export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 const DEFAULT_API_URL =
   "https://script.google.com/macros/s/AKfycbykybYjjrkdOMEC5M-mgFWIngGTY-g_jPdNL9mksND0jaoJ-ht8wspYAj88MCla8r2F2g/exec";
 const API_URL_KEY = "rawleads.apiUrl";
-const START_ROW_KEY = "rawleads.startRow";
-const NEXT_ROW_KEY = "rawleads.nextRow";
+const SHARED_START_ROW_KEY = "raw_leads.start_row";
 
 // raw_lead_cache table is new — types.ts hasn't been regenerated yet.
 // Use a loose-typed accessor so the build doesn't fail.
@@ -75,6 +74,7 @@ type CacheEntry = {
   category: Category | null;
   captured_at: string | null;
   lead_link: string | null;
+  sheet_row: number | null;
 };
 
 const RAW_LEAD_COLUMNS = [
