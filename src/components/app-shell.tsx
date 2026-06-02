@@ -4,6 +4,7 @@ import {
   ScrollText, Settings, Headphones, LogOut, Command, Globe, Sun, Moon,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
+import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
