@@ -232,11 +232,16 @@ function Inner() {
   const [apiUrlDraft, setApiUrlDraft] = useState(apiUrl);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const [startRow, setStartRow] = useState<number>(() =>
-    typeof window === "undefined" ? 1 : getEffectiveStartRow(),
-  );
+  // Shared start row — kept in sync across all users via Supabase
+  const startRowQuery = useQuery({
+    queryKey: ["raw-leads-shared-start-row"],
+    queryFn: loadSharedStartRow,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
+  const startRow = startRowQuery.data ?? 1;
   const [startRowDraft, setStartRowDraft] = useState<string>(String(startRow));
-  const nextRowRef = useRef<number>(startRow);
+  useEffect(() => { setStartRowDraft(String(startRow)); }, [startRow]);
 
   const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong">("new");
   const [query, setQuery] = useState("");
