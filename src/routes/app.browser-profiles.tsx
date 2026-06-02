@@ -171,19 +171,15 @@ function Inner() {
               <th>Profile Name</th>
               <th>Profile ID</th>
               <th>Group</th>
-              <th>Platform</th>
-              <th>Linked Lead</th>
+              <th>Account Area</th>
+              <th>Geo</th>
               <th>Last Launched</th>
               <th className="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {profiles.isLoading && (
-              <tr>
-                <td colSpan={7} className="text-center py-6 text-muted-foreground">
-                  Loading…
-                </td>
-              </tr>
+              <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">Loading…</td></tr>
             )}
             {!profiles.isLoading && filtered.length === 0 && (
               <tr>
@@ -200,41 +196,31 @@ function Inner() {
                   <td className="font-medium">{p.profile_name}</td>
                   <td className="font-mono text-[11px] text-muted-foreground">{p.incogniton_profile_id}</td>
                   <td className="text-[12.5px]">{p.group_name ?? "—"}</td>
-                  <td className="text-[12.5px]">{p.platform ?? "—"}</td>
-                  <td className="text-[12.5px]">
-                    {p.linked_lead_id
-                      ? (leadMap.get(p.linked_lead_id) ?? (
-                          <span className="text-muted-foreground/70 font-mono text-[11px]">
-                            {p.linked_lead_id.slice(0, 8)}…
-                          </span>
-                        ))
+                  <td className="text-[12.5px]">{p.account_area ?? "—"}</td>
+                  <td className="text-[11.5px] font-mono text-muted-foreground">
+                    {p.latitude != null && p.longitude != null
+                      ? `${p.latitude.toFixed(3)}, ${p.longitude.toFixed(3)}`
                       : "—"}
                   </td>
                   <td>
                     {p.last_launched_at ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span
-                          className={cn(
-                            "text-[10.5px] px-2 py-0.5 rounded-full border w-fit",
-                            status === "Active"
-                              ? "bg-success/10 text-success border-success/30"
-                              : "bg-muted text-muted-foreground border-border",
-                          )}
-                        >
-                          {status}
-                        </span>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryFor(p)}
+                        className="flex flex-col gap-0.5 text-left hover:opacity-80"
+                        title="View last 5 launches"
+                      >
+                        <span className={cn(
+                          "text-[10.5px] px-2 py-0.5 rounded-full border w-fit",
+                          status === "Active" ? "bg-success/10 text-success border-success/30" : "bg-muted text-muted-foreground border-border",
+                        )}>{status}</span>
                         <span className="text-[11px] font-medium text-foreground pl-0.5">
                           {p.launched_by_name ?? p.launched_by_email ?? "Unknown"}
                         </span>
                         <span className="text-[10px] text-muted-foreground pl-0.5">
-                          {new Date(p.last_launched_at).toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {new Date(p.last_launched_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                         </span>
-                      </div>
+                      </button>
                     ) : (
                       <span className="text-[11px] text-muted-foreground/50 italic">Never launched</span>
                     )}
@@ -242,9 +228,6 @@ function Inner() {
                   <td className="text-right space-x-1.5 whitespace-nowrap">
                     <Button size="sm" variant="default" onClick={() => launch(p)} title="Launch in Incogniton">
                       <Rocket className="h-3.5 w-3.5 mr-1" /> Launch
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setLinkOpenFor(p)} title="Link to lead">
-                      <Link2 className="h-3.5 w-3.5" />
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => remove(p)} title="Delete">
                       <Trash2 className="h-3.5 w-3.5" />
@@ -261,25 +244,30 @@ function Inner() {
         <AddProfileDialog
           userId={auth.user?.id ?? null}
           onClose={() => setAddOpen(false)}
-          onSaved={() => {
-            setAddOpen(false);
-            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-          }}
+          onSaved={() => { setAddOpen(false); qc.invalidateQueries({ queryKey: ["incog_profiles"] }); }}
         />
       )}
       {exportOpen && (
         <ExportDialog profiles={profiles.data ?? []} groups={groups} onClose={() => setExportOpen(false)} />
       )}
-      {linkOpenFor && (
-        <LinkLeadDialog
-          profile={linkOpenFor}
-          leads={leads.data ?? []}
-          onClose={() => setLinkOpenFor(null)}
-          onSaved={() => {
-            setLinkOpenFor(null);
-            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-          }}
-        />
+      {historyFor && (
+        <Dialog open onOpenChange={(o) => !o && setHistoryFor(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Last 5 launches · {historyFor.profile_name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              {(historyFor.launch_history ?? []).length === 0 ? (
+                <div className="text-[12.5px] text-muted-foreground">No history yet.</div>
+              ) : (historyFor.launch_history ?? []).slice(0, 5).map((h, i) => (
+                <div key={i} className="flex justify-between text-[12.5px] bg-muted/30 rounded px-3 py-2">
+                  <span className="font-medium">{h.by ?? "Unknown"}</span>
+                  <span className="text-muted-foreground tabular-nums">{new Date(h.at).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* How to find profile ID */}
