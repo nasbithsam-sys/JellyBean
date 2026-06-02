@@ -162,10 +162,21 @@ async function fetchSheetRows(
     throw new Error(`Apps Script returned HTTP ${res.status}.`);
   }
   const json = (await res.json()) as { rows?: Row[]; nextRow?: number };
-  const rows = Array.isArray(json.rows) ? json.rows : [];
-  const nextRow =
-    typeof json.nextRow === "number" && json.nextRow > 0 ? json.nextRow : startRow + rows.length;
+  const allRows = Array.isArray(json.rows) ? json.rows : [];
+  // Only take contiguous rows from the start whose "Lead" column (E) is filled.
+  // Stop at the first empty Lead cell — even if later rows have data, we wait
+  // until the gap is filled before advancing the shared cursor.
+  let cutoff = allRows.length;
+  for (let i = 0; i < allRows.length; i++) {
+    if (!(allRows[i].Lead ?? "").trim()) {
+      cutoff = i;
+      break;
+    }
+  }
+  const rows = allRows.slice(0, cutoff);
+  const nextRow = startRow + rows.length;
   return { rows, nextRow };
+
 }
 
 // ── Supabase cache helpers ────────────────────────────────────────────────────
