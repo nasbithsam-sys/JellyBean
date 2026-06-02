@@ -715,6 +715,10 @@ function Inner() {
         <LeadDetailDialog
           entry={detailFor}
           onClose={() => setDetailFor(null)}
+          onLeadChange={async (lead) => {
+            await updateAction(detailFor.row_key, { lead });
+            toast.success(`Marked as ${lead === "yes" ? "Yes" : "No"}`);
+          }}
           onNotFound={async () => {
             await updateAction(detailFor.row_key, { category: "not_found" });
             setDetailFor(null);
@@ -756,12 +760,14 @@ function LeadDetailDialog({
   onNotFound,
   onWrong,
   onForward,
+  onLeadChange,
 }: {
   entry: CacheEntry;
   onClose: () => void;
   onNotFound: () => void | Promise<void>;
   onWrong: () => void | Promise<void>;
   onForward: (phone: string) => void | Promise<void>;
+  onLeadChange: (lead: "yes" | "no") => void | Promise<void>;
 }) {
   const r = entry.data;
   const [phone, setPhone] = useState(entry.phone ?? "");
@@ -837,16 +843,33 @@ function LeadDetailDialog({
             </a>
           )}
 
-          <div className="pt-2 border-t">
-            <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-              Phone Number
-            </Label>
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Enter phone number found in the post / comments"
-              autoFocus
-            />
+          <div className="pt-2 border-t grid grid-cols-2 gap-3">
+            <div>
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Lead Status
+              </Label>
+              <Select
+                value={effectiveLead(r, { lead: entry.lead }) || ""}
+                onValueChange={(v) => onLeadChange(v as "yes" | "no")}
+              >
+                <SelectTrigger><SelectValue placeholder="Set Yes / No" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yes">Yes</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Phone Number
+              </Label>
+              <Input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="Phone from post / comments"
+                autoFocus
+              />
+            </div>
           </div>
         </div>
 
