@@ -401,7 +401,7 @@ function Inner() {
           </Button>
         </div>
         <div className="text-muted-foreground">
-          Next refresh will load from row <strong>{Math.max(nextRowRef.current, startRow)}</strong>.
+          Next refresh will load from row <strong>{startRow}</strong>.
         </div>
         <Button
           size="sm"
