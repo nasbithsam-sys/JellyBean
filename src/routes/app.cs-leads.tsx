@@ -113,19 +113,17 @@ const STATUS_TONE: Record<string, string> = {
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
-  const [group, setGroup] = useState<keyof typeof GROUPS>("To contact");
   const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<Lead | null>(null);
 
   const list = useQuery({
-    queryKey: ["cs_leads", group],
+    queryKey: ["cs_leads"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select("*")
-        .in("cs_status", GROUPS[group].statuses as never)
         .order("assigned_at", { ascending: false })
-        .limit(300);
+        .limit(1000);
       if (error) throw error;
       return (data ?? []) as unknown as Lead[];
     },
@@ -187,26 +185,16 @@ function Inner() {
     );
   }, [list.data, query]);
 
+  const sections = useMemo(() => {
+    return PIPELINE_STATUSES.map((s) => ({
+      status: s,
+      leads: filtered.filter((l) => l.cs_status === s),
+    }));
+  }, [filtered]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
-          {Object.entries(GROUPS).map(([name, g]) => (
-            <button
-              key={name}
-              onClick={() => setGroup(name as keyof typeof GROUPS)}
-              className={cn(
-                "relative px-3 h-8 text-[12.5px] font-medium rounded-md transition-all flex items-center gap-2",
-                group === name
-                  ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <span className={cn("h-1.5 w-1.5 rounded-full", g.tone)} />
-              {name}
-            </button>
-          ))}
-        </div>
         <div className="relative flex-1 min-w-[240px] max-w-md">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
@@ -238,13 +226,24 @@ function Inner() {
         <div className="glass-card p-16 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="glass-card p-16 text-center">
-          <div className="text-sm text-muted-foreground">No leads in this view.</div>
-        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpened(l)} />)}
+        <div className="space-y-6">
+          {sections.map(({ status, leads }) => (
+            <section key={status}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className={cn("h-2 w-2 rounded-full", STATUS_TONE[status] ?? "bg-muted-foreground")} />
+                <h3 className="text-[13px] font-semibold tracking-tight">{STATUS_LABEL[status] ?? status}</h3>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{leads.length}</span>
+              </div>
+              {leads.length === 0 ? (
+                <div className="glass-card p-6 text-center text-[12px] text-muted-foreground">No leads.</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {leads.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpened(l)} />)}
+                </div>
+              )}
+            </section>
+          ))}
         </div>
       )}
 
