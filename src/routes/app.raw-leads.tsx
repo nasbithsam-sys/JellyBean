@@ -298,13 +298,15 @@ function Inner() {
 
   useEffect(() => {
     if (!data) return;
-    nextRowRef.current = data.nextRow;
-    localStorage.setItem(NEXT_ROW_KEY, String(data.nextRow));
     if (data.rows.length > 0) {
-      upsertNewRows(data.rows)
+      upsertNewRows(data.rows, startRow)
         .then(() => cacheQuery.refetch())
         .catch((e) => toast.error(`Save failed: ${(e as Error).message}`));
     }
+    // Persist the advancing cursor to the shared row so every user picks up from here.
+    saveSharedStartRow(data.nextRow, auth.user?.id ?? null)
+      .then(() => startRowQuery.refetch())
+      .catch((e) => toast.error(`Could not sync row cursor: ${(e as Error).message}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
@@ -352,35 +354,33 @@ function Inner() {
     toast.success("Web App URL saved");
   }
 
-  function applyManualStartRow() {
+  async function applyManualStartRow() {
     const n = parseInt(startRowDraft, 10);
     if (isNaN(n) || n < 1) {
       toast.error("Enter a valid row number (1 or above)");
       return;
     }
-    localStorage.setItem(START_ROW_KEY, String(n));
-    localStorage.removeItem(NEXT_ROW_KEY);
-    setStartRow(n);
-    nextRowRef.current = n;
-    toast.success(`Will load from row ${n} on next refresh`);
-    setTimeout(() => refetch(), 100);
-  }
-
-  function handleRefresh() {
-    const next = nextRowRef.current;
-    if (next !== startRow) {
-      setStartRow(next);
-      setTimeout(() => refetch(), 0);
-    } else {
-      refetch();
+    try {
+      await saveSharedStartRow(n, auth.user?.id ?? null);
+      await startRowQuery.refetch();
+      toast.success(`Will load from row ${n} on next refresh (synced for all users)`);
+      setTimeout(() => refetch(), 100);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
-  function markCurrentPosition() {
-    const next = nextRowRef.current;
-    localStorage.setItem(START_ROW_KEY, String(next));
-    localStorage.removeItem(NEXT_ROW_KEY);
-    toast.success(`Bookmark saved at row ${next}. Next session will start from here.`);
+  function handleRefresh() {
+    refetch();
+  }
+
+  async function markCurrentPosition() {
+    try {
+      await saveSharedStartRow(startRow, auth.user?.id ?? null);
+      toast.success(`Bookmark saved at row ${startRow} for all users.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   }
 
   return (
