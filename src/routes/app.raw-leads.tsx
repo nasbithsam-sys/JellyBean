@@ -42,8 +42,7 @@ export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 const DEFAULT_API_URL =
   "https://script.google.com/macros/s/AKfycbykybYjjrkdOMEC5M-mgFWIngGTY-g_jPdNL9mksND0jaoJ-ht8wspYAj88MCla8r2F2g/exec";
 const API_URL_KEY = "rawleads.apiUrl";
-const START_ROW_KEY = "rawleads.startRow";
-const NEXT_ROW_KEY = "rawleads.nextRow";
+const SHARED_START_ROW_KEY = "raw_leads.start_row";
 
 // raw_lead_cache table is new — types.ts hasn't been regenerated yet.
 // Use a loose-typed accessor so the build doesn't fail.
@@ -75,6 +74,7 @@ type CacheEntry = {
   category: Category | null;
   captured_at: string | null;
   lead_link: string | null;
+  sheet_row: number | null;
 };
 
 const RAW_LEAD_COLUMNS = [
@@ -124,10 +124,24 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
   return "";
 }
 
-function getEffectiveStartRow(): number {
-  const manual = parseInt(localStorage.getItem(START_ROW_KEY) || "1", 10) || 1;
-  const cursor = parseInt(localStorage.getItem(NEXT_ROW_KEY) || "0", 10) || 0;
-  return Math.max(manual, cursor, 1);
+// ── Shared start-row state (synced across all users via Supabase) ─────────────
+async function loadSharedStartRow(): Promise<number> {
+  const { data, error } = await sb
+    .from("shared_state")
+    .select("value")
+    .eq("key", SHARED_START_ROW_KEY)
+    .maybeSingle();
+  if (error) throw error;
+  const n = data?.value?.row;
+  return typeof n === "number" && n > 0 ? n : 1;
+}
+
+async function saveSharedStartRow(row: number, userId: string | null): Promise<void> {
+  const { error } = await sb.from("shared_state").upsert(
+    { key: SHARED_START_ROW_KEY, value: { row }, updated_at: new Date().toISOString(), updated_by: userId },
+    { onConflict: "key" },
+  );
+  if (error) throw error;
 }
 
 // ── Google Sheets fetch ───────────────────────────────────────────────────────
@@ -158,21 +172,22 @@ async function fetchSheetRows(
 async function loadCache(): Promise<CacheEntry[]> {
   const { data, error } = await sb
     .from(TABLE)
-    .select("row_key, data, lead, phone, category, captured_at, lead_link")
+    .select("row_key, data, lead, phone, category, captured_at, lead_link, sheet_row")
     .order("captured_at", { ascending: false, nullsFirst: false })
     .limit(5000);
   if (error) throw error;
   return (data ?? []) as CacheEntry[];
 }
 
-async function upsertNewRows(rows: Row[]) {
+async function upsertNewRows(rows: Row[], startRow: number) {
   if (!rows.length) return;
-  const payload = rows.map((r) => ({
+  const payload = rows.map((r, i) => ({
     row_key: keyFor(r),
     data: r,
     lead: leadValueFromRow(r),
     captured_at: capturedIsoFromRow(r),
     lead_link: r["Lead Link"] || null,
+    sheet_row: startRow + i,
   }));
   // Insert only fresh keys; ignore conflicts on row_key to preserve existing edits.
   const { error } = await sb.from(TABLE).upsert(payload, {
@@ -217,11 +232,16 @@ function Inner() {
   const [apiUrlDraft, setApiUrlDraft] = useState(apiUrl);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const [startRow, setStartRow] = useState<number>(() =>
-    typeof window === "undefined" ? 1 : getEffectiveStartRow(),
-  );
+  // Shared start row — kept in sync across all users via Supabase
+  const startRowQuery = useQuery({
+    queryKey: ["raw-leads-shared-start-row"],
+    queryFn: loadSharedStartRow,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
+  const startRow = startRowQuery.data ?? 1;
   const [startRowDraft, setStartRowDraft] = useState<string>(String(startRow));
-  const nextRowRef = useRef<number>(startRow);
+  useEffect(() => { setStartRowDraft(String(startRow)); }, [startRow]);
 
   const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong">("new");
   const [query, setQuery] = useState("");
@@ -278,13 +298,15 @@ function Inner() {
 
   useEffect(() => {
     if (!data) return;
-    nextRowRef.current = data.nextRow;
-    localStorage.setItem(NEXT_ROW_KEY, String(data.nextRow));
     if (data.rows.length > 0) {
-      upsertNewRows(data.rows)
+      upsertNewRows(data.rows, startRow)
         .then(() => cacheQuery.refetch())
         .catch((e) => toast.error(`Save failed: ${(e as Error).message}`));
     }
+    // Persist the advancing cursor to the shared row so every user picks up from here.
+    saveSharedStartRow(data.nextRow, auth.user?.id ?? null)
+      .then(() => startRowQuery.refetch())
+      .catch((e) => toast.error(`Could not sync row cursor: ${(e as Error).message}`));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
@@ -332,35 +354,33 @@ function Inner() {
     toast.success("Web App URL saved");
   }
 
-  function applyManualStartRow() {
+  async function applyManualStartRow() {
     const n = parseInt(startRowDraft, 10);
     if (isNaN(n) || n < 1) {
       toast.error("Enter a valid row number (1 or above)");
       return;
     }
-    localStorage.setItem(START_ROW_KEY, String(n));
-    localStorage.removeItem(NEXT_ROW_KEY);
-    setStartRow(n);
-    nextRowRef.current = n;
-    toast.success(`Will load from row ${n} on next refresh`);
-    setTimeout(() => refetch(), 100);
-  }
-
-  function handleRefresh() {
-    const next = nextRowRef.current;
-    if (next !== startRow) {
-      setStartRow(next);
-      setTimeout(() => refetch(), 0);
-    } else {
-      refetch();
+    try {
+      await saveSharedStartRow(n, auth.user?.id ?? null);
+      await startRowQuery.refetch();
+      toast.success(`Will load from row ${n} on next refresh (synced for all users)`);
+      setTimeout(() => refetch(), 100);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
-  function markCurrentPosition() {
-    const next = nextRowRef.current;
-    localStorage.setItem(START_ROW_KEY, String(next));
-    localStorage.removeItem(NEXT_ROW_KEY);
-    toast.success(`Bookmark saved at row ${next}. Next session will start from here.`);
+  function handleRefresh() {
+    refetch();
+  }
+
+  async function markCurrentPosition() {
+    try {
+      await saveSharedStartRow(startRow, auth.user?.id ?? null);
+      toast.success(`Bookmark saved at row ${startRow} for all users.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   }
 
   return (
@@ -381,7 +401,7 @@ function Inner() {
           </Button>
         </div>
         <div className="text-muted-foreground">
-          Next refresh will load from row <strong>{Math.max(nextRowRef.current, startRow)}</strong>.
+          Next refresh will load from row <strong>{startRow}</strong>.
         </div>
         <Button
           size="sm"
@@ -515,6 +535,7 @@ function Inner() {
             style={{ minWidth: 1240 }}
           >
             <colgroup>
+              <col style={{ width: 60 }} />
               <col style={{ width: 140 }} />
               <col style={{ width: 125 }} />
               <col style={{ width: 125 }} />
@@ -529,6 +550,9 @@ function Inner() {
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface">
               <tr>
+                <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
+                  Row #
+                </th>
                 {RAW_LEAD_COLUMNS.map((h) => (
                   <th
                     key={h}
@@ -543,7 +567,7 @@ function Inner() {
             <tbody>
               {!cacheQuery.isLoading && visible.length === 0 && !error && (
                 <tr>
-                  <td colSpan={11} className="text-center py-12 text-muted-foreground">
+                  <td colSpan={12} className="text-center py-12 text-muted-foreground">
                     {tab === "new" ? "No leads in this view. Click Refresh to pull from sheet." : "Nothing here yet."}
                   </td>
                 </tr>
@@ -553,16 +577,15 @@ function Inner() {
                 const k = e.row_key;
                 const a = actions[k] || {};
                 const lv = effectiveLead(r, a);
-                const isYes = lv === "yes";
                 return (
                   <tr
                     key={k}
-                    className={cn(
-                      "transition-colors align-top",
-                      isYes ? "hover:bg-success/10 cursor-pointer" : "hover:bg-accent/40",
-                    )}
-                    onClick={() => isYes && setDetailFor(e)}
+                    className="transition-colors align-top hover:bg-accent/40 cursor-pointer"
+                    onClick={() => setDetailFor(e)}
                   >
+                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] font-mono text-muted-foreground tabular-nums">
+                      {e.sheet_row ?? "—"}
+                    </td>
                     <td className="border-b border-border px-2.5 py-2">
                       <div className="font-medium truncate" title={r["Account Name"]}>
                         {r["Account Name"] || "—"}
@@ -588,31 +611,22 @@ function Inner() {
                       </div>
                     </td>
                     <td className="border-b border-border px-2.5 py-2" onClick={(ev) => ev.stopPropagation()}>
-                      {lv === "yes" || lv === "no" ? (
-                        <span
-                          className={cn(
-                            "inline-flex px-2 py-0.5 rounded-full border text-[10.5px] font-medium",
-                            lv === "yes"
-                              ? "bg-success/15 text-success border-success/30"
-                              : "bg-destructive/15 text-destructive border-destructive/30",
-                          )}
-                        >
-                          {lv === "yes" ? "Yes" : "No"}
-                        </span>
-                      ) : (
-                        <Select
-                          value=""
-                          onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
-                        >
-                          <SelectTrigger className="h-7 text-[11px]">
-                            <SelectValue placeholder="—" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="yes">Yes</SelectItem>
-                            <SelectItem value="no">No</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <Select
+                        value={lv || ""}
+                        onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
+                      >
+                        <SelectTrigger className={cn(
+                          "h-7 text-[11px]",
+                          lv === "yes" && "bg-success/15 text-success border-success/30",
+                          lv === "no" && "bg-destructive/15 text-destructive border-destructive/30",
+                        )}>
+                          <SelectValue placeholder="—" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="yes">Yes</SelectItem>
+                          <SelectItem value="no">No</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="border-b border-border px-2.5 py-2" onClick={(ev) => ev.stopPropagation()}>
                       {r["Lead Link"] ? (
@@ -647,17 +661,15 @@ function Inner() {
                       {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="border-b border-border px-2 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
-                      {isYes && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          onClick={() => setDetailFor(e)}
-                          title="Open lead"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setDetailFor(e)}
+                        title="Open lead"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
                     </td>
                   </tr>
                 );
@@ -703,6 +715,10 @@ function Inner() {
         <LeadDetailDialog
           entry={detailFor}
           onClose={() => setDetailFor(null)}
+          onLeadChange={async (lead) => {
+            await updateAction(detailFor.row_key, { lead });
+            toast.success(`Marked as ${lead === "yes" ? "Yes" : "No"}`);
+          }}
           onNotFound={async () => {
             await updateAction(detailFor.row_key, { category: "not_found" });
             setDetailFor(null);
@@ -744,12 +760,14 @@ function LeadDetailDialog({
   onNotFound,
   onWrong,
   onForward,
+  onLeadChange,
 }: {
   entry: CacheEntry;
   onClose: () => void;
   onNotFound: () => void | Promise<void>;
   onWrong: () => void | Promise<void>;
   onForward: (phone: string) => void | Promise<void>;
+  onLeadChange: (lead: "yes" | "no") => void | Promise<void>;
 }) {
   const r = entry.data;
   const [phone, setPhone] = useState(entry.phone ?? "");
@@ -825,16 +843,33 @@ function LeadDetailDialog({
             </a>
           )}
 
-          <div className="pt-2 border-t">
-            <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-              Phone Number
-            </Label>
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Enter phone number found in the post / comments"
-              autoFocus
-            />
+          <div className="pt-2 border-t grid grid-cols-2 gap-3">
+            <div>
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Lead Status
+              </Label>
+              <Select
+                value={effectiveLead(r, { lead: entry.lead }) || ""}
+                onValueChange={(v) => onLeadChange(v as "yes" | "no")}
+              >
+                <SelectTrigger><SelectValue placeholder="Set Yes / No" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yes">Yes</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Phone Number
+              </Label>
+              <Input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="Phone from post / comments"
+                autoFocus
+              />
+            </div>
           </div>
         </div>
 

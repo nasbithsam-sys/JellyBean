@@ -339,12 +339,17 @@ function AddProfileDialog({
   async function save() {
     const id = profileId.trim();
     const name = profileName.trim();
+    const area = accountArea.trim();
+    const latStr = latitude.trim();
+    const lngStr = longitude.trim();
     if (!id) { toast.error("Profile ID is required"); return; }
     if (!name) { toast.error("Profile name is required"); return; }
-    const lat = latitude.trim() ? parseFloat(latitude) : null;
-    const lng = longitude.trim() ? parseFloat(longitude) : null;
-    if ((lat !== null && Number.isNaN(lat)) || (lng !== null && Number.isNaN(lng))) {
-      toast.error("Latitude and longitude must be numbers"); return;
+    if (!area) { toast.error("Account Area is required"); return; }
+    if (!latStr || !lngStr) { toast.error("Latitude and longitude are required"); return; }
+    const lat = parseFloat(latStr);
+    const lng = parseFloat(lngStr);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      toast.error("Latitude and longitude must be valid numbers"); return;
     }
     setSaving(true);
     const { error } = await supabase.from("incogniton_profiles").upsert(
@@ -352,7 +357,7 @@ function AddProfileDialog({
         incogniton_profile_id: id,
         profile_name: name,
         group_name: groupName.trim() || null,
-        account_area: accountArea.trim() || null,
+        account_area: area,
         latitude: lat,
         longitude: lng,
         created_by: userId,
@@ -371,7 +376,7 @@ function AddProfileDialog({
         <div>
           <h2 className="text-lg font-semibold">Add Incogniton Profile</h2>
           <p className="text-[12px] text-muted-foreground mt-1">
-            Enter the profile details. Geo coordinates (optional) will plot the profile on the map with a 50-mile radius.
+            Only Group is optional. Geo coordinates will plot the profile on the map with a 50-mile radius.
           </p>
         </div>
 
@@ -386,15 +391,15 @@ function AddProfileDialog({
             <Field label="Group (optional)">
               <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. testing" />
             </Field>
-            <Field label="Account Area (optional)">
+            <Field label="Account Area *">
               <Input value={accountArea} onChange={(e) => setAccountArea(e.target.value)} placeholder="e.g. CA · Fountain Valley" />
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Latitude (optional)">
+            <Field label="Latitude *">
               <Input value={latitude} onChange={(e) => setLatitude(e.target.value)} placeholder="e.g. 33.7092" inputMode="decimal" />
             </Field>
-            <Field label="Longitude (optional)">
+            <Field label="Longitude *">
               <Input value={longitude} onChange={(e) => setLongitude(e.target.value)} placeholder="e.g. -117.9536" inputMode="decimal" />
             </Field>
           </div>

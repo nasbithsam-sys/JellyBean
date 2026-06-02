@@ -176,6 +176,8 @@ function Inner() {
     }
   }, [newLeadPoll.data, qc]);
 
+  const [activeStatus, setActiveStatus] = useState<string>("new");
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return list.data ?? [];
@@ -184,12 +186,17 @@ function Inner() {
     );
   }, [list.data, query]);
 
-  const sections = useMemo(() => {
-    return PIPELINE_STATUSES.map((s) => ({
-      status: s,
-      leads: filtered.filter((l) => l.cs_status === s),
-    }));
+  const counts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const s of PIPELINE_STATUSES) c[s] = 0;
+    for (const l of filtered) c[l.cs_status] = (c[l.cs_status] ?? 0) + 1;
+    return c;
   }, [filtered]);
+
+  const visibleLeads = useMemo(
+    () => filtered.filter((l) => l.cs_status === activeStatus),
+    [filtered, activeStatus],
+  );
 
   return (
     <div className="space-y-4">
@@ -221,28 +228,35 @@ function Inner() {
         </div>
       </div>
 
+      {/* Status tabs */}
+      <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+        {PIPELINE_STATUSES.map((s) => (
+          <button
+            key={s}
+            onClick={() => setActiveStatus(s)}
+            className={cn(
+              "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+              activeStatus === s
+                ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_TONE[s] ?? "bg-muted-foreground")} />
+            {STATUS_LABEL[s] ?? s}
+            <span className="text-[10.5px] text-muted-foreground tabular-nums">{counts[s] ?? 0}</span>
+          </button>
+        ))}
+      </div>
+
       {list.isLoading ? (
         <div className="glass-card p-16 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
         </div>
+      ) : visibleLeads.length === 0 ? (
+        <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">No leads in this status.</div>
       ) : (
-        <div className="space-y-6">
-          {sections.map(({ status, leads }) => (
-            <section key={status}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className={cn("h-2 w-2 rounded-full", STATUS_TONE[status] ?? "bg-muted-foreground")} />
-                <h3 className="text-[13px] font-semibold tracking-tight">{STATUS_LABEL[status] ?? status}</h3>
-                <span className="text-[11px] text-muted-foreground tabular-nums">{leads.length}</span>
-              </div>
-              {leads.length === 0 ? (
-                <div className="glass-card p-6 text-center text-[12px] text-muted-foreground">No leads.</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {leads.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpened(l)} />)}
-                </div>
-              )}
-            </section>
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {visibleLeads.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpened(l)} />)}
         </div>
       )}
 
