@@ -674,10 +674,6 @@ function Inner() {
                   </tr>
                 );
               })}
-                    </td>
-                  </tr>
-                );
-              })}
             </tbody>
           </table>
         </div>
