@@ -106,20 +106,29 @@ export const adminResetPassword = createServerFn({ method: "POST" })
 async function createUserInternal(data: z.infer<typeof createUserSchema>) {
   const admin = adminClient();
 
-  // Pre-flight: username unique
-  const { data: dupe } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("username", data.username)
-    .maybeSingle();
-  if (dupe) throw new Error("That username is already taken.");
+  // Auto-derive username from the email local-part if none was provided, and
+  // ensure it's unique by suffixing a number if necessary.
+  let username = (data.username ?? deriveUsername(data.email)).toLowerCase();
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const candidate = attempt === 0 ? username : `${username}${attempt}`;
+    const { data: dupe } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("username", candidate)
+      .maybeSingle();
+    if (!dupe) {
+      username = candidate;
+      break;
+    }
+    if (attempt === 19) throw new Error("Could not generate a unique username from this email.");
+  }
 
   // Create auth user (email auto-confirmed)
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email: data.email,
     password: data.password,
     email_confirm: true,
-    user_metadata: { full_name: data.fullName, username: data.username },
+    user_metadata: { full_name: data.fullName, username },
   });
   if (createErr || !created.user) throw new Error(createErr?.message ?? "Failed to create user");
 
@@ -129,7 +138,7 @@ async function createUserInternal(data: z.infer<typeof createUserSchema>) {
   const { error: profErr } = await admin.from("profiles").insert({
     user_id: userId,
     full_name: data.fullName,
-    username: data.username,
+    username,
     email: data.email,
     is_active: data.isActive,
   });
