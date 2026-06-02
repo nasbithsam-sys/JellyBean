@@ -124,10 +124,24 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
   return "";
 }
 
-function getEffectiveStartRow(): number {
-  const manual = parseInt(localStorage.getItem(START_ROW_KEY) || "1", 10) || 1;
-  const cursor = parseInt(localStorage.getItem(NEXT_ROW_KEY) || "0", 10) || 0;
-  return Math.max(manual, cursor, 1);
+// ── Shared start-row state (synced across all users via Supabase) ─────────────
+async function loadSharedStartRow(): Promise<number> {
+  const { data, error } = await sb
+    .from("shared_state")
+    .select("value")
+    .eq("key", SHARED_START_ROW_KEY)
+    .maybeSingle();
+  if (error) throw error;
+  const n = data?.value?.row;
+  return typeof n === "number" && n > 0 ? n : 1;
+}
+
+async function saveSharedStartRow(row: number, userId: string | null): Promise<void> {
+  const { error } = await sb.from("shared_state").upsert(
+    { key: SHARED_START_ROW_KEY, value: { row }, updated_at: new Date().toISOString(), updated_by: userId },
+    { onConflict: "key" },
+  );
+  if (error) throw error;
 }
 
 // ── Google Sheets fetch ───────────────────────────────────────────────────────
@@ -158,21 +172,22 @@ async function fetchSheetRows(
 async function loadCache(): Promise<CacheEntry[]> {
   const { data, error } = await sb
     .from(TABLE)
-    .select("row_key, data, lead, phone, category, captured_at, lead_link")
+    .select("row_key, data, lead, phone, category, captured_at, lead_link, sheet_row")
     .order("captured_at", { ascending: false, nullsFirst: false })
     .limit(5000);
   if (error) throw error;
   return (data ?? []) as CacheEntry[];
 }
 
-async function upsertNewRows(rows: Row[]) {
+async function upsertNewRows(rows: Row[], startRow: number) {
   if (!rows.length) return;
-  const payload = rows.map((r) => ({
+  const payload = rows.map((r, i) => ({
     row_key: keyFor(r),
     data: r,
     lead: leadValueFromRow(r),
     captured_at: capturedIsoFromRow(r),
     lead_link: r["Lead Link"] || null,
+    sheet_row: startRow + i,
   }));
   // Insert only fresh keys; ignore conflicts on row_key to preserve existing edits.
   const { error } = await sb.from(TABLE).upsert(payload, {
