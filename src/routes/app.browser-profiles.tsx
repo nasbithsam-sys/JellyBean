@@ -331,37 +331,36 @@ function AddProfileDialog({
   const [profileId, setProfileId] = useState("");
   const [profileName, setProfileName] = useState("");
   const [groupName, setGroupName] = useState("");
-  const [platform, setPlatform] = useState("");
+  const [accountArea, setAccountArea] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function save() {
     const id = profileId.trim();
     const name = profileName.trim();
-    if (!id) {
-      toast.error("Profile ID is required");
-      return;
+    if (!id) { toast.error("Profile ID is required"); return; }
+    if (!name) { toast.error("Profile name is required"); return; }
+    const lat = latitude.trim() ? parseFloat(latitude) : null;
+    const lng = longitude.trim() ? parseFloat(longitude) : null;
+    if ((lat !== null && Number.isNaN(lat)) || (lng !== null && Number.isNaN(lng))) {
+      toast.error("Latitude and longitude must be numbers"); return;
     }
-    if (!name) {
-      toast.error("Profile name is required");
-      return;
-    }
-
     setSaving(true);
     const { error } = await supabase.from("incogniton_profiles").upsert(
       {
         incogniton_profile_id: id,
         profile_name: name,
         group_name: groupName.trim() || null,
-        platform: platform.trim() || null,
+        account_area: accountArea.trim() || null,
+        latitude: lat,
+        longitude: lng,
         created_by: userId,
-      },
+      } as never,
       { onConflict: "incogniton_profile_id", ignoreDuplicates: false },
     );
     setSaving(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    if (error) { toast.error(error.message); return; }
     toast.success("Profile saved ✓");
     onSaved();
   }
@@ -372,41 +371,37 @@ function AddProfileDialog({
         <div>
           <h2 className="text-lg font-semibold">Add Incogniton Profile</h2>
           <p className="text-[12px] text-muted-foreground mt-1">
-            Enter the profile details manually. Not sure of the ID?{" "}
-            <span className="text-primary">Open Incogniton → right-click profile → Profile Info.</span>
+            Enter the profile details. Geo coordinates (optional) will plot the profile on the map with a 50-mile radius.
           </p>
         </div>
 
         <div className="space-y-3">
           <Field label="Profile ID *">
-            <Input
-              value={profileId}
-              onChange={(e) => setProfileId(e.target.value)}
-              placeholder="e.g. 1234567890 or abc-def-123"
-              autoFocus
-            />
+            <Input value={profileId} onChange={(e) => setProfileId(e.target.value)} placeholder="e.g. 1234567890 or abc-def-123" autoFocus />
           </Field>
           <Field label="Profile Name *">
-            <Input
-              value={profileName}
-              onChange={(e) => setProfileName(e.target.value)}
-              placeholder="e.g. Account A – Facebook"
-            />
+            <Input value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="e.g. Account A – Facebook" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Group (optional)">
               <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. testing" />
             </Field>
-            <Field label="Platform (optional)">
-              <Input value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="e.g. Facebook" />
+            <Field label="Account Area (optional)">
+              <Input value={accountArea} onChange={(e) => setAccountArea(e.target.value)} placeholder="e.g. CA · Fountain Valley" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Latitude (optional)">
+              <Input value={latitude} onChange={(e) => setLatitude(e.target.value)} placeholder="e.g. 33.7092" inputMode="decimal" />
+            </Field>
+            <Field label="Longitude (optional)">
+              <Input value={longitude} onChange={(e) => setLongitude(e.target.value)} placeholder="e.g. -117.9536" inputMode="decimal" />
             </Field>
           </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button onClick={save} disabled={saving}>
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             Save Profile
