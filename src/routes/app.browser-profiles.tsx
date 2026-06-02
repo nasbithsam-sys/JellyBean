@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Download, Rocket, Link2, Trash2, Search, Globe, Plus, Info } from "lucide-react";
+import { Loader2, Download, Rocket, Trash2, Search, Globe, Plus, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { launchIncognitonProfile } from "@/lib/incogniton";
@@ -16,20 +16,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 
 export const Route = createFileRoute("/app/browser-profiles")({ component: Page });
 
+type LaunchHistoryEntry = { at: string; by: string | null };
+
 type Profile = {
   id: string;
   profile_name: string;
   incogniton_profile_id: string;
   group_name: string | null;
-  platform: string | null;
-  linked_lead_id: string | null;
   last_launched_at: string | null;
   launched_by_name: string | null;
   launched_by_email: string | null;
   created_at: string;
+  latitude: number | null;
+  longitude: number | null;
+  account_area: string | null;
+  launch_history: LaunchHistoryEntry[] | null;
 };
-
-type Lead = { id: string; customer_name: string };
 
 function Page() {
   const auth = useAuth();
