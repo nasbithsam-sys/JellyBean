@@ -9,11 +9,16 @@ const roleSchema = z.enum(["admin", "marketing", "cs"]);
 const createUserSchema = z.object({
   fullName: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(255),
-  username: z.string().trim().min(2).max(60).regex(/^[a-zA-Z0-9._-]+$/),
+  username: z.string().trim().min(2).max(60).regex(/^[a-zA-Z0-9._-]+$/).optional(),
   password: z.string().min(8).max(128),
   role: roleSchema,
   isActive: z.boolean().default(true),
 });
+
+function deriveUsername(email: string): string {
+  const base = email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 50) || "user";
+  return base;
+}
 
 function adminClient() {
   const url = process.env.SUPABASE_URL;
