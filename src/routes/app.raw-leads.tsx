@@ -535,6 +535,7 @@ function Inner() {
             style={{ minWidth: 1240 }}
           >
             <colgroup>
+              <col style={{ width: 60 }} />
               <col style={{ width: 140 }} />
               <col style={{ width: 125 }} />
               <col style={{ width: 125 }} />
@@ -549,6 +550,9 @@ function Inner() {
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface">
               <tr>
+                <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
+                  Row #
+                </th>
                 {RAW_LEAD_COLUMNS.map((h) => (
                   <th
                     key={h}
@@ -563,7 +567,7 @@ function Inner() {
             <tbody>
               {!cacheQuery.isLoading && visible.length === 0 && !error && (
                 <tr>
-                  <td colSpan={11} className="text-center py-12 text-muted-foreground">
+                  <td colSpan={12} className="text-center py-12 text-muted-foreground">
                     {tab === "new" ? "No leads in this view. Click Refresh to pull from sheet." : "Nothing here yet."}
                   </td>
                 </tr>
@@ -573,16 +577,15 @@ function Inner() {
                 const k = e.row_key;
                 const a = actions[k] || {};
                 const lv = effectiveLead(r, a);
-                const isYes = lv === "yes";
                 return (
                   <tr
                     key={k}
-                    className={cn(
-                      "transition-colors align-top",
-                      isYes ? "hover:bg-success/10 cursor-pointer" : "hover:bg-accent/40",
-                    )}
-                    onClick={() => isYes && setDetailFor(e)}
+                    className="transition-colors align-top hover:bg-accent/40 cursor-pointer"
+                    onClick={() => setDetailFor(e)}
                   >
+                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] font-mono text-muted-foreground tabular-nums">
+                      {e.sheet_row ?? "—"}
+                    </td>
                     <td className="border-b border-border px-2.5 py-2">
                       <div className="font-medium truncate" title={r["Account Name"]}>
                         {r["Account Name"] || "—"}
@@ -608,31 +611,22 @@ function Inner() {
                       </div>
                     </td>
                     <td className="border-b border-border px-2.5 py-2" onClick={(ev) => ev.stopPropagation()}>
-                      {lv === "yes" || lv === "no" ? (
-                        <span
-                          className={cn(
-                            "inline-flex px-2 py-0.5 rounded-full border text-[10.5px] font-medium",
-                            lv === "yes"
-                              ? "bg-success/15 text-success border-success/30"
-                              : "bg-destructive/15 text-destructive border-destructive/30",
-                          )}
-                        >
-                          {lv === "yes" ? "Yes" : "No"}
-                        </span>
-                      ) : (
-                        <Select
-                          value=""
-                          onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
-                        >
-                          <SelectTrigger className="h-7 text-[11px]">
-                            <SelectValue placeholder="—" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="yes">Yes</SelectItem>
-                            <SelectItem value="no">No</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <Select
+                        value={lv || ""}
+                        onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
+                      >
+                        <SelectTrigger className={cn(
+                          "h-7 text-[11px]",
+                          lv === "yes" && "bg-success/15 text-success border-success/30",
+                          lv === "no" && "bg-destructive/15 text-destructive border-destructive/30",
+                        )}>
+                          <SelectValue placeholder="—" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="yes">Yes</SelectItem>
+                          <SelectItem value="no">No</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="border-b border-border px-2.5 py-2" onClick={(ev) => ev.stopPropagation()}>
                       {r["Lead Link"] ? (
@@ -667,17 +661,19 @@ function Inner() {
                       {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="border-b border-border px-2 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
-                      {isYes && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          onClick={() => setDetailFor(e)}
-                          title="Open lead"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setDetailFor(e)}
+                        title="Open lead"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
                     </td>
                   </tr>
                 );
