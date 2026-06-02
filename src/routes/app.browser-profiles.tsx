@@ -421,7 +421,7 @@ function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; grou
   function download() {
     const rows = group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
     if (rows.length === 0) return toast.error("No profiles in this group");
-    const fields = ["profile_name", "incogniton_profile_id", "group_name", "platform", "linked_lead_id"] as const;
+    const fields = ["profile_name", "incogniton_profile_id", "group_name", "account_area"] as const;
     let blob: Blob;
     let filename: string;
     if (format === "csv") {
