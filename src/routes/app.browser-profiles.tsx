@@ -56,7 +56,7 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [linkOpenFor, setLinkOpenFor] = useState<Profile | null>(null);
+  const [historyFor, setHistoryFor] = useState<Profile | null>(null);
   const [howToOpen, setHowToOpen] = useState(false);
 
   const profiles = useQuery({
@@ -67,28 +67,9 @@ function Inner() {
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Profile[];
+      return (data ?? []) as unknown as Profile[];
     },
   });
-
-  const leads = useQuery({
-    queryKey: ["qualified_leads_min"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("qualified_leads")
-        .select("id, customer_name")
-        .order("assigned_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return (data ?? []) as Lead[];
-    },
-  });
-
-  const leadMap = useMemo(() => {
-    const m = new Map<string, string>();
-    (leads.data ?? []).forEach((l) => m.set(l.id, l.customer_name));
-    return m;
-  }, [leads.data]);
 
   const groups = useMemo(
     () => Array.from(new Set((profiles.data ?? []).map((p) => p.group_name).filter((g): g is string => !!g))).sort(),
@@ -102,7 +83,7 @@ function Inner() {
       return (
         p.profile_name.toLowerCase().includes(q) ||
         p.incogniton_profile_id.toLowerCase().includes(q) ||
-        (p.platform ?? "").toLowerCase().includes(q)
+        (p.account_area ?? "").toLowerCase().includes(q)
       );
     });
   }, [profiles.data, query]);
@@ -111,20 +92,21 @@ function Inner() {
     toast.loading("Launching profile…", { id: "launch" });
     try {
       await launchIncognitonProfile(p.incogniton_profile_id);
-      // Update last launched timestamp + who launched it (best-effort)
       const user = auth.user;
+      const who = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Unknown";
+      const nowIso = new Date().toISOString();
+      const prevHistory = Array.isArray(p.launch_history) ? p.launch_history : [];
+      const nextHistory = [{ at: nowIso, by: who }, ...prevHistory].slice(0, 5);
       supabase
         .from("incogniton_profiles")
         .update({
-          last_launched_at: new Date().toISOString(),
-          launched_by_name: user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Unknown",
+          last_launched_at: nowIso,
+          launched_by_name: who,
           launched_by_email: user?.email ?? null,
+          launch_history: nextHistory as never,
         })
         .eq("id", p.id)
         .then(() => qc.invalidateQueries({ queryKey: ["incog_profiles"] }));
-      // Launch command was sent — Incogniton should open the profile now.
-      // (We can't confirm it opened because the browser blocks reading localhost responses from HTTPS,
-      //  but the request IS sent and Incogniton processes it.)
       toast.success("Launch command sent ✓ — Incogniton should open the profile now.", { id: "launch" });
     } catch (e) {
       toast.error(
