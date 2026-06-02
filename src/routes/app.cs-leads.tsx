@@ -363,38 +363,7 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
   const [note, setNote] = useState("");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
-  const [linkOpen, setLinkOpen] = useState(false);
   const notes = useMemo(() => Array.isArray(lead.cs_notes) ? lead.cs_notes : [], [lead.cs_notes]);
-
-  const linkedProfile = useQuery({
-    queryKey: ["incog_profile_for_lead", lead.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("incogniton_profiles")
-        .select("id, incogniton_profile_id, profile_name")
-        .eq("linked_lead_id", lead.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  async function launchProfile() {
-    if (!linkedProfile.data) {
-      setLinkOpen(true);
-      return;
-    }
-    try {
-      await launchIncognitonProfile(linkedProfile.data.incogniton_profile_id);
-      await supabase
-        .from("incogniton_profiles")
-        .update({ last_launched_at: new Date().toISOString() })
-        .eq("id", linkedProfile.data.id);
-      toast.success("Profile opened in Incogniton");
-    } catch (e) {
-      toast.error((e as Error).message || INCOG_UNREACHABLE);
-    }
-  }
 
   async function save() {
     setBusy(true);
@@ -438,23 +407,6 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
         </div>
         {lead.context && <Info label="Context" value={lead.context} multiline />}
         {lead.marketing_notes && <Info label="Marketing notes" value={lead.marketing_notes} multiline />}
-        {auth.primaryRole !== "cs" && lead.original_lead_link && (
-          <a href={lead.original_lead_link} target="_blank" rel="noreferrer" className="inline-flex items-center text-sm text-primary hover:text-primary-glow transition-colors">
-            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />Original post
-          </a>
-        )}
-
-        {auth.primaryRole !== "cs" && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={launchProfile}>
-              <Globe className="h-3.5 w-3.5 mr-1.5" />
-              {linkedProfile.data ? "Launch Incogniton profile" : "Link & launch Incogniton profile"}
-            </Button>
-            {linkedProfile.data && (
-              <span className="text-[11px] text-muted-foreground">→ {linkedProfile.data.profile_name}</span>
-            )}
-          </div>
-        )}
 
         <div className="border-t border-border pt-5 space-y-4">
           <div>
@@ -502,22 +454,6 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
           </div>
         )}
       </div>
-      {linkOpen && (
-        <LinkProfileModal
-          leadId={lead.id}
-          onClose={() => setLinkOpen(false)}
-          onLinked={async (profileId) => {
-            setLinkOpen(false);
-            await linkedProfile.refetch();
-            try {
-              await launchIncognitonProfile(profileId);
-              toast.success("Profile opened in Incogniton");
-            } catch (e) {
-              toast.error((e as Error).message || INCOG_UNREACHABLE);
-            }
-          }}
-        />
-      )}
     </div>
   );
 }
