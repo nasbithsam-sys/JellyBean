@@ -155,36 +155,39 @@ function Inner() {
     },
   });
 
-  // ── New-lead sound notification (poll every 20s) ────────────────────────────
-  const lastSeenRef = useRef<string | null>(null);
-  const newLeadPoll = useQuery({
-    queryKey: ["cs_new_lead_ping"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("qualified_leads")
-        .select("id, customer_name, assigned_at")
-        .order("assigned_at", { ascending: false })
-        .limit(1);
-      if (error) throw error;
-      return data?.[0] ?? null;
-    },
-    refetchInterval: 20_000,
-    refetchOnWindowFocus: true,
-  });
+  // ── New-lead sound notification (Supabase Realtime — instant for every CS) ──
+  // Listens for INSERT events on qualified_leads. Every signed-in CS/admin
+  // tab fires the chime + toast the moment the lead is forwarded, with no
+  // polling delay. The realtime-sync hook handles cache invalidation, but
+  // we mount a dedicated channel here so we get the *new row* payload to
+  // surface the customer name in the toast.
+  const armedRef = useRef(false);
   useEffect(() => {
-    const latest = newLeadPoll.data;
-    if (!latest) return;
-    if (lastSeenRef.current === null) {
-      lastSeenRef.current = latest.assigned_at;
-      return;
-    }
-    if (latest.assigned_at > lastSeenRef.current) {
-      lastSeenRef.current = latest.assigned_at;
-      playNotificationBeep();
-      toast.success(`New lead: ${latest.customer_name}`);
-      qc.invalidateQueries({ queryKey: ["cs_leads"] });
-    }
-  }, [newLeadPoll.data, qc]);
+    // Arm after first paint so we don't beep for historical rows during
+    // initial subscription replay.
+    const t = setTimeout(() => { armedRef.current = true; }, 1500);
+    const channel = supabase
+      .channel("cs-leads-new-ping")
+      .on(
+        // @ts-expect-error – postgres_changes typing is loose in supabase-js
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "qualified_leads" },
+        (payload: { new: { customer_name?: string } }) => {
+          if (!armedRef.current) return;
+          playNotificationBeep();
+          toast.success(`New lead: ${payload.new?.customer_name ?? "incoming"}`, {
+            duration: 6000,
+          });
+          qc.invalidateQueries({ queryKey: ["cs_leads"] });
+        },
+      )
+      .subscribe();
+    return () => {
+      clearTimeout(t);
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
 
   const [activeStatus, setActiveStatus] = useState<string>("new");
 
