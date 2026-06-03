@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
@@ -10,32 +11,40 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw } from "lucide-react";
+import { Loader2, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw, UserPlus, UserCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
 
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
+const UNASSIGNED_VALUE = "__unassigned__";
+
 function playNotificationBeep() {
   try {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new Ctx();
-    const beep = (freq: number, start: number, dur: number) => {
+    const beep = (freq: number, start: number, dur: number, vol = 0.35) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
-      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
       osc.connect(gain).connect(ctx.destination);
       osc.start(ctx.currentTime + start);
       osc.stop(ctx.currentTime + start + dur + 0.02);
     };
-    beep(880, 0, 0.18);
-    beep(1175, 0.2, 0.22);
-    setTimeout(() => ctx.close(), 700);
+    // Three-tone alert chime, repeated — clearly noticeable for CS agents.
+    beep(880, 0.0, 0.22);
+    beep(1175, 0.22, 0.22);
+    beep(1568, 0.46, 0.32);
+    beep(880, 0.95, 0.22);
+    beep(1175, 1.17, 0.22);
+    beep(1568, 1.41, 0.40);
+    setTimeout(() => ctx.close(), 2200);
   } catch {
     // ignore — autoplay may be blocked until user interacts
   }
@@ -48,6 +57,7 @@ type Lead = {
   marketing_notes: string | null; original_lead_link: string | null;
   cs_status: string; cs_notes: Array<{ at: string; by: string; text: string }>;
   followup_at: string | null; assigned_at: string;
+  assigned_to: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -145,36 +155,50 @@ function Inner() {
     },
   });
 
-  // ── New-lead sound notification (poll every 20s) ────────────────────────────
-  const lastSeenRef = useRef<string | null>(null);
-  const newLeadPoll = useQuery({
-    queryKey: ["cs_new_lead_ping"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("qualified_leads")
-        .select("id, customer_name, assigned_at")
-        .order("assigned_at", { ascending: false })
-        .limit(1);
-      if (error) throw error;
-      return data?.[0] ?? null;
-    },
-    refetchInterval: 20_000,
-    refetchOnWindowFocus: true,
+  // CS team — used to display assignee names and (for admins) to reassign.
+  const listTeam = useServerFn(listCsTeam);
+  const team = useQuery({
+    queryKey: ["cs_team"],
+    queryFn: () => listTeam(),
   });
+  const teamById = useMemo(() => {
+    const map = new Map<string, CsTeamMember>();
+    for (const m of team.data ?? []) map.set(m.user_id, m);
+    return map;
+  }, [team.data]);
+
+
+  // ── New-lead sound notification (Supabase Realtime — instant for every CS) ──
+  // Listens for INSERT events on qualified_leads. Every signed-in CS/admin
+  // tab fires the chime + toast the moment the lead is forwarded, with no
+  // polling delay. The realtime-sync hook handles cache invalidation, but
+  // we mount a dedicated channel here so we get the *new row* payload to
+  // surface the customer name in the toast.
+  const armedRef = useRef(false);
   useEffect(() => {
-    const latest = newLeadPoll.data;
-    if (!latest) return;
-    if (lastSeenRef.current === null) {
-      lastSeenRef.current = latest.assigned_at;
-      return;
-    }
-    if (latest.assigned_at > lastSeenRef.current) {
-      lastSeenRef.current = latest.assigned_at;
-      playNotificationBeep();
-      toast.success(`New lead: ${latest.customer_name}`);
-      qc.invalidateQueries({ queryKey: ["cs_leads"] });
-    }
-  }, [newLeadPoll.data, qc]);
+    // Arm after first paint so we don't beep for historical rows during
+    // initial subscription replay.
+    const t = setTimeout(() => { armedRef.current = true; }, 1500);
+    const channel = supabase.channel("cs-leads-new-ping");
+    (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "qualified_leads" },
+      (payload: { new: { customer_name?: string } }) => {
+        if (!armedRef.current) return;
+        playNotificationBeep();
+        toast.success(`New lead: ${payload.new?.customer_name ?? "incoming"}`, {
+          duration: 6000,
+        });
+        qc.invalidateQueries({ queryKey: ["cs_leads"] });
+      },
+    );
+    channel.subscribe();
+    return () => {
+      clearTimeout(t);
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
 
   const [activeStatus, setActiveStatus] = useState<string>("new");
 
@@ -256,21 +280,53 @@ function Inner() {
         <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">No leads in this status.</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {visibleLeads.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpened(l)} />)}
+          {visibleLeads.map((l) => (
+            <LeadCard
+              key={l.id}
+              lead={l}
+              team={team.data ?? []}
+              teamById={teamById}
+              onOpen={() => setOpened(l)}
+            />
+          ))}
         </div>
       )}
 
-      {opened && <LeadDrawer lead={opened} onClose={() => setOpened(null)} onSaved={() => { setOpened(null); qc.invalidateQueries({ queryKey: ["cs_leads"] }); }} />}
+      {opened && (
+        <LeadDrawer
+          lead={opened}
+          team={team.data ?? []}
+          teamById={teamById}
+          onClose={() => setOpened(null)}
+          onSaved={() => { setOpened(null); qc.invalidateQueries({ queryKey: ["cs_leads"] }); }}
+        />
+      )}
     </div>
   );
 }
 
-function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
+function LeadCard({
+  lead,
+  team,
+  teamById,
+  onOpen,
+}: {
+  lead: Lead;
+  team: CsTeamMember[];
+  teamById: Map<string, CsTeamMember>;
+  onOpen: () => void;
+}) {
   const qc = useQueryClient();
   const auth = useAuth();
   const [status, setStatus] = useState(lead.cs_status);
+  const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [saving, setSaving] = useState(false);
+  const [assigning, setAssigning] = useState(false);
   const initials = (lead.customer_name || "?").split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+  const isAdmin = auth.primaryRole === "admin";
+  const isCs = auth.primaryRole === "cs";
+  const assignee = assignedTo ? teamById.get(assignedTo) : null;
+  const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
   async function changeStatus(next: string) {
     const prev = status;
@@ -293,6 +349,40 @@ function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
       setSaving(false);
     }
   }
+
+  async function changeAssignee(nextValue: string) {
+    const next = nextValue === UNASSIGNED_VALUE ? null : nextValue;
+    const prev = assignedTo;
+    setAssignedTo(next);
+    setAssigning(true);
+    try {
+      const { error } = await supabase
+        .from("qualified_leads")
+        .update({ assigned_to: next })
+        .eq("id", lead.id);
+      if (error) throw error;
+      const nextName = next ? (teamById.get(next)?.full_name ?? "teammate") : "unassigned";
+      await supabase.from("activity_logs").insert({
+        actor_id: auth.user?.id, actor_name: auth.profile?.full_name, actor_role: auth.primaryRole,
+        action: "cs.assigned", entity_type: "qualified_lead", entity_id: lead.id,
+        metadata: { assigned_to: next, assigned_to_name: nextName },
+      });
+      toast.success(next ? `Assigned to ${nextName}` : "Unassigned");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } catch (e) {
+      setAssignedTo(prev);
+      toast.error((e as Error).message);
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  async function assignToMe(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!auth.user?.id) return;
+    await changeAssignee(auth.user.id);
+  }
+
 
   return (
     <div className="glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up" onClick={onOpen}>
@@ -341,6 +431,58 @@ function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
         </Select>
       </div>
 
+      {/* Assignment row */}
+      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+        {isAdmin ? (
+          <Select
+            value={assignedTo ?? UNASSIGNED_VALUE}
+            onValueChange={changeAssignee}
+            disabled={assigning}
+          >
+            <SelectTrigger className="h-8 text-[12px]">
+              <div className="inline-flex items-center gap-1.5 truncate">
+                <UserPlus className="h-3 w-3 text-muted-foreground" />
+                <SelectValue placeholder="Assign to…" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
+              {team.map((m) => (
+                <SelectItem key={m.user_id} value={m.user_id}>
+                  {m.full_name || m.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="flex items-center justify-between gap-2 text-[12px]">
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground truncate">
+              <UserCheck className="h-3 w-3" />
+              {assignee ? (
+                <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
+                  {assignedToMe ? "You" : (assignee.full_name || assignee.email)}
+                </span>
+              ) : (
+                <span className="italic text-muted-foreground/70">Unassigned</span>
+              )}
+            </span>
+            {isCs && !assignedToMe && (
+              <Button
+                size="sm"
+                variant={assignedTo ? "outline" : "default"}
+                className="h-7 text-[11.5px] px-2"
+                disabled={assigning}
+                onClick={assignToMe}
+              >
+                {assigning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <UserPlus className="h-3 w-3 mr-1" />}
+                {assignedTo ? "Take over" : "Assign to me"}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+
       <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11.5px] text-muted-foreground">
         <span className="tabular-nums">{formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}</span>
         {lead.followup_at && (
@@ -370,13 +512,31 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => void; onSaved: () => void }) {
+function LeadDrawer({
+  lead,
+  team,
+  teamById,
+  onClose,
+  onSaved,
+}: {
+  lead: Lead;
+  team: CsTeamMember[];
+  teamById: Map<string, CsTeamMember>;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const auth = useAuth();
+  const qc = useQueryClient();
   const [status, setStatus] = useState(lead.cs_status);
+  const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
   const notes = useMemo(() => Array.isArray(lead.cs_notes) ? lead.cs_notes : [], [lead.cs_notes]);
+  const isAdmin = auth.primaryRole === "admin";
+  const isCs = auth.primaryRole === "cs";
+  const assignee = assignedTo ? teamById.get(assignedTo) : null;
+  const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
   async function save() {
     setBusy(true);
@@ -389,19 +549,22 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
           cs_status: status as never,
           cs_notes: newNotes as never,
           followup_at: followup ? new Date(followup).toISOString() : null,
+          assigned_to: assignedTo,
         })
         .eq("id", lead.id);
       if (error) throw error;
       await supabase.from("activity_logs").insert({
         actor_id: auth.user?.id, actor_name: auth.profile?.full_name, actor_role: auth.primaryRole,
         action: "cs.updated", entity_type: "qualified_lead", entity_id: lead.id,
-        metadata: { status, hasNote: !!note.trim() },
+        metadata: { status, hasNote: !!note.trim(), assigned_to: assignedTo },
       });
       toast.success("Saved");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
       onSaved();
     } catch (e) { toast.error((e as Error).message); }
     finally { setBusy(false); }
   }
+
 
   return (
     <div className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up" onClick={onClose}>
@@ -430,6 +593,49 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
                 {PIPELINE_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABEL[s] ?? s.replace(/_/g, " ")}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Assigned to</Label>
+            {isAdmin ? (
+              <Select
+                value={assignedTo ?? UNASSIGNED_VALUE}
+                onValueChange={(v) => setAssignedTo(v === UNASSIGNED_VALUE ? null : v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
+                  {team.map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      {m.full_name || m.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex items-center justify-between gap-2 px-3 h-10 rounded-md border border-border bg-surface/60 text-[13px]">
+                <span className="inline-flex items-center gap-2 truncate">
+                  <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                  {assignee ? (
+                    <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
+                      {assignedToMe ? "You" : (assignee.full_name || assignee.email)}
+                    </span>
+                  ) : (
+                    <span className="italic text-muted-foreground/70">Unassigned</span>
+                  )}
+                </span>
+                {isCs && !assignedToMe && (
+                  <Button
+                    size="sm"
+                    variant={assignedTo ? "outline" : "default"}
+                    className="h-7 text-[11.5px] px-2"
+                    onClick={() => auth.user?.id && setAssignedTo(auth.user.id)}
+                  >
+                    <UserPlus className="h-3 w-3 mr-1" />
+                    {assignedTo ? "Take over" : "Assign to me"}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Follow-up at</Label>
