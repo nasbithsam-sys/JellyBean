@@ -280,11 +280,27 @@ function Inner() {
         <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">No leads in this status.</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {visibleLeads.map((l) => <LeadCard key={l.id} lead={l} onOpen={() => setOpened(l)} />)}
+          {visibleLeads.map((l) => (
+            <LeadCard
+              key={l.id}
+              lead={l}
+              team={team.data ?? []}
+              teamById={teamById}
+              onOpen={() => setOpened(l)}
+            />
+          ))}
         </div>
       )}
 
-      {opened && <LeadDrawer lead={opened} onClose={() => setOpened(null)} onSaved={() => { setOpened(null); qc.invalidateQueries({ queryKey: ["cs_leads"] }); }} />}
+      {opened && (
+        <LeadDrawer
+          lead={opened}
+          team={team.data ?? []}
+          teamById={teamById}
+          onClose={() => setOpened(null)}
+          onSaved={() => { setOpened(null); qc.invalidateQueries({ queryKey: ["cs_leads"] }); }}
+        />
+      )}
     </div>
   );
 }
