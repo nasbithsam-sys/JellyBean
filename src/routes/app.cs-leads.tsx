@@ -305,12 +305,28 @@ function Inner() {
   );
 }
 
-function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
+function LeadCard({
+  lead,
+  team,
+  teamById,
+  onOpen,
+}: {
+  lead: Lead;
+  team: CsTeamMember[];
+  teamById: Map<string, CsTeamMember>;
+  onOpen: () => void;
+}) {
   const qc = useQueryClient();
   const auth = useAuth();
   const [status, setStatus] = useState(lead.cs_status);
+  const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [saving, setSaving] = useState(false);
+  const [assigning, setAssigning] = useState(false);
   const initials = (lead.customer_name || "?").split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+  const isAdmin = auth.primaryRole === "admin";
+  const isCs = auth.primaryRole === "cs";
+  const assignee = assignedTo ? teamById.get(assignedTo) : null;
+  const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
   async function changeStatus(next: string) {
     const prev = status;
@@ -333,6 +349,40 @@ function LeadCard({ lead, onOpen }: { lead: Lead; onOpen: () => void }) {
       setSaving(false);
     }
   }
+
+  async function changeAssignee(nextValue: string) {
+    const next = nextValue === UNASSIGNED_VALUE ? null : nextValue;
+    const prev = assignedTo;
+    setAssignedTo(next);
+    setAssigning(true);
+    try {
+      const { error } = await supabase
+        .from("qualified_leads")
+        .update({ assigned_to: next })
+        .eq("id", lead.id);
+      if (error) throw error;
+      const nextName = next ? (teamById.get(next)?.full_name ?? "teammate") : "unassigned";
+      await supabase.from("activity_logs").insert({
+        actor_id: auth.user?.id, actor_name: auth.profile?.full_name, actor_role: auth.primaryRole,
+        action: "cs.assigned", entity_type: "qualified_lead", entity_id: lead.id,
+        metadata: { assigned_to: next, assigned_to_name: nextName },
+      });
+      toast.success(next ? `Assigned to ${nextName}` : "Unassigned");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } catch (e) {
+      setAssignedTo(prev);
+      toast.error((e as Error).message);
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  async function assignToMe(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!auth.user?.id) return;
+    await changeAssignee(auth.user.id);
+  }
+
 
   return (
     <div className="glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up" onClick={onOpen}>
