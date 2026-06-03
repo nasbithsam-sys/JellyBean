@@ -595,6 +595,49 @@ function LeadDrawer({
             </Select>
           </div>
           <div>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Assigned to</Label>
+            {isAdmin ? (
+              <Select
+                value={assignedTo ?? UNASSIGNED_VALUE}
+                onValueChange={(v) => setAssignedTo(v === UNASSIGNED_VALUE ? null : v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
+                  {team.map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      {m.full_name || m.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex items-center justify-between gap-2 px-3 h-10 rounded-md border border-border bg-surface/60 text-[13px]">
+                <span className="inline-flex items-center gap-2 truncate">
+                  <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                  {assignee ? (
+                    <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
+                      {assignedToMe ? "You" : (assignee.full_name || assignee.email)}
+                    </span>
+                  ) : (
+                    <span className="italic text-muted-foreground/70">Unassigned</span>
+                  )}
+                </span>
+                {isCs && !assignedToMe && (
+                  <Button
+                    size="sm"
+                    variant={assignedTo ? "outline" : "default"}
+                    className="h-7 text-[11.5px] px-2"
+                    onClick={() => auth.user?.id && setAssignedTo(auth.user.id)}
+                  >
+                    <UserPlus className="h-3 w-3 mr-1" />
+                    {assignedTo ? "Take over" : "Assign to me"}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Follow-up at</Label>
             <Input type="datetime-local" value={followup} onChange={(e) => setFollowup(e.target.value)} />
           </div>
