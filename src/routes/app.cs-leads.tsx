@@ -155,6 +155,19 @@ function Inner() {
     },
   });
 
+  // CS team — used to display assignee names and (for admins) to reassign.
+  const listTeam = useServerFn(listCsTeam);
+  const team = useQuery({
+    queryKey: ["cs_team"],
+    queryFn: () => listTeam(),
+  });
+  const teamById = useMemo(() => {
+    const map = new Map<string, CsTeamMember>();
+    for (const m of team.data ?? []) map.set(m.user_id, m);
+    return map;
+  }, [team.data]);
+
+
   // ── New-lead sound notification (Supabase Realtime — instant for every CS) ──
   // Listens for INSERT events on qualified_leads. Every signed-in CS/admin
   // tab fires the chime + toast the moment the lead is forwarded, with no
