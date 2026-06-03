@@ -1,7 +1,5 @@
 @import "tailwindcss" source(none);
-@import url("https://rsms.me/inter/inter.css");
 @import "tw-animate-css";
-@import url("https://rsms.me/inter/inter.css");
 @import "leaflet/dist/leaflet.css";
 @source "../src";
 
