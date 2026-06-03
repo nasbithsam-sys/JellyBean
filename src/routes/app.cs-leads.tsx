@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
@@ -10,32 +11,40 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw } from "lucide-react";
+import { Loader2, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw, UserPlus, UserCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
 
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
+const UNASSIGNED_VALUE = "__unassigned__";
+
 function playNotificationBeep() {
   try {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new Ctx();
-    const beep = (freq: number, start: number, dur: number) => {
+    const beep = (freq: number, start: number, dur: number, vol = 0.35) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
-      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
       osc.connect(gain).connect(ctx.destination);
       osc.start(ctx.currentTime + start);
       osc.stop(ctx.currentTime + start + dur + 0.02);
     };
-    beep(880, 0, 0.18);
-    beep(1175, 0.2, 0.22);
-    setTimeout(() => ctx.close(), 700);
+    // Three-tone alert chime, repeated — clearly noticeable for CS agents.
+    beep(880, 0.0, 0.22);
+    beep(1175, 0.22, 0.22);
+    beep(1568, 0.46, 0.32);
+    beep(880, 0.95, 0.22);
+    beep(1175, 1.17, 0.22);
+    beep(1568, 1.41, 0.40);
+    setTimeout(() => ctx.close(), 2200);
   } catch {
     // ignore — autoplay may be blocked until user interacts
   }
@@ -48,6 +57,7 @@ type Lead = {
   marketing_notes: string | null; original_lead_link: string | null;
   cs_status: string; cs_notes: Array<{ at: string; by: string; text: string }>;
   followup_at: string | null; assigned_at: string;
+  assigned_to: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
