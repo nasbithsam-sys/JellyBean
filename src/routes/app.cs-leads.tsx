@@ -512,13 +512,31 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => void; onSaved: () => void }) {
+function LeadDrawer({
+  lead,
+  team,
+  teamById,
+  onClose,
+  onSaved,
+}: {
+  lead: Lead;
+  team: CsTeamMember[];
+  teamById: Map<string, CsTeamMember>;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const auth = useAuth();
+  const qc = useQueryClient();
   const [status, setStatus] = useState(lead.cs_status);
+  const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
   const notes = useMemo(() => Array.isArray(lead.cs_notes) ? lead.cs_notes : [], [lead.cs_notes]);
+  const isAdmin = auth.primaryRole === "admin";
+  const isCs = auth.primaryRole === "cs";
+  const assignee = assignedTo ? teamById.get(assignedTo) : null;
+  const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
   async function save() {
     setBusy(true);
@@ -531,19 +549,22 @@ function LeadDrawer({ lead, onClose, onSaved }: { lead: Lead; onClose: () => voi
           cs_status: status as never,
           cs_notes: newNotes as never,
           followup_at: followup ? new Date(followup).toISOString() : null,
+          assigned_to: assignedTo,
         })
         .eq("id", lead.id);
       if (error) throw error;
       await supabase.from("activity_logs").insert({
         actor_id: auth.user?.id, actor_name: auth.profile?.full_name, actor_role: auth.primaryRole,
         action: "cs.updated", entity_type: "qualified_lead", entity_id: lead.id,
-        metadata: { status, hasNote: !!note.trim() },
+        metadata: { status, hasNote: !!note.trim(), assigned_to: assignedTo },
       });
       toast.success("Saved");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
       onSaved();
     } catch (e) { toast.error((e as Error).message); }
     finally { setBusy(false); }
   }
+
 
   return (
     <div className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up" onClick={onClose}>
