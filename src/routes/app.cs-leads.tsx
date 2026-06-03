@@ -431,6 +431,58 @@ function LeadCard({
         </Select>
       </div>
 
+      {/* Assignment row */}
+      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+        {isAdmin ? (
+          <Select
+            value={assignedTo ?? UNASSIGNED_VALUE}
+            onValueChange={changeAssignee}
+            disabled={assigning}
+          >
+            <SelectTrigger className="h-8 text-[12px]">
+              <div className="inline-flex items-center gap-1.5 truncate">
+                <UserPlus className="h-3 w-3 text-muted-foreground" />
+                <SelectValue placeholder="Assign to…" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
+              {team.map((m) => (
+                <SelectItem key={m.user_id} value={m.user_id}>
+                  {m.full_name || m.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="flex items-center justify-between gap-2 text-[12px]">
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground truncate">
+              <UserCheck className="h-3 w-3" />
+              {assignee ? (
+                <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
+                  {assignedToMe ? "You" : (assignee.full_name || assignee.email)}
+                </span>
+              ) : (
+                <span className="italic text-muted-foreground/70">Unassigned</span>
+              )}
+            </span>
+            {isCs && !assignedToMe && (
+              <Button
+                size="sm"
+                variant={assignedTo ? "outline" : "default"}
+                className="h-7 text-[11.5px] px-2"
+                disabled={assigning}
+                onClick={assignToMe}
+              >
+                {assigning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <UserPlus className="h-3 w-3 mr-1" />}
+                {assignedTo ? "Take over" : "Assign to me"}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+
       <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11.5px] text-muted-foreground">
         <span className="tabular-nums">{formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}</span>
         {lead.followup_at && (
