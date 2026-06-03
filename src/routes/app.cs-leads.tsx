@@ -166,22 +166,20 @@ function Inner() {
     // Arm after first paint so we don't beep for historical rows during
     // initial subscription replay.
     const t = setTimeout(() => { armedRef.current = true; }, 1500);
-    const channel = supabase
-      .channel("cs-leads-new-ping")
-      .on(
-        // @ts-expect-error – postgres_changes typing is loose in supabase-js
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "qualified_leads" },
-        (payload: { new: { customer_name?: string } }) => {
-          if (!armedRef.current) return;
-          playNotificationBeep();
-          toast.success(`New lead: ${payload.new?.customer_name ?? "incoming"}`, {
-            duration: 6000,
-          });
-          qc.invalidateQueries({ queryKey: ["cs_leads"] });
-        },
-      )
-      .subscribe();
+    const channel = supabase.channel("cs-leads-new-ping");
+    (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "qualified_leads" },
+      (payload: { new: { customer_name?: string } }) => {
+        if (!armedRef.current) return;
+        playNotificationBeep();
+        toast.success(`New lead: ${payload.new?.customer_name ?? "incoming"}`, {
+          duration: 6000,
+        });
+        qc.invalidateQueries({ queryKey: ["cs_leads"] });
+      },
+    );
+    channel.subscribe();
     return () => {
       clearTimeout(t);
       supabase.removeChannel(channel);
