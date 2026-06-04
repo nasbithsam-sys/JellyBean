@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, KeyRound, Power, Settings as SettingsIcon, Users as UsersIcon } from "lucide-react";
+import { Loader2, Plus, KeyRound, Power, Settings as SettingsIcon, Users as UsersIcon, Trash2, RefreshCw, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { adminCreateUser, adminResetPassword, adminSetActive } from "@/lib/admin-users.functions";
+import { adminDeleteUser, adminRotateLoginOtp, adminGetLoginOtp } from "@/lib/login-otp.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/settings")({ component: Page });
