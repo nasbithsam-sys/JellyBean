@@ -99,22 +99,22 @@ function LoginPage() {
           <h1 className="text-[22px] font-semibold tracking-tight mt-4">Welcome back</h1>
           <p className="text-[13px] text-muted-foreground mt-1">Sign in to Leadgrid</p>
         </div>
-        {mfaRequired ? (
-          <form onSubmit={handleMfaVerify} className="glass-card p-6 space-y-4 ring-glow">
+        {otpRequired ? (
+          <form onSubmit={handleOtpVerify} className="glass-card p-6 space-y-4 ring-glow">
             <div>
-              <Label htmlFor="otp" className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium">Authenticator code</Label>
+              <Label htmlFor="otp" className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium">One-time login code</Label>
               <Input
                 id="otp"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 placeholder="123 456"
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value)}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
                 maxLength={6}
                 className="mt-2 tracking-[0.4em] text-center text-lg h-12 font-mono"
               />
               <p className="text-[11.5px] text-muted-foreground mt-2 text-center">
-                Open Google Authenticator and enter the 6-digit code.
+                Ask your admin for the current 6-digit code. It rotates after every use.
               </p>
             </div>
             <Button type="submit" className="w-full h-10" disabled={submitting}>
