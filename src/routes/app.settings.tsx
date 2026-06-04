@@ -130,14 +130,14 @@ function UsersTab() {
       <div className="bg-card border rounded-lg overflow-hidden">
         <table className="crm-table">
           <thead>
-            <tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th className="text-right">Actions</th></tr>
+            <tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Login code</th><th>Status</th><th className="text-right">Actions</th></tr>
           </thead>
           <tbody>
-            {usersQuery.isLoading && <tr><td colSpan={6} className="text-center text-muted-foreground py-6">Loading…</td></tr>}
+            {usersQuery.isLoading && <tr><td colSpan={7} className="text-center text-muted-foreground py-6">Loading…</td></tr>}
             {usersQuery.data?.map((u) => (
               <UserRowItem key={u.user_id} user={u} onChange={() => qc.invalidateQueries({ queryKey: ["admin-users"] })} />
             ))}
-            {usersQuery.data?.length === 0 && <tr><td colSpan={6} className="text-center text-muted-foreground py-6">No users yet.</td></tr>}
+            {usersQuery.data?.length === 0 && <tr><td colSpan={7} className="text-center text-muted-foreground py-6">No users yet.</td></tr>}
           </tbody>
         </table>
       </div>
