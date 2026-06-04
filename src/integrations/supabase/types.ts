@@ -188,6 +188,8 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          login_otp: string | null
+          login_otp_updated_at: string | null
           otp_required: boolean
           updated_at: string
           user_id: string
@@ -199,6 +201,8 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          login_otp?: string | null
+          login_otp_updated_at?: string | null
           otp_required?: boolean
           updated_at?: string
           user_id: string
@@ -210,6 +214,8 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          login_otp?: string | null
+          login_otp_updated_at?: string | null
           otp_required?: boolean
           updated_at?: string
           user_id?: string
@@ -445,6 +451,7 @@ export type Database = {
         Returns: boolean
       }
       email_for_username: { Args: { _username: string }; Returns: string }
+      generate_login_otp: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

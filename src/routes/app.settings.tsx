@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, KeyRound, Power, Settings as SettingsIcon, Users as UsersIcon } from "lucide-react";
+import { Loader2, Plus, KeyRound, Power, Settings as SettingsIcon, Users as UsersIcon, Trash2, RefreshCw, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { adminCreateUser, adminResetPassword, adminSetActive } from "@/lib/admin-users.functions";
+import { adminDeleteUser, adminRotateLoginOtp, adminGetLoginOtp } from "@/lib/login-otp.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/settings")({ component: Page });
@@ -129,14 +130,14 @@ function UsersTab() {
       <div className="bg-card border rounded-lg overflow-hidden">
         <table className="crm-table">
           <thead>
-            <tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th className="text-right">Actions</th></tr>
+            <tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Login code</th><th>Status</th><th className="text-right">Actions</th></tr>
           </thead>
           <tbody>
-            {usersQuery.isLoading && <tr><td colSpan={6} className="text-center text-muted-foreground py-6">Loading…</td></tr>}
+            {usersQuery.isLoading && <tr><td colSpan={7} className="text-center text-muted-foreground py-6">Loading…</td></tr>}
             {usersQuery.data?.map((u) => (
               <UserRowItem key={u.user_id} user={u} onChange={() => qc.invalidateQueries({ queryKey: ["admin-users"] })} />
             ))}
-            {usersQuery.data?.length === 0 && <tr><td colSpan={6} className="text-center text-muted-foreground py-6">No users yet.</td></tr>}
+            {usersQuery.data?.length === 0 && <tr><td colSpan={7} className="text-center text-muted-foreground py-6">No users yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -148,7 +149,24 @@ function UsersTab() {
 function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }) {
   const setActive = useServerFn(adminSetActive);
   const resetPw = useServerFn(adminResetPassword);
+  const deleteUser = useServerFn(adminDeleteUser);
+  const rotateOtp = useServerFn(adminRotateLoginOtp);
+  const getOtp = useServerFn(adminGetLoginOtp);
   const [busy, setBusy] = useState(false);
+  const [otp, setOtp] = useState<string | null>(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+
+  const needsOtp = user.role === "marketing" || user.role === "cs";
+
+  useEffect(() => {
+    if (!needsOtp) return;
+    void (async () => {
+      try {
+        const res = await getOtp({ data: { userId: user.user_id } });
+        setOtp(res.code);
+      } catch { /* ignore */ }
+    })();
+  }, [needsOtp, user.user_id, getOtp]);
 
   async function toggleActive() {
     setBusy(true);
@@ -169,6 +187,30 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
     } catch (e) { toast.error((e as Error).message); }
     finally { setBusy(false); }
   }
+  async function remove() {
+    if (!window.confirm(`Permanently delete ${user.full_name || user.email}? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      await deleteUser({ data: { userId: user.user_id } });
+      toast.success("User deleted");
+      onChange();
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  async function rotate() {
+    setOtpLoading(true);
+    try {
+      const res = await rotateOtp({ data: { userId: user.user_id } });
+      setOtp(res.code);
+      toast.success("New login code generated");
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setOtpLoading(false); }
+  }
+  async function copyOtp() {
+    if (!otp) return;
+    await navigator.clipboard.writeText(otp);
+    toast.success("Code copied");
+  }
 
   return (
     <tr>
@@ -176,11 +218,31 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
       <td className="font-mono text-xs">{user.username ?? "—"}</td>
       <td>{user.email}</td>
       <td className="capitalize">{user.role ?? "—"}</td>
+      <td>
+        {needsOtp ? (
+          <div className="flex items-center gap-1.5">
+            <code className="font-mono text-xs px-2 py-0.5 rounded bg-muted">{otp ?? "— — — — — —"}</code>
+            {otp && (
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={copyOtp} title="Copy">
+                <Copy className="h-3 w-3" />
+              </Button>
+            )}
+            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={rotate} disabled={otpLoading} title="Generate new code">
+              {otpLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            </Button>
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        )}
+      </td>
       <td><span className={user.is_active ? "text-success" : "text-muted-foreground"}>{user.is_active ? "Active" : "Inactive"}</span></td>
       <td className="text-right space-x-2 whitespace-nowrap">
         <Button size="sm" variant="outline" onClick={reset} disabled={busy}><KeyRound className="h-3.5 w-3.5 mr-1" /> Reset PW</Button>
         <Button size="sm" variant={user.is_active ? "outline" : "default"} onClick={toggleActive} disabled={busy}>
           <Power className="h-3.5 w-3.5 mr-1" /> {user.is_active ? "Deactivate" : "Activate"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={remove} disabled={busy} className="text-destructive hover:text-destructive">
+          <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
         </Button>
       </td>
     </tr>

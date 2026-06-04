@@ -21,10 +21,11 @@ export const listCsTeam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
     const admin = adminClient();
+    // Leads are only assignable to CS users (admins can assign but never receive).
     const { data: roleRows, error: rErr } = await admin
       .from("user_roles")
       .select("user_id, role")
-      .in("role", ["cs", "admin"]);
+      .eq("role", "cs");
     if (rErr) throw new Error(rErr.message);
     const ids = Array.from(new Set((roleRows ?? []).map((r) => r.user_id)));
     if (ids.length === 0) return [] as CsTeamMember[];
