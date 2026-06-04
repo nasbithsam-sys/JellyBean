@@ -3,7 +3,6 @@ import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
-import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/app")({
   component: AuthenticatedLayout,
@@ -17,26 +16,8 @@ function AuthenticatedLayout() {
     if (auth.loading) return;
     if (!auth.session) {
       navigate({ to: "/login" });
-      return;
     }
-    // Verify MFA assurance for users that need it
-    void (async () => {
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      const needsMfa = auth.roles.includes("marketing") || auth.roles.includes("cs");
-      if (needsMfa) {
-        const { data: factors } = await supabase.auth.mfa.listFactors();
-        const verified = factors?.totp?.some((f) => f.status === "verified");
-        if (!verified) {
-          navigate({ to: "/mfa-setup" });
-          return;
-        }
-        if (aal?.currentLevel !== "aal2") {
-          navigate({ to: "/login" });
-          return;
-        }
-      }
-    })();
-  }, [auth.loading, auth.session, auth.roles, navigate]);
+  }, [auth.loading, auth.session, navigate]);
 
   if (auth.loading || !auth.session) {
     return (
