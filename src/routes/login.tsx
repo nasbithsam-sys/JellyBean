@@ -15,30 +15,29 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const consumeOtp = useServerFn(consumeLoginOtp);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [mfaRequired, setMfaRequired] = useState<{ factorId: string } | null>(null);
-  const [mfaCode, setMfaCode] = useState("");
+  const [otpRequired, setOtpRequired] = useState(false);
+  const [code, setCode] = useState("");
 
-  // Already signed in? Route based on MFA / role
+  // Already signed in? If they still owe an OTP, ask; otherwise route to app.
   useEffect(() => {
     void (async () => {
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       const { data: sess } = await supabase.auth.getSession();
       if (!sess.session) return;
-      if (aal?.nextLevel === "aal2" && aal?.currentLevel !== "aal2") {
-        // MFA exists, needs challenge
-        const { data: factors } = await supabase.auth.mfa.listFactors();
-        const verified = factors?.totp?.find((f) => f.status === "verified");
-        if (verified) {
-          setMfaRequired({ factorId: verified.id });
-          return;
-        }
-      }
-      navigate({ to: "/app" });
+      const needs = await userNeedsOtp(sess.session.user.id);
+      if (needs) setOtpRequired(true);
+      else navigate({ to: "/app" });
     })();
   }, [navigate]);
+
+  async function userNeedsOtp(uid: string): Promise<boolean> {
+    const { data } = await supabase.from("user_roles").select("role").eq("user_id", uid);
+    const roles = (data ?? []).map((r) => r.role as string);
+    return roles.includes("marketing") || roles.includes("cs");
+  }
 
   async function resolveEmail(id: string): Promise<string | null> {
     const trimmed = id.trim();
@@ -62,30 +61,10 @@ function LoginPage() {
         toast.error(error.message);
         return;
       }
-      // Check MFA requirement
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (aal?.nextLevel === "aal2" && aal?.currentLevel !== "aal2") {
-        const { data: factors } = await supabase.auth.mfa.listFactors();
-        const verified = factors?.totp?.find((f) => f.status === "verified");
-        if (verified) {
-          setMfaRequired({ factorId: verified.id });
-          return;
-        }
-      }
-
-      // Enforce OTP for marketing/cs even if not enrolled yet
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: rolesData } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
-        const roles = (rolesData ?? []).map((r) => r.role as string);
-        const mustOtp = roles.includes("marketing") || roles.includes("cs");
-        if (mustOtp) {
-          const { data: factors } = await supabase.auth.mfa.listFactors();
-          if (!factors?.totp?.some((f) => f.status === "verified")) {
-            navigate({ to: "/mfa-setup" });
-            return;
-          }
-        }
+      if (user && (await userNeedsOtp(user.id))) {
+        setOtpRequired(true);
+        return;
       }
       navigate({ to: "/app" });
     } finally {
@@ -93,26 +72,14 @@ function LoginPage() {
     }
   }
 
-  async function handleMfaVerify(e: React.FormEvent) {
+  async function handleOtpVerify(e: React.FormEvent) {
     e.preventDefault();
-    if (!mfaRequired) return;
     setSubmitting(true);
     try {
-      const { data: ch, error: chErr } = await supabase.auth.mfa.challenge({ factorId: mfaRequired.factorId });
-      if (chErr || !ch) {
-        toast.error(chErr?.message ?? "Could not start MFA challenge");
-        return;
-      }
-      const { error } = await supabase.auth.mfa.verify({
-        factorId: mfaRequired.factorId,
-        challengeId: ch.id,
-        code: mfaCode.trim(),
-      });
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
+      await consumeOtp({ data: { code: code.trim() } });
       navigate({ to: "/app" });
+    } catch (err) {
+      toast.error((err as Error).message);
     } finally {
       setSubmitting(false);
     }
