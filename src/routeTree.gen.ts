@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as MfaSetupRouteImport } from './routes/mfa-setup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -24,11 +23,6 @@ import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
 
-const MfaSetupRoute = MfaSetupRouteImport.update({
-  id: '/mfa-setup',
-  path: '/mfa-setup',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -99,7 +93,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
-  '/mfa-setup': typeof MfaSetupRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -114,7 +107,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/mfa-setup': typeof MfaSetupRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -131,7 +123,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
-  '/mfa-setup': typeof MfaSetupRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -149,7 +140,6 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
-    | '/mfa-setup'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -164,7 +154,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
-    | '/mfa-setup'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -180,7 +169,6 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
-    | '/mfa-setup'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -197,18 +185,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
-  MfaSetupRoute: typeof MfaSetupRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/mfa-setup': {
-      id: '/mfa-setup'
-      path: '/mfa-setup'
-      fullPath: '/mfa-setup'
-      preLoaderRoute: typeof MfaSetupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -335,7 +315,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
-  MfaSetupRoute: MfaSetupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
