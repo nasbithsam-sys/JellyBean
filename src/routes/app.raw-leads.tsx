@@ -560,11 +560,18 @@ function Inner() {
                 ),
               );
               try {
-                const { error } = await supabase
-                  .from(TABLE)
-                  .update({ category: "wrong" })
-                  .in("row_key", keys);
-                if (error) throw error;
+                // row_keys are full Nextdoor URLs — batch to avoid
+                // exceeding the request URL length limit (which surfaces
+                // as a browser-level "TypeError: Failed to fetch").
+                const CHUNK = 25;
+                for (let i = 0; i < keys.length; i += CHUNK) {
+                  const slice = keys.slice(i, i + CHUNK);
+                  const { error } = await supabase
+                    .from(TABLE)
+                    .update({ category: "wrong" })
+                    .in("row_key", slice);
+                  if (error) throw error;
+                }
                 toast.success(
                   `Moved ${targets.length} "No" lead${targets.length === 1 ? "" : "s"} to Wrong posts`,
                 );
