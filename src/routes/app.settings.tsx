@@ -255,7 +255,11 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
   const [otp, setOtp] = useState<string | null>(null);
   const [otpLoading, setOtpLoading] = useState(false);
 
-  const needsOtp = user.role === "admin" || user.role === "marketing" || user.role === "cs";
+  const needsOtp =
+    user.role === "admin" ||
+    user.role === "scraping" ||
+    user.role === "processor" ||
+    user.role === "cs";
 
   useEffect(() => {
     if (!needsOtp) return;
@@ -411,7 +415,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     fullName: "",
     email: "",
     password: "",
-    role: "marketing" as "admin" | "marketing" | "cs",
+    role: "scraping" as "admin" | "scraping" | "processor" | "cs",
     isActive: true,
   });
   async function submit(e: React.FormEvent) {
@@ -469,7 +473,8 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="marketing">Marketing</SelectItem>
+                <SelectItem value="scraping">Scraping</SelectItem>
+                <SelectItem value="processor">Processor</SelectItem>
                 <SelectItem value="cs">CS</SelectItem>
               </SelectContent>
             </Select>

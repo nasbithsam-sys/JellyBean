@@ -232,7 +232,7 @@ function Page() {
         description="Live feed from your Google Sheets scraper. Stored in Supabase — shared across all your devices."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "marketing"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "scraping", "processor"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
@@ -1070,7 +1070,10 @@ function QualifyDialog({
         main_area: row["Account Area"]?.trim() || null,
         original_lead_link: row["Lead Link"] || null,
         assigned_by: actorId,
-      });
+        // Track who forwarded the lead so scraping/processor can see status
+        // updates of their own forwarded leads in the Forwarded Leads tab.
+        created_by: actorId,
+      } as never);
       if (error) throw error;
       onSent();
     } catch (e) {

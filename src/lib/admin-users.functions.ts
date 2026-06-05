@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
 
-const roleSchema = z.enum(["admin", "marketing", "cs"]);
+const roleSchema = z.enum(["admin", "scraping", "processor", "cs"]);
 
 const createUserSchema = z.object({
   fullName: z.string().trim().min(1).max(120),

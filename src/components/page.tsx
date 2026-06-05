@@ -45,13 +45,15 @@ export function PageBody({
   return <div className={cn("px-8 py-7 animate-fade-in-up", className)}>{children}</div>;
 }
 
+type Role = "admin" | "scraping" | "processor" | "cs";
+
 export function RoleGate({
   allow,
   current,
   children,
 }: {
-  allow: Array<"admin" | "marketing" | "cs">;
-  current: "admin" | "marketing" | "cs" | null;
+  allow: Array<Role>;
+  current: Role | null;
   children: React.ReactNode;
 }) {
   if (!current || !allow.includes(current)) {

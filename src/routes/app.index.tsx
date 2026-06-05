@@ -30,7 +30,8 @@ function DashboardHome() {
   useEffect(() => {
     if (auth.loading) return;
     if (role === "cs") navigate({ to: "/app/cs-leads", replace: true });
-    else if (role === "marketing") navigate({ to: "/app/raw-leads", replace: true });
+    else if (role === "scraping" || role === "processor")
+      navigate({ to: "/app/raw-leads", replace: true });
   }, [auth.loading, role, navigate]);
 
   if (role !== "admin") {
