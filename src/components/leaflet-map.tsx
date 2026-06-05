@@ -18,7 +18,9 @@ export type PlacedAccount = {
   area: string | null;
   latitude: number;
   longitude: number;
-  last_opened_at: string | null;
+  last_launched_at: string | null;
+  launched_today: boolean;
+  today_launch_count: number;
 };
 
 interface Props {
@@ -26,37 +28,37 @@ interface Props {
   visuals: boolean;
 }
 
-function isActive(a: { last_opened_at: string | null }) {
-  if (!a.last_opened_at) return false;
-  return Date.now() - new Date(a.last_opened_at).getTime() < 1000 * 60 * 60 * 24 * 14;
-}
+const FIFTY_MILES_IN_METERS = 80467;
 
 export default function LeafletMap({ placed, visuals }: Props) {
   const items: React.ReactNode[] = [];
-  for (const a of placed) {
-    const active = isActive(a);
+
+  for (const account of placed) {
     if (visuals) {
       items.push(
         <Circle
-          key={`c-${a.id}`}
-          center={[a.latitude, a.longitude]}
-          radius={active ? 60000 : 30000}
+          key={`c-${account.id}`}
+          center={[account.latitude, account.longitude]}
+          radius={account.launched_today ? FIFTY_MILES_IN_METERS : 12000}
           pathOptions={{
-            color: active ? "#22c55e" : "#94a3b8",
-            fillOpacity: 0.15,
-            weight: 1,
+            color: account.launched_today ? "#14b8a6" : "#94a3b8",
+            fillColor: account.launched_today ? "#14b8a6" : "#94a3b8",
+            fillOpacity: account.launched_today ? 0.16 : 0.05,
+            weight: account.launched_today ? 2 : 1,
+            dashArray: account.launched_today ? undefined : "4 6",
           }}
-        />,
+        >
+          <Popup>
+            <CoveragePopup account={account} />
+          </Popup>
+        </Circle>,
       );
     }
+
     items.push(
-      <Marker key={`m-${a.id}`} position={[a.latitude, a.longitude]}>
+      <Marker key={`m-${account.id}`} position={[account.latitude, account.longitude]}>
         <Popup>
-          <div className="text-[12.5px]">
-            <div className="font-semibold">{a.name}</div>
-            <div className="text-muted-foreground">{a.area ?? "—"}</div>
-            <div className="mt-1 text-[11px]">{active ? "Active" : "Idle"}</div>
-          </div>
+          <CoveragePopup account={account} />
         </Popup>
       </Marker>,
     );
@@ -76,5 +78,31 @@ export default function LeafletMap({ placed, visuals }: Props) {
       />
       {items}
     </MapContainer>
+  );
+}
+
+function CoveragePopup({ account }: { account: PlacedAccount }) {
+  return (
+    <div className="text-[12.5px] min-w-[170px]">
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">Account name</div>
+      <div className="font-semibold">{account.name}</div>
+      <div className="text-[10px] uppercase tracking-wide text-slate-500 mt-2">Account area</div>
+      <div>{account.area ?? "-"}</div>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+        <div>
+          <div className="text-slate-500">Today</div>
+          <div className="font-medium">{account.launched_today ? "Covered" : "Missing"}</div>
+        </div>
+        <div>
+          <div className="text-slate-500">Launch count</div>
+          <div className="font-medium tabular-nums">{account.today_launch_count}</div>
+        </div>
+      </div>
+      {account.last_launched_at && (
+        <div className="mt-2 text-[11px] text-slate-500">
+          Last launch: {new Date(account.last_launched_at).toLocaleString()}
+        </div>
+      )}
+    </div>
   );
 }

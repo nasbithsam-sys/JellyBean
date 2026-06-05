@@ -10,16 +10,23 @@ export const Route = createFileRoute("/app")({
 
 function AuthenticatedLayout() {
   const auth = useAuth();
+  const { loading, session, signOut } = auth;
   const navigate = useNavigate();
+  const inactive = auth.profile?.is_active === false;
 
   useEffect(() => {
-    if (auth.loading) return;
-    if (!auth.session) {
+    if (loading) return;
+    if (!session) {
+      navigate({ to: "/login" });
+      return;
+    }
+    if (inactive) {
+      void signOut();
       navigate({ to: "/login" });
     }
-  }, [auth.loading, auth.session, navigate]);
+  }, [loading, session, inactive, signOut, navigate]);
 
-  if (auth.loading || !auth.session) {
+  if (loading || !session || inactive) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

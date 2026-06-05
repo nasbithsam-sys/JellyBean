@@ -9,14 +9,24 @@ const roleSchema = z.enum(["admin", "marketing", "cs"]);
 const createUserSchema = z.object({
   fullName: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(255),
-  username: z.string().trim().min(2).max(60).regex(/^[a-zA-Z0-9._-]+$/).optional(),
+  username: z
+    .string()
+    .trim()
+    .min(2)
+    .max(60)
+    .regex(/^[a-zA-Z0-9._-]+$/)
+    .optional(),
   password: z.string().min(8).max(128),
   role: roleSchema,
   isActive: z.boolean().default(true),
 });
 
 function deriveUsername(email: string): string {
-  const base = email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 50) || "user";
+  const base =
+    email
+      .split("@")[0]
+      .replace(/[^a-zA-Z0-9._-]/g, "")
+      .slice(0, 50) || "user";
   return base;
 }
 
@@ -129,6 +139,7 @@ async function createUserInternal(data: z.infer<typeof createUserSchema>) {
     password: data.password,
     email_confirm: true,
     user_metadata: { full_name: data.fullName, username },
+    ban_duration: data.isActive ? "none" : "876000h",
   });
   if (createErr || !created.user) throw new Error(createErr?.message ?? "Failed to create user");
 

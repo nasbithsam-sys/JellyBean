@@ -10,20 +10,43 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Phone, MapPin, MessageSquarePlus, ArrowRight, Search, RefreshCw, UserPlus, UserCheck } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Loader2,
+  Phone,
+  MapPin,
+  MessageSquarePlus,
+  ArrowRight,
+  Search,
+  RefreshCw,
+  UserPlus,
+  UserCheck,
+  Download,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
+import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
 const UNASSIGNED_VALUE = "__unassigned__";
+type CsStatus = Database["public"]["Enums"]["cs_status"];
+type LeadNote = { at: string; by: string; text: string };
 
 function playNotificationBeep() {
   try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new Ctx();
     const beep = (freq: number, start: number, dur: number, vol = 0.35) => {
       const osc = ctx.createOscillator();
@@ -43,7 +66,7 @@ function playNotificationBeep() {
     beep(1568, 0.46, 0.32);
     beep(880, 0.95, 0.22);
     beep(1175, 1.17, 0.22);
-    beep(1568, 1.41, 0.40);
+    beep(1568, 1.41, 0.4);
     setTimeout(() => ctx.close(), 2200);
   } catch {
     // ignore — autoplay may be blocked until user interacts
@@ -51,12 +74,19 @@ function playNotificationBeep() {
 }
 
 type Lead = {
-  id: string; customer_name: string; customer_number: string;
-  context: string | null; pass_it_to: string | null;
-  main_area: string | null; sub_area: string | null;
-  marketing_notes: string | null; original_lead_link: string | null;
-  cs_status: string; cs_notes: Array<{ at: string; by: string; text: string }>;
-  followup_at: string | null; assigned_at: string;
+  id: string;
+  customer_name: string;
+  customer_number: string;
+  context: string | null;
+  pass_it_to: string | null;
+  main_area: string | null;
+  sub_area: string | null;
+  marketing_notes: string | null;
+  original_lead_link: string | null;
+  cs_status: CsStatus;
+  cs_notes: LeadNote[];
+  followup_at: string | null;
+  assigned_at: string;
   assigned_to: string | null;
 };
 
@@ -69,7 +99,7 @@ const PIPELINE_STATUSES = [
   "service_provider_himself",
   "converted",
   "need_follow_up",
-] as const;
+] as const satisfies readonly CsStatus[];
 
 function Page() {
   const auth = useAuth();
@@ -123,6 +153,9 @@ function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [areaFilter, setAreaFilter] = useState("all");
+  const [visibleLimit, setVisibleLimit] = useState(60);
   const [opened, setOpened] = useState<Lead | null>(null);
 
   const list = useQuery({
@@ -130,16 +163,20 @@ function Inner() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("qualified_leads")
-        .select("*")
+        .select(
+          "id, customer_name, customer_number, context, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to",
+        )
         .order("assigned_at", { ascending: false })
-        .limit(1000);
+        .limit(500);
       if (error) throw error;
       return (data ?? []) as unknown as Lead[];
     },
   });
 
   const todayStart = useMemo(() => {
-    const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString();
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
   }, []);
   const sentToday = useQuery({
     queryKey: ["cs_sent_today", auth.user?.id, todayStart],
@@ -167,6 +204,14 @@ function Inner() {
     return map;
   }, [team.data]);
 
+  const areaOptions = useMemo(() => {
+    const areas = new Set<string>();
+    for (const lead of list.data ?? []) {
+      const area = lead.main_area?.trim() || lead.sub_area?.trim();
+      if (area) areas.add(area);
+    }
+    return Array.from(areas).sort();
+  }, [list.data]);
 
   // ── New-lead sound notification (Supabase Realtime — instant for every CS) ──
   // Listens for INSERT events on qualified_leads. Every signed-in CS/admin
@@ -178,7 +223,9 @@ function Inner() {
   useEffect(() => {
     // Arm after first paint so we don't beep for historical rows during
     // initial subscription replay.
-    const t = setTimeout(() => { armedRef.current = true; }, 1500);
+    const t = setTimeout(() => {
+      armedRef.current = true;
+    }, 1500);
     const channel = supabase.channel("cs-leads-new-ping");
     (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
       "postgres_changes",
@@ -189,7 +236,6 @@ function Inner() {
         toast.success(`New lead: ${payload.new?.customer_name ?? "incoming"}`, {
           duration: 6000,
         });
-        qc.invalidateQueries({ queryKey: ["cs_leads"] });
       },
     );
     channel.subscribe();
@@ -197,18 +243,37 @@ function Inner() {
       clearTimeout(t);
       supabase.removeChannel(channel);
     };
-  }, [qc]);
+  }, []);
 
-
-  const [activeStatus, setActiveStatus] = useState<string>("new");
+  const [activeStatus, setActiveStatus] = useState<CsStatus>("new");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return list.data ?? [];
-    return (list.data ?? []).filter((l) =>
-      [l.customer_name, l.customer_number, l.main_area, l.sub_area, l.pass_it_to].some((f) => f?.toLowerCase().includes(q))
-    );
-  }, [list.data, query]);
+    return (list.data ?? []).filter((l) => {
+      if (
+        q &&
+        ![l.customer_name, l.customer_number, l.main_area, l.sub_area, l.pass_it_to].some((f) =>
+          f?.toLowerCase().includes(q),
+        )
+      ) {
+        return false;
+      }
+      if (ownerFilter === "mine" && l.assigned_to !== auth.user?.id) return false;
+      if (ownerFilter === "unassigned" && l.assigned_to) return false;
+      if (
+        ownerFilter !== "all" &&
+        ownerFilter !== "mine" &&
+        ownerFilter !== "unassigned" &&
+        l.assigned_to !== ownerFilter
+      ) {
+        return false;
+      }
+      if (areaFilter !== "all" && l.main_area !== areaFilter && l.sub_area !== areaFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [areaFilter, auth.user?.id, list.data, ownerFilter, query]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -221,6 +286,28 @@ function Inner() {
     () => filtered.filter((l) => l.cs_status === activeStatus),
     [filtered, activeStatus],
   );
+  const shownLeads = visibleLeads.slice(0, visibleLimit);
+
+  function exportLeads() {
+    downloadCsv(
+      "cs-leads.csv",
+      ["Customer", "Phone", "Status", "Assigned To", "Area", "Sub Area", "Created"],
+      visibleLeads.map((lead) => [
+        lead.customer_name,
+        formatPhone(lead.customer_number),
+        STATUS_LABEL[lead.cs_status] ?? lead.cs_status,
+        lead.assigned_to
+          ? (teamById.get(lead.assigned_to)?.full_name ??
+            teamById.get(lead.assigned_to)?.email ??
+            "")
+          : "Unassigned",
+        lead.main_area ?? "",
+        lead.sub_area ?? "",
+        lead.assigned_at,
+      ]),
+    );
+    toast.success(`Exported ${visibleLeads.length} CS lead${visibleLeads.length === 1 ? "" : "s"}`);
+  }
 
   return (
     <div className="space-y-4">
@@ -234,6 +321,34 @@ function Inner() {
             className="w-full h-9 pl-9 pr-3 rounded-md bg-surface border border-border text-[13px] placeholder:text-muted-foreground/70 focus:outline-none"
           />
         </div>
+        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+          <SelectTrigger className="h-9 w-[150px] text-[12px]">
+            <SelectValue placeholder="Owner" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All owners</SelectItem>
+            <SelectItem value="mine">My leads</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+            {team.data?.map((member) => (
+              <SelectItem key={member.user_id} value={member.user_id}>
+                {member.full_name || member.email}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={areaFilter} onValueChange={setAreaFilter}>
+          <SelectTrigger className="h-9 w-[150px] text-[12px]">
+            <SelectValue placeholder="Area" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All areas</SelectItem>
+            {areaOptions.map((area) => (
+              <SelectItem key={area} value={area}>
+                {area}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <div className="ml-auto flex items-center gap-2">
           <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px]">
             <span className="text-muted-foreground">Sent today</span>
@@ -246,8 +361,16 @@ function Inner() {
             onClick={() => qc.invalidateQueries({ queryKey: ["cs_leads"] })}
             disabled={list.isFetching}
           >
-            {list.isFetching ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+            {list.isFetching ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+            )}
             Refresh
+          </Button>
+          <Button variant="outline" size="sm" className="h-9" onClick={exportLeads}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export
           </Button>
         </div>
       </div>
@@ -265,22 +388,34 @@ function Inner() {
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_TONE[s] ?? "bg-muted-foreground")} />
+            <span
+              className={cn("h-1.5 w-1.5 rounded-full", STATUS_TONE[s] ?? "bg-muted-foreground")}
+            />
             {STATUS_LABEL[s] ?? s}
-            <span className="text-[10.5px] text-muted-foreground tabular-nums">{counts[s] ?? 0}</span>
+            <span className="text-[10.5px] text-muted-foreground tabular-nums">
+              {counts[s] ?? 0}
+            </span>
           </button>
         ))}
       </div>
+
+      {list.error && (
+        <div className="text-[12.5px] text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">
+          {(list.error as Error).message}
+        </div>
+      )}
 
       {list.isLoading ? (
         <div className="glass-card p-16 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
         </div>
       ) : visibleLeads.length === 0 ? (
-        <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">No leads in this status.</div>
+        <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">
+          No leads in this status.
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {visibleLeads.map((l) => (
+          {shownLeads.map((l) => (
             <LeadCard
               key={l.id}
               lead={l}
@@ -292,13 +427,24 @@ function Inner() {
         </div>
       )}
 
+      {visibleLeads.length > shownLeads.length && (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={() => setVisibleLimit((n) => n + 60)}>
+            Load more ({visibleLeads.length - shownLeads.length} remaining)
+          </Button>
+        </div>
+      )}
+
       {opened && (
         <LeadDrawer
           lead={opened}
           team={team.data ?? []}
           teamById={teamById}
           onClose={() => setOpened(null)}
-          onSaved={() => { setOpened(null); qc.invalidateQueries({ queryKey: ["cs_leads"] }); }}
+          onSaved={() => {
+            setOpened(null);
+            qc.invalidateQueries({ queryKey: ["cs_leads"] });
+          }}
         />
       )}
     </div>
@@ -318,26 +464,38 @@ function LeadCard({
 }) {
   const qc = useQueryClient();
   const auth = useAuth();
-  const [status, setStatus] = useState(lead.cs_status);
+  const [status, setStatus] = useState<CsStatus>(lead.cs_status);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [saving, setSaving] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const initials = (lead.customer_name || "?").split(/\s+/).map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+  const initials = (lead.customer_name || "?")
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
-  async function changeStatus(next: string) {
+  async function changeStatus(next: CsStatus) {
     const prev = status;
     setStatus(next);
     setSaving(true);
     try {
-      const { error } = await supabase.from("qualified_leads").update({ cs_status: next as never }).eq("id", lead.id);
+      const { error } = await supabase
+        .from("qualified_leads")
+        .update({ cs_status: next })
+        .eq("id", lead.id);
       if (error) throw error;
       await supabase.from("activity_logs").insert({
-        actor_id: auth.user?.id, actor_name: auth.profile?.full_name, actor_role: auth.primaryRole,
-        action: "cs.status_changed", entity_type: "qualified_lead", entity_id: lead.id,
+        actor_id: auth.user?.id,
+        actor_name: auth.profile?.full_name,
+        actor_role: auth.primaryRole,
+        action: "cs.status_changed",
+        entity_type: "qualified_lead",
+        entity_id: lead.id,
         metadata: { status: next, from: "card" },
       });
       toast.success(`Status → ${STATUS_LABEL[next] ?? next}`);
@@ -363,8 +521,12 @@ function LeadCard({
       if (error) throw error;
       const nextName = next ? (teamById.get(next)?.full_name ?? "teammate") : "unassigned";
       await supabase.from("activity_logs").insert({
-        actor_id: auth.user?.id, actor_name: auth.profile?.full_name, actor_role: auth.primaryRole,
-        action: "cs.assigned", entity_type: "qualified_lead", entity_id: lead.id,
+        actor_id: auth.user?.id,
+        actor_name: auth.profile?.full_name,
+        actor_role: auth.primaryRole,
+        action: "cs.assigned",
+        entity_type: "qualified_lead",
+        entity_id: lead.id,
         metadata: { assigned_to: next, assigned_to_name: nextName },
       });
       toast.success(next ? `Assigned to ${nextName}` : "Unassigned");
@@ -383,11 +545,13 @@ function LeadCard({
     await changeAssignee(auth.user.id);
   }
 
-
   return (
-    <div className="glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up" onClick={onOpen}>
+    <div
+      className="glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up"
+      onClick={onOpen}
+    >
       <div className="flex items-start gap-3">
-        <div className="h-10 w-10 shrink-0 rounded-lg bg-gradient-to-br from-primary/30 to-primary-glow/20 grid place-items-center text-[12px] font-semibold ring-1 ring-primary/30">
+        <div className="h-10 w-10 shrink-0 rounded-sm bg-surface border border-border-strong grid place-items-center text-[12px] font-mono font-semibold text-primary">
           {initials || "·"}
         </div>
         <div className="min-w-0 flex-1">
@@ -400,7 +564,7 @@ function LeadCard({
             onClick={(e) => e.stopPropagation()}
             className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-primary transition-colors mt-0.5"
           >
-            <Phone className="h-3 w-3" /> {lead.customer_number}
+            <Phone className="h-3 w-3" /> {formatPhone(lead.customer_number)}
           </a>
         </div>
       </div>
@@ -408,7 +572,9 @@ function LeadCard({
       {(lead.main_area || lead.sub_area) && (
         <div className="mt-3 flex items-center gap-1.5 text-[12px] text-muted-foreground">
           <MapPin className="h-3 w-3" />
-          <span className="truncate">{[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")}</span>
+          <span className="truncate">
+            {[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")}
+          </span>
         </div>
       )}
 
@@ -419,13 +585,19 @@ function LeadCard({
       )}
 
       <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-        <Select value={status} onValueChange={changeStatus} disabled={saving}>
+        <Select
+          value={status}
+          onValueChange={(next) => changeStatus(next as CsStatus)}
+          disabled={saving}
+        >
           <SelectTrigger className="h-8 text-[12px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {PIPELINE_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>{STATUS_LABEL[s] ?? s.replace(/_/g, " ")}</SelectItem>
+              <SelectItem key={s} value={s}>
+                {STATUS_LABEL[s] ?? s.replace(/_/g, " ")}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -460,7 +632,7 @@ function LeadCard({
               <UserCheck className="h-3 w-3" />
               {assignee ? (
                 <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
-                  {assignedToMe ? "You" : (assignee.full_name || assignee.email)}
+                  {assignedToMe ? "You" : assignee.full_name || assignee.email}
                 </span>
               ) : (
                 <span className="italic text-muted-foreground/70">Unassigned</span>
@@ -474,7 +646,11 @@ function LeadCard({
                 disabled={assigning}
                 onClick={assignToMe}
               >
-                {assigning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <UserPlus className="h-3 w-3 mr-1" />}
+                {assigning ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : (
+                  <UserPlus className="h-3 w-3 mr-1" />
+                )}
                 {assignedTo ? "Take over" : "Assign to me"}
               </Button>
             )}
@@ -482,9 +658,10 @@ function LeadCard({
         )}
       </div>
 
-
       <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11.5px] text-muted-foreground">
-        <span className="tabular-nums">{formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}</span>
+        <span className="tabular-nums">
+          {formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}
+        </span>
         {lead.followup_at && (
           <span className="inline-flex items-center gap-1 text-warning">
             <span className="h-1.5 w-1.5 rounded-full bg-warning" />
@@ -499,14 +676,30 @@ function LeadCard({
 
 function StatusBadge({ status }: { status: string }) {
   const tone =
-    status === "converted" || status === "closed_won" ? "bg-success/15 text-success border-success/30"
-      : status === "undeliver" || status === "wrong_number" || status === "already_got_someone" || status === "service_provider_himself" || status === "closed_lost" || status === "not_interested" || status === "already_done" ? "bg-destructive/15 text-destructive border-destructive/30"
-        : status === "need_follow_up" || status === "follow_up" ? "bg-warning/15 text-warning border-warning/30"
-          : status === "interested" ? "bg-primary/15 text-primary border-primary/30"
-            : status === "called" || status === "messaged" ? "bg-warning/15 text-warning border-warning/30"
+    status === "converted" || status === "closed_won"
+      ? "bg-success/15 text-success border-success/30"
+      : status === "undeliver" ||
+          status === "wrong_number" ||
+          status === "already_got_someone" ||
+          status === "service_provider_himself" ||
+          status === "closed_lost" ||
+          status === "not_interested" ||
+          status === "already_done"
+        ? "bg-destructive/15 text-destructive border-destructive/30"
+        : status === "need_follow_up" || status === "follow_up"
+          ? "bg-warning/15 text-warning border-warning/30"
+          : status === "interested"
+            ? "bg-primary/15 text-primary border-primary/30"
+            : status === "called" || status === "messaged"
+              ? "bg-warning/15 text-warning border-warning/30"
               : "bg-muted text-muted-foreground border-border";
   return (
-    <span className={cn("text-[10.5px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap", tone)}>
+    <span
+      className={cn(
+        "text-[10.5px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap",
+        tone,
+      )}
+    >
       {STATUS_LABEL[status] ?? status.replace(/_/g, " ")}
     </span>
   );
@@ -527,12 +720,12 @@ function LeadDrawer({
 }) {
   const auth = useAuth();
   const qc = useQueryClient();
-  const [status, setStatus] = useState(lead.cs_status);
+  const [status, setStatus] = useState<CsStatus>(lead.cs_status);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
-  const notes = useMemo(() => Array.isArray(lead.cs_notes) ? lead.cs_notes : [], [lead.cs_notes]);
+  const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
@@ -542,66 +735,111 @@ function LeadDrawer({
     setBusy(true);
     try {
       const newNotes = note.trim()
-        ? [...notes, { at: new Date().toISOString(), by: auth.profile?.full_name ?? auth.user?.email ?? "user", text: note.trim() }]
+        ? [
+            ...notes,
+            {
+              at: new Date().toISOString(),
+              by: auth.profile?.full_name ?? auth.user?.email ?? "user",
+              text: note.trim(),
+            },
+          ]
         : notes;
-      const { error } = await supabase.from("qualified_leads")
+      const { error } = await supabase
+        .from("qualified_leads")
         .update({
-          cs_status: status as never,
-          cs_notes: newNotes as never,
+          cs_status: status,
+          cs_notes: newNotes as Json,
           followup_at: followup ? new Date(followup).toISOString() : null,
           assigned_to: assignedTo,
         })
         .eq("id", lead.id);
       if (error) throw error;
       await supabase.from("activity_logs").insert({
-        actor_id: auth.user?.id, actor_name: auth.profile?.full_name, actor_role: auth.primaryRole,
-        action: "cs.updated", entity_type: "qualified_lead", entity_id: lead.id,
+        actor_id: auth.user?.id,
+        actor_name: auth.profile?.full_name,
+        actor_role: auth.primaryRole,
+        action: "cs.updated",
+        entity_type: "qualified_lead",
+        entity_id: lead.id,
         metadata: { status, hasNote: !!note.trim(), assigned_to: assignedTo },
       });
       toast.success("Saved");
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
       onSaved();
-    } catch (e) { toast.error((e as Error).message); }
-    finally { setBusy(false); }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
-
   return (
-    <div className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up" onClick={onClose}>
-      <div className="bg-card w-full max-w-lg h-full overflow-y-auto border-l border-border p-7 space-y-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card w-full max-w-lg h-full overflow-y-auto border-l border-border p-7 space-y-6 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div>
-          <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">Customer</div>
+          <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">
+            Customer
+          </div>
           <h2 className="text-[22px] font-semibold tracking-tight mt-1">{lead.customer_name}</h2>
-          <a href={`tel:${lead.customer_number}`} className="text-sm text-primary inline-flex items-center mt-1.5 hover:text-primary-glow transition-colors">
-            <Phone className="h-3.5 w-3.5 mr-1.5" />{lead.customer_number}
+          <a
+            href={`tel:${lead.customer_number}`}
+            className="text-sm text-primary inline-flex items-center mt-1.5 hover:text-primary-glow transition-colors"
+          >
+            <Phone className="h-3.5 w-3.5 mr-1.5" />
+            {formatPhone(lead.customer_number)}
           </a>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {(lead.main_area || lead.sub_area) && <Info label="Area" value={[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")} />}
+          {(lead.main_area || lead.sub_area) && (
+            <Info
+              label="Area"
+              value={[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")}
+            />
+          )}
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
         </div>
         {lead.context && <Info label="Context" value={lead.context} multiline />}
-        {lead.marketing_notes && <Info label="Marketing notes" value={lead.marketing_notes} multiline />}
+        {lead.marketing_notes && (
+          <Info label="Marketing notes" value={lead.marketing_notes} multiline />
+        )}
 
         <div className="border-t border-border pt-5 space-y-4">
           <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Status</Label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Status
+            </Label>
+            <Select value={status} onValueChange={(next) => setStatus(next as CsStatus)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {PIPELINE_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABEL[s] ?? s.replace(/_/g, " ")}</SelectItem>)}
+                {PIPELINE_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {STATUS_LABEL[s] ?? s.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Assigned to</Label>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Assigned to
+            </Label>
             {isAdmin ? (
               <Select
                 value={assignedTo ?? UNASSIGNED_VALUE}
                 onValueChange={(v) => setAssignedTo(v === UNASSIGNED_VALUE ? null : v)}
               >
-                <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
                   {team.map((m) => (
@@ -617,7 +855,7 @@ function LeadDrawer({
                   <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
                   {assignee ? (
                     <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
-                      {assignedToMe ? "You" : (assignee.full_name || assignee.email)}
+                      {assignedToMe ? "You" : assignee.full_name || assignee.email}
                     </span>
                   ) : (
                     <span className="italic text-muted-foreground/70">Unassigned</span>
@@ -638,22 +876,36 @@ function LeadDrawer({
             )}
           </div>
           <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Follow-up at</Label>
-            <Input type="datetime-local" value={followup} onChange={(e) => setFollowup(e.target.value)} />
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Follow-up at
+            </Label>
+            <Input
+              type="datetime-local"
+              value={followup}
+              onChange={(e) => setFollowup(e.target.value)}
+            />
           </div>
           <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">Comment</Label>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Comment
+            </Label>
             <Textarea
               rows={3}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Write what happened in your own words — e.g. customer is interested, already done by someone else, asked to message later…"
             />
-            <p className="text-[11px] text-muted-foreground mt-1.5">Free-text comment. Appended to the history when you save.</p>
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Free-text comment. Appended to the history when you save.
+            </p>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose} disabled={busy}>Close</Button>
-            <Button onClick={save} disabled={busy}>{busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save</Button>
+            <Button variant="outline" onClick={onClose} disabled={busy}>
+              Close
+            </Button>
+            <Button onClick={save} disabled={busy}>
+              {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
+            </Button>
           </div>
         </div>
 
@@ -665,8 +917,12 @@ function LeadDrawer({
             <div className="space-y-2.5">
               {[...notes].reverse().map((n, i) => (
                 <div key={i} className="bg-surface/60 border border-border rounded-md p-3">
-                  <div className="text-[11px] text-muted-foreground tabular-nums">{n.by} · {new Date(n.at).toLocaleString()}</div>
-                  <div className="text-[13px] mt-1 whitespace-pre-wrap leading-relaxed">{n.text}</div>
+                  <div className="text-[11px] text-muted-foreground tabular-nums">
+                    {n.by} · {new Date(n.at).toLocaleString()}
+                  </div>
+                  <div className="text-[13px] mt-1 whitespace-pre-wrap leading-relaxed">
+                    {n.text}
+                  </div>
                 </div>
               ))}
             </div>
@@ -677,12 +933,17 @@ function LeadDrawer({
   );
 }
 
-
 function Info({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
   return (
     <div>
-      <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">{label}</div>
-      <div className={cn("text-[13px] mt-1 leading-relaxed", multiline ? "whitespace-pre-wrap" : "")}>{value}</div>
+      <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">
+        {label}
+      </div>
+      <div
+        className={cn("text-[13px] mt-1 leading-relaxed", multiline ? "whitespace-pre-wrap" : "")}
+      >
+        {value}
+      </div>
     </div>
   );
 }

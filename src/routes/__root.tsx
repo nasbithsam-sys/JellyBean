@@ -25,8 +25,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:title", content: "Leadgrid CRM" },
       { property: "og:description", content: "Internal lead operations dashboard" },
       { name: "twitter:description", content: "Internal lead operations dashboard" },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0124fe2f-025d-4c1a-9b6c-d92b65573183/id-preview-f25bae7c--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1779779798915.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0124fe2f-025d-4c1a-9b6c-d92b65573183/id-preview-f25bae7c--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1779779798915.png" },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0124fe2f-025d-4c1a-9b6c-d92b65573183/id-preview-f25bae7c--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1779779798915.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0124fe2f-025d-4c1a-9b6c-d92b65573183/id-preview-f25bae7c--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1779779798915.png",
+      },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
     ],
@@ -65,7 +73,9 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
       router.invalidate();
       queryClient.invalidateQueries();
     });
@@ -85,7 +95,9 @@ function NotFound() {
       <div className="text-center">
         <h1 className="text-7xl font-semibold tracking-tight">404</h1>
         <p className="text-muted-foreground mt-3">This page doesn't exist.</p>
-        <a href="/" className="inline-block mt-5 text-primary hover:text-primary-glow transition">Back home →</a>
+        <a href="/" className="inline-block mt-5 text-primary hover:text-primary-glow transition">
+          Back home →
+        </a>
       </div>
     </div>
   );
@@ -97,7 +109,9 @@ function ErrorView({ error }: { error: Error }) {
       <div className="text-center max-w-md glass-card p-8">
         <h1 className="text-2xl font-semibold">Something went wrong</h1>
         <p className="text-sm text-muted-foreground mt-2">{error.message}</p>
-        <a href="/" className="inline-block mt-5 text-primary hover:text-primary-glow transition">Reload →</a>
+        <a href="/" className="inline-block mt-5 text-primary hover:text-primary-glow transition">
+          Reload →
+        </a>
       </div>
     </div>
   );

@@ -32,9 +32,12 @@ import {
   BookmarkCheck,
   Eye,
   PhoneOff,
+  Download,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
+import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
@@ -44,11 +47,8 @@ const DEFAULT_API_URL =
 const API_URL_KEY = "rawleads.apiUrl";
 const SHARED_START_ROW_KEY = "raw_leads.start_row";
 
-// raw_lead_cache table is new — types.ts hasn't been regenerated yet.
-// Use a loose-typed accessor so the build doesn't fail.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const sb = supabase as any;
 const TABLE = "raw_lead_cache";
+type RawLeadCacheUpdate = Database["public"]["Tables"]["raw_lead_cache"]["Update"];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Row = Record<string, string> & {
@@ -76,6 +76,7 @@ type CacheEntry = {
   lead_link: string | null;
   sheet_row: number | null;
 };
+const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
 
 const RAW_LEAD_COLUMNS = [
   "Account Name",
@@ -126,19 +127,25 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
 
 // ── Shared start-row state (synced across all users via Supabase) ─────────────
 async function loadSharedStartRow(): Promise<number> {
-  const { data, error } = await sb
+  const { data, error } = await supabase
     .from("shared_state")
     .select("value")
     .eq("key", SHARED_START_ROW_KEY)
     .maybeSingle();
   if (error) throw error;
-  const n = data?.value?.row;
+  const value = data?.value;
+  const n = value && typeof value === "object" && !Array.isArray(value) ? value.row : undefined;
   return typeof n === "number" && n > 0 ? n : 1;
 }
 
 async function saveSharedStartRow(row: number, userId: string | null): Promise<void> {
-  const { error } = await sb.from("shared_state").upsert(
-    { key: SHARED_START_ROW_KEY, value: { row }, updated_at: new Date().toISOString(), updated_by: userId },
+  const { error } = await supabase.from("shared_state").upsert(
+    {
+      key: SHARED_START_ROW_KEY,
+      value: { row },
+      updated_at: new Date().toISOString(),
+      updated_by: userId,
+    },
     { onConflict: "key" },
   );
   if (error) throw error;
@@ -176,16 +183,15 @@ async function fetchSheetRows(
   const rows = allRows.slice(0, cutoff);
   const nextRow = startRow + rows.length;
   return { rows, nextRow };
-
 }
 
 // ── Supabase cache helpers ────────────────────────────────────────────────────
 async function loadCache(): Promise<CacheEntry[]> {
-  const { data, error } = await sb
+  const { data, error } = await supabase
     .from(TABLE)
     .select("row_key, data, lead, phone, category, captured_at, lead_link, sheet_row")
     .order("captured_at", { ascending: false, nullsFirst: false })
-    .limit(5000);
+    .limit(1000);
   if (error) throw error;
   return (data ?? []) as CacheEntry[];
 }
@@ -194,14 +200,14 @@ async function upsertNewRows(rows: Row[], startRow: number) {
   if (!rows.length) return;
   const payload = rows.map((r, i) => ({
     row_key: keyFor(r),
-    data: r,
+    data: r as Json,
     lead: leadValueFromRow(r),
     captured_at: capturedIsoFromRow(r),
     lead_link: r["Lead Link"] || null,
     sheet_row: startRow + i,
   }));
   // Insert only fresh keys; ignore conflicts on row_key to preserve existing edits.
-  const { error } = await sb.from(TABLE).upsert(payload, {
+  const { error } = await supabase.from(TABLE).upsert(payload, {
     onConflict: "row_key",
     ignoreDuplicates: true,
   });
@@ -209,7 +215,10 @@ async function upsertNewRows(rows: Row[], startRow: number) {
 }
 
 async function patchEntry(row_key: string, patch: Partial<CacheEntry>) {
-  const { error } = await sb.from(TABLE).update(patch).eq("row_key", row_key);
+  const { error } = await supabase
+    .from(TABLE)
+    .update(patch as RawLeadCacheUpdate)
+    .eq("row_key", row_key);
   if (error) throw error;
 }
 
@@ -247,15 +256,20 @@ function Inner() {
   const startRowQuery = useQuery({
     queryKey: ["raw-leads-shared-start-row"],
     queryFn: loadSharedStartRow,
-    refetchInterval: 15_000,
-    refetchOnWindowFocus: true,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
   const startRow = startRowQuery.data ?? 1;
   const [startRowDraft, setStartRowDraft] = useState<string>(String(startRow));
-  useEffect(() => { setStartRowDraft(String(startRow)); }, [startRow]);
+  useEffect(() => {
+    setStartRowDraft(String(startRow));
+  }, [startRow]);
 
   const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong">("new");
   const [query, setQuery] = useState("");
+  const [leadFilter, setLeadFilter] = useState("all");
+  const [areaFilter, setAreaFilter] = useState("all");
+  const [visibleLimit, setVisibleLimit] = useState(80);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
 
@@ -272,7 +286,7 @@ function Inner() {
   });
 
   // Build action map keyed by row_key for fast lookup
-  const entries: CacheEntry[] = cacheQuery.data ?? [];
+  const entries: CacheEntry[] = cacheQuery.data ?? EMPTY_CACHE_ENTRIES;
   const actions = useMemo(() => {
     const m: Record<string, Action> = {};
     for (const e of entries) {
@@ -339,6 +353,15 @@ function Inner() {
     return b;
   }, [entries]);
 
+  const areaOptions = useMemo(() => {
+    const areas = new Set<string>();
+    for (const e of entries) {
+      const area = e.data["Account Area"]?.trim() || e.data["Sub Area / Neighborhood"]?.trim();
+      if (area) areas.add(area);
+    }
+    return Array.from(areas).sort();
+  }, [entries]);
+
   const visible = useMemo(() => {
     let list = buckets[tab];
     const q = query.trim().toLowerCase();
@@ -353,8 +376,38 @@ function Inner() {
         ].some((v) => (v ?? "").toString().toLowerCase().includes(q)),
       );
     }
+    if (leadFilter !== "all") {
+      list = list.filter((e) => effectiveLead(e.data, actions[e.row_key]) === leadFilter);
+    }
+    if (areaFilter !== "all") {
+      list = list.filter(
+        (e) =>
+          e.data["Account Area"] === areaFilter || e.data["Sub Area / Neighborhood"] === areaFilter,
+      );
+    }
     return list;
-  }, [buckets, tab, query]);
+  }, [actions, areaFilter, buckets, leadFilter, query, tab]);
+
+  const shownRows = visible.slice(0, visibleLimit);
+
+  function exportRows() {
+    downloadCsv(
+      "raw-leads.csv",
+      ["Row", "Account", "Sub Area", "Posted", "Lead", "Phone", "Area", "Incog Account", "Link"],
+      visible.map((entry) => [
+        entry.sheet_row ?? "",
+        entry.data["Account Name"] ?? "",
+        entry.data["Sub Area / Neighborhood"] ?? "",
+        entry.data["Posted Date & Time"] ?? "",
+        effectiveLead(entry.data, actions[entry.row_key]) || "",
+        formatPhone(entry.phone),
+        entry.data["Account Area"] ?? "",
+        entry.data["Incog Account"] ?? "",
+        entry.data["Lead Link"] ?? "",
+      ]),
+    );
+    toast.success(`Exported ${visible.length} raw lead${visible.length === 1 ? "" : "s"}`);
+  }
 
   function saveApiUrl() {
     const v = apiUrlDraft.trim();
@@ -462,6 +515,31 @@ function Inner() {
           />
         </div>
 
+        <Select value={leadFilter} onValueChange={setLeadFilter}>
+          <SelectTrigger className="h-9 w-[118px] text-[12px]">
+            <SelectValue placeholder="Lead" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All leads</SelectItem>
+            <SelectItem value="yes">Lead yes</SelectItem>
+            <SelectItem value="no">Lead no</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={areaFilter} onValueChange={setAreaFilter}>
+          <SelectTrigger className="h-9 w-[150px] text-[12px]">
+            <SelectValue placeholder="Area" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All areas</SelectItem>
+            {areaOptions.map((area) => (
+              <SelectItem key={area} value={area}>
+                {area}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         {tab === "new" && (
           <Button
             size="sm"
@@ -482,12 +560,14 @@ function Inner() {
                 ),
               );
               try {
-                const { error } = await sb
+                const { error } = await supabase
                   .from(TABLE)
                   .update({ category: "wrong" })
                   .in("row_key", keys);
                 if (error) throw error;
-                toast.success(`Moved ${targets.length} "No" lead${targets.length === 1 ? "" : "s"} to Wrong posts`);
+                toast.success(
+                  `Moved ${targets.length} "No" lead${targets.length === 1 ? "" : "s"} to Wrong posts`,
+                );
               } catch (e) {
                 toast.error((e as Error).message);
                 cacheQuery.refetch();
@@ -522,6 +602,10 @@ function Inner() {
               <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
             )}
             Refresh
+          </Button>
+          <Button size="sm" variant="outline" className="h-9" onClick={exportRows}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export
           </Button>
         </div>
       </div>
@@ -579,11 +663,13 @@ function Inner() {
               {!cacheQuery.isLoading && visible.length === 0 && !error && (
                 <tr>
                   <td colSpan={12} className="text-center py-12 text-muted-foreground">
-                    {tab === "new" ? "No leads in this view. Click Refresh to pull from sheet." : "Nothing here yet."}
+                    {tab === "new"
+                      ? "No leads in this view. Click Refresh to pull from sheet."
+                      : "Nothing here yet."}
                   </td>
                 </tr>
               )}
-              {visible.map((e) => {
+              {shownRows.map((e) => {
                 const r = e.data;
                 const k = e.row_key;
                 const a = actions[k] || {};
@@ -621,16 +707,22 @@ function Inner() {
                         {r["Post Text"] || "—"}
                       </div>
                     </td>
-                    <td className="border-b border-border px-2.5 py-2" onClick={(ev) => ev.stopPropagation()}>
+                    <td
+                      className="border-b border-border px-2.5 py-2"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
                       <Select
                         value={lv || ""}
                         onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
                       >
-                        <SelectTrigger className={cn(
-                          "h-7 text-[11px]",
-                          lv === "yes" && "bg-success/15 text-success border-success/30",
-                          lv === "no" && "bg-destructive/15 text-destructive border-destructive/30",
-                        )}>
+                        <SelectTrigger
+                          className={cn(
+                            "h-7 text-[11px]",
+                            lv === "yes" && "bg-success/15 text-success border-success/30",
+                            lv === "no" &&
+                              "bg-destructive/15 text-destructive border-destructive/30",
+                          )}
+                        >
                           <SelectValue placeholder="—" />
                         </SelectTrigger>
                         <SelectContent>
@@ -639,7 +731,10 @@ function Inner() {
                         </SelectContent>
                       </Select>
                     </td>
-                    <td className="border-b border-border px-2.5 py-2" onClick={(ev) => ev.stopPropagation()}>
+                    <td
+                      className="border-b border-border px-2.5 py-2"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
                       {r["Lead Link"] ? (
                         <a
                           href={r["Lead Link"]}
@@ -671,7 +766,10 @@ function Inner() {
                     >
                       {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="border-b border-border px-2 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
+                    <td
+                      className="border-b border-border px-2 py-2 text-center"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
                       <Button
                         size="sm"
                         variant="ghost"
@@ -690,9 +788,17 @@ function Inner() {
         </div>
       </div>
 
+      {visible.length > shownRows.length && (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={() => setVisibleLimit((n) => n + 80)}>
+            Load more ({visible.length - shownRows.length} remaining)
+          </Button>
+        </div>
+      )}
+
       <div className="text-[11.5px] text-muted-foreground">
-        {visible.length} {visible.length === 1 ? "row" : "rows"} shown · {entries.length} total in
-        database
+        {shownRows.length} of {visible.length} {visible.length === 1 ? "row" : "rows"} shown ·{" "}
+        {entries.length} loaded from database
       </div>
 
       {/* Source settings */}
@@ -863,7 +969,9 @@ function LeadDetailDialog({
                 value={effectiveLead(r, { lead: entry.lead }) || ""}
                 onValueChange={(v) => onLeadChange(v as "yes" | "no")}
               >
-                <SelectTrigger><SelectValue placeholder="Set Yes / No" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Set Yes / No" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="yes">Yes</SelectItem>
                   <SelectItem value="no">No</SelectItem>
@@ -955,7 +1063,7 @@ function QualifyDialog({
     try {
       const { error } = await supabase.from("qualified_leads").insert({
         customer_name: customerName.trim(),
-        customer_number: customerNumber.trim(),
+        customer_number: formatPhone(customerNumber.trim()) || customerNumber.trim(),
         context: context.trim() || null,
         pass_it_to: passItTo.trim() || null,
         sub_area: subArea.trim() || null,

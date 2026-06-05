@@ -25,6 +25,13 @@ export interface AuthState {
   signOut: () => Promise<void>;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    promise.then(resolve, reject).finally(() => window.clearTimeout(timer));
+  });
+}
+
 export function useAuth(): AuthState {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -39,7 +46,11 @@ export function useAuth(): AuthState {
       return;
     }
     const [{ data: prof }, { data: rolesData }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("user_id", uid).maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("id, user_id, full_name, username, email, is_active, otp_required")
+        .eq("user_id", uid)
+        .maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", uid),
     ]);
     setProfile((prof as AuthProfile | null) ?? null);
@@ -57,11 +68,24 @@ export function useAuth(): AuthState {
       }, 0);
     });
     // Then check current session
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      void loadProfileAndRoles(data.session?.user?.id).finally(() => setLoading(false));
-    });
+    withTimeout(supabase.auth.getSession(), 8000, "Supabase session lookup")
+      .then(({ data }) => {
+        setSession(data.session);
+        setUser(data.session?.user ?? null);
+        return withTimeout(
+          loadProfileAndRoles(data.session?.user?.id),
+          8000,
+          "Supabase profile lookup",
+        );
+      })
+      .catch((error) => {
+        console.error("[Auth] Could not initialize session", error);
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setRoles([]);
+      })
+      .finally(() => setLoading(false));
     return () => sub.subscription.unsubscribe();
   }, [loadProfileAndRoles]);
 

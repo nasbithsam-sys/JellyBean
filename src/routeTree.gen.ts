@@ -19,6 +19,7 @@ import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppRawLeadsRouteImport } from './routes/app.raw-leads'
 import { Route as AppMapRouteImport } from './routes/app.map'
 import { Route as AppLogsRouteImport } from './routes/app.logs'
+import { Route as AppHealthRouteImport } from './routes/app.health'
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
@@ -73,6 +74,11 @@ const AppLogsRoute = AppLogsRouteImport.update({
   path: '/logs',
   getParentRoute: () => AppRoute,
 } as any)
+const AppHealthRoute = AppHealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCsLeadsRoute = AppCsLeadsRouteImport.update({
   id: '/cs-leads',
   path: '/cs-leads',
@@ -97,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
+  '/app/health': typeof AppHealthRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
   '/app/raw-leads': typeof AppRawLeadsRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
+  '/app/health': typeof AppHealthRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
   '/app/raw-leads': typeof AppRawLeadsRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
+  '/app/health': typeof AppHealthRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
   '/app/raw-leads': typeof AppRawLeadsRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
+    | '/app/health'
     | '/app/logs'
     | '/app/map'
     | '/app/raw-leads'
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
+    | '/app/health'
     | '/app/logs'
     | '/app/map'
     | '/app/raw-leads'
@@ -173,6 +184,7 @@ export interface FileRouteTypes {
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
+    | '/app/health'
     | '/app/logs'
     | '/app/map'
     | '/app/raw-leads'
@@ -260,6 +272,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLogsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/health': {
+      id: '/app/health'
+      path: '/health'
+      fullPath: '/app/health'
+      preLoaderRoute: typeof AppHealthRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/cs-leads': {
       id: '/app/cs-leads'
       path: '/cs-leads'
@@ -288,6 +307,7 @@ interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppBrowserProfilesRoute: typeof AppBrowserProfilesRoute
   AppCsLeadsRoute: typeof AppCsLeadsRoute
+  AppHealthRoute: typeof AppHealthRoute
   AppLogsRoute: typeof AppLogsRoute
   AppMapRoute: typeof AppMapRoute
   AppRawLeadsRoute: typeof AppRawLeadsRoute
@@ -300,6 +320,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppBrowserProfilesRoute: AppBrowserProfilesRoute,
   AppCsLeadsRoute: AppCsLeadsRoute,
+  AppHealthRoute: AppHealthRoute,
   AppLogsRoute: AppLogsRoute,
   AppMapRoute: AppMapRoute,
   AppRawLeadsRoute: AppRawLeadsRoute,
@@ -319,3 +340,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

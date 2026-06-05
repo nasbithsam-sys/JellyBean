@@ -9,6 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { consumeLoginOtp } from "@/lib/login-otp.functions";
 
+type LoginProfile = {
+  is_active: boolean;
+};
+
+type LoginSettings = {
+  admin_otp_required: boolean;
+};
+
 export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
@@ -27,16 +35,32 @@ function LoginPage() {
     void (async () => {
       const { data: sess } = await supabase.auth.getSession();
       if (!sess.session) return;
-      const needs = await userNeedsOtp(sess.session.user.id);
-      if (needs) setOtpRequired(true);
+      const access = await getLoginAccess(sess.session.user.id);
+      if (!access.isActive) {
+        await supabase.auth.signOut();
+        toast.error("Your account is inactive. Please contact an administrator.");
+        return;
+      }
+      if (access.needsOtp) setOtpRequired(true);
       else navigate({ to: "/app" });
     })();
   }, [navigate]);
 
-  async function userNeedsOtp(uid: string): Promise<boolean> {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", uid);
-    const roles = (data ?? []).map((r) => r.role as string);
-    return roles.includes("marketing") || roles.includes("cs");
+  async function getLoginAccess(uid: string): Promise<{ isActive: boolean; needsOtp: boolean }> {
+    const [{ data: profile }, { data: rolesData }, { data: settings }] = await Promise.all([
+      supabase.from("profiles").select("is_active").eq("user_id", uid).maybeSingle(),
+      supabase.from("user_roles").select("role").eq("user_id", uid),
+      supabase.from("app_settings").select("admin_otp_required").maybeSingle(),
+    ]);
+    const roles = (rolesData ?? []).map((r) => r.role as string);
+    const isAdmin = roles.includes("admin");
+    const roleNeedsOtp = roles.includes("marketing") || roles.includes("cs");
+    const adminNeedsOtp =
+      isAdmin && Boolean((settings as LoginSettings | null)?.admin_otp_required);
+    return {
+      isActive: (profile as LoginProfile | null)?.is_active ?? false,
+      needsOtp: roleNeedsOtp || adminNeedsOtp,
+    };
   }
 
   async function resolveEmail(id: string): Promise<string | null> {
@@ -61,10 +85,20 @@ function LoginPage() {
         toast.error(error.message);
         return;
       }
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && (await userNeedsOtp(user.id))) {
-        setOtpRequired(true);
-        return;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const access = await getLoginAccess(user.id);
+        if (!access.isActive) {
+          await supabase.auth.signOut();
+          toast.error("Your account is inactive. Please contact an administrator.");
+          return;
+        }
+        if (access.needsOtp) {
+          setOtpRequired(true);
+          return;
+        }
       }
       navigate({ to: "/app" });
     } finally {
@@ -87,22 +121,25 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
-      {/* Decorative glow */}
-      <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-[460px] w-[820px] rounded-full bg-primary/20 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-0 right-0 h-[300px] w-[500px] rounded-full bg-primary-glow/10 blur-[120px] pointer-events-none" />
-
       <div className="w-full max-w-sm relative animate-fade-in-up">
-        <div className="mb-8 flex flex-col items-center">
-          <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary to-primary-glow grid place-items-center shadow-lg ring-1 ring-primary/40">
-            <span className="text-[16px] font-semibold text-primary-foreground">L</span>
+        <div className="mb-6 flex flex-col items-start border-l-[3px] border-primary pl-3">
+          <div className="h-10 w-10 rounded-sm border border-border bg-card grid place-items-center">
+            <span className="text-[13px] font-mono font-semibold text-primary">LG</span>
           </div>
-          <h1 className="text-[22px] font-semibold tracking-tight mt-4">Welcome back</h1>
-          <p className="text-[13px] text-muted-foreground mt-1">Sign in to Leadgrid</p>
+          <h1 className="text-[22px] font-semibold tracking-normal mt-4">Leadgrid access</h1>
+          <p className="text-[12px] text-muted-foreground mt-1 font-mono uppercase tracking-wide">
+            Field Ops Console
+          </p>
         </div>
         {otpRequired ? (
           <form onSubmit={handleOtpVerify} className="glass-card p-6 space-y-4 ring-glow">
             <div>
-              <Label htmlFor="otp" className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium">One-time login code</Label>
+              <Label
+                htmlFor="otp"
+                className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium"
+              >
+                One-time login code
+              </Label>
               <Input
                 id="otp"
                 inputMode="numeric"
@@ -125,7 +162,12 @@ function LoginPage() {
         ) : (
           <form onSubmit={handleSignIn} className="glass-card p-6 space-y-4 ring-glow">
             <div>
-              <Label htmlFor="id" className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium">Email or username</Label>
+              <Label
+                htmlFor="id"
+                className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium"
+              >
+                Email or username
+              </Label>
               <Input
                 id="id"
                 autoComplete="username"
@@ -136,7 +178,12 @@ function LoginPage() {
               />
             </div>
             <div>
-              <Label htmlFor="pw" className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium">Password</Label>
+              <Label
+                htmlFor="pw"
+                className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium"
+              >
+                Password
+              </Label>
               <Input
                 id="pw"
                 type="password"
@@ -147,7 +194,11 @@ function LoginPage() {
                 className="mt-2 h-10"
               />
             </div>
-            <Button type="submit" className="w-full h-10 shadow-md hover:shadow-lg" disabled={submitting}>
+            <Button
+              type="submit"
+              className="w-full h-10 shadow-md hover:shadow-lg"
+              disabled={submitting}
+            >
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Sign in
             </Button>

@@ -7,16 +7,30 @@ import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2, Download, Rocket, Trash2, Search, Globe, Plus, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import { launchIncognitonProfile } from "@/lib/incogniton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/app/browser-profiles")({ component: Page });
 
 type LaunchHistoryEntry = { at: string; by: string | null };
+type IncognitonProfileInsert = Database["public"]["Tables"]["incogniton_profiles"]["Insert"];
 
 type Profile = {
   id: string;
@@ -64,7 +78,9 @@ function Inner() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("incogniton_profiles")
-        .select("*")
+        .select(
+          "id, profile_name, incogniton_profile_id, group_name, account_area, latitude, longitude, last_launched_at, launched_by_name, launched_by_email, created_at, launch_history",
+        )
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as unknown as Profile[];
@@ -72,7 +88,10 @@ function Inner() {
   });
 
   const groups = useMemo(
-    () => Array.from(new Set((profiles.data ?? []).map((p) => p.group_name).filter((g): g is string => !!g))).sort(),
+    () =>
+      Array.from(
+        new Set((profiles.data ?? []).map((p) => p.group_name).filter((g): g is string => !!g)),
+      ).sort(),
     [profiles.data],
   );
 
@@ -96,18 +115,20 @@ function Inner() {
       const who = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Unknown";
       const nowIso = new Date().toISOString();
       const prevHistory = Array.isArray(p.launch_history) ? p.launch_history : [];
-      const nextHistory = [{ at: nowIso, by: who }, ...prevHistory].slice(0, 5);
+      const nextHistory = [{ at: nowIso, by: who }, ...prevHistory].slice(0, 100);
       supabase
         .from("incogniton_profiles")
         .update({
           last_launched_at: nowIso,
           launched_by_name: who,
           launched_by_email: user?.email ?? null,
-          launch_history: nextHistory as never,
+          launch_history: nextHistory as Json,
         })
         .eq("id", p.id)
         .then(() => qc.invalidateQueries({ queryKey: ["incog_profiles"] }));
-      toast.success("Launch command sent ✓ — Incogniton should open the profile now.", { id: "launch" });
+      toast.success("Launch command sent ✓ — Incogniton should open the profile now.", {
+        id: "launch",
+      });
     } catch (e) {
       toast.error(
         "Could not launch. Make sure: (1) Incogniton is open, (2) the Bridge is installed on this PC. See README.txt in the bridge folder.",
@@ -135,9 +156,10 @@ function Inner() {
       <div className="text-[12px] bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-start gap-2">
         <Info className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
         <div>
-          <span className="font-medium">How launching works:</span> Click <strong>Add Profile</strong> below to save
-          your Incogniton profile ID and name. Then hit <strong>Launch</strong> — it sends the open command directly to
-          Incogniton on your PC. Make sure Incogniton is running. Not sure of your profile ID?{" "}
+          <span className="font-medium">How launching works:</span> Click{" "}
+          <strong>Add Profile</strong> below to save your Incogniton profile ID and name. Then hit{" "}
+          <strong>Launch</strong> — it sends the open command directly to Incogniton on your PC.
+          Make sure Incogniton is running. Not sure of your profile ID?{" "}
           <button className="underline text-primary" onClick={() => setHowToOpen(true)}>
             See how to find it.
           </button>
@@ -179,7 +201,11 @@ function Inner() {
           </thead>
           <tbody>
             {profiles.isLoading && (
-              <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">Loading…</td></tr>
+              <tr>
+                <td colSpan={7} className="text-center py-6 text-muted-foreground">
+                  Loading…
+                </td>
+              </tr>
             )}
             {!profiles.isLoading && filtered.length === 0 && (
               <tr>
@@ -194,7 +220,9 @@ function Inner() {
               return (
                 <tr key={p.id}>
                   <td className="font-medium">{p.profile_name}</td>
-                  <td className="font-mono text-[11px] text-muted-foreground">{p.incogniton_profile_id}</td>
+                  <td className="font-mono text-[11px] text-muted-foreground">
+                    {p.incogniton_profile_id}
+                  </td>
                   <td className="text-[12.5px]">{p.group_name ?? "—"}</td>
                   <td className="text-[12.5px]">{p.account_area ?? "—"}</td>
                   <td className="text-[11.5px] font-mono text-muted-foreground">
@@ -210,23 +238,41 @@ function Inner() {
                         className="flex flex-col gap-0.5 text-left hover:opacity-80"
                         title="View last 5 launches"
                       >
-                        <span className={cn(
-                          "text-[10.5px] px-2 py-0.5 rounded-full border w-fit",
-                          status === "Active" ? "bg-success/10 text-success border-success/30" : "bg-muted text-muted-foreground border-border",
-                        )}>{status}</span>
+                        <span
+                          className={cn(
+                            "text-[10.5px] px-2 py-0.5 rounded-full border w-fit",
+                            status === "Active"
+                              ? "bg-success/10 text-success border-success/30"
+                              : "bg-muted text-muted-foreground border-border",
+                          )}
+                        >
+                          {status}
+                        </span>
                         <span className="text-[11px] font-medium text-foreground pl-0.5">
                           {p.launched_by_name ?? p.launched_by_email ?? "Unknown"}
                         </span>
                         <span className="text-[10px] text-muted-foreground pl-0.5">
-                          {new Date(p.last_launched_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          {new Date(p.last_launched_at).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </span>
                       </button>
                     ) : (
-                      <span className="text-[11px] text-muted-foreground/50 italic">Never launched</span>
+                      <span className="text-[11px] text-muted-foreground/50 italic">
+                        Never launched
+                      </span>
                     )}
                   </td>
                   <td className="text-right space-x-1.5 whitespace-nowrap">
-                    <Button size="sm" variant="default" onClick={() => launch(p)} title="Launch in Incogniton">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => launch(p)}
+                      title="Launch in Incogniton"
+                    >
                       <Rocket className="h-3.5 w-3.5 mr-1" /> Launch
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => remove(p)} title="Delete">
@@ -244,11 +290,18 @@ function Inner() {
         <AddProfileDialog
           userId={auth.user?.id ?? null}
           onClose={() => setAddOpen(false)}
-          onSaved={() => { setAddOpen(false); qc.invalidateQueries({ queryKey: ["incog_profiles"] }); }}
+          onSaved={() => {
+            setAddOpen(false);
+            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+          }}
         />
       )}
       {exportOpen && (
-        <ExportDialog profiles={profiles.data ?? []} groups={groups} onClose={() => setExportOpen(false)} />
+        <ExportDialog
+          profiles={profiles.data ?? []}
+          groups={groups}
+          onClose={() => setExportOpen(false)}
+        />
       )}
       {historyFor && (
         <Dialog open onOpenChange={(o) => !o && setHistoryFor(null)}>
@@ -259,12 +312,19 @@ function Inner() {
             <div className="space-y-2">
               {(historyFor.launch_history ?? []).length === 0 ? (
                 <div className="text-[12.5px] text-muted-foreground">No history yet.</div>
-              ) : (historyFor.launch_history ?? []).slice(0, 5).map((h, i) => (
-                <div key={i} className="flex justify-between text-[12.5px] bg-muted/30 rounded px-3 py-2">
-                  <span className="font-medium">{h.by ?? "Unknown"}</span>
-                  <span className="text-muted-foreground tabular-nums">{new Date(h.at).toLocaleString()}</span>
-                </div>
-              ))}
+              ) : (
+                (historyFor.launch_history ?? []).slice(0, 5).map((h, i) => (
+                  <div
+                    key={i}
+                    className="flex justify-between text-[12.5px] bg-muted/30 rounded px-3 py-2"
+                  >
+                    <span className="font-medium">{h.by ?? "Unknown"}</span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {new Date(h.at).toLocaleString()}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </DialogContent>
         </Dialog>
@@ -307,8 +367,8 @@ function Inner() {
               </ol>
             </div>
             <div className="bg-muted/40 rounded p-3 text-[12px] text-muted-foreground">
-              <strong>Tip:</strong> The profile name is just a label for your CRM — it doesn't need to match the name in
-              Incogniton exactly, but keeping them the same avoids confusion.
+              <strong>Tip:</strong> The profile name is just a label for your CRM — it doesn't need
+              to match the name in Incogniton exactly, but keeping them the same avoids confusion.
             </div>
           </div>
         </DialogContent>
@@ -342,14 +402,27 @@ function AddProfileDialog({
     const area = accountArea.trim();
     const latStr = latitude.trim();
     const lngStr = longitude.trim();
-    if (!id) { toast.error("Profile ID is required"); return; }
-    if (!name) { toast.error("Profile name is required"); return; }
-    if (!area) { toast.error("Account Area is required"); return; }
-    if (!latStr || !lngStr) { toast.error("Latitude and longitude are required"); return; }
+    if (!id) {
+      toast.error("Profile ID is required");
+      return;
+    }
+    if (!name) {
+      toast.error("Profile name is required");
+      return;
+    }
+    if (!area) {
+      toast.error("Account Area is required");
+      return;
+    }
+    if (!latStr || !lngStr) {
+      toast.error("Latitude and longitude are required");
+      return;
+    }
     const lat = parseFloat(latStr);
     const lng = parseFloat(lngStr);
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      toast.error("Latitude and longitude must be valid numbers"); return;
+      toast.error("Latitude and longitude must be valid numbers");
+      return;
     }
     setSaving(true);
     const { error } = await supabase.from("incogniton_profiles").upsert(
@@ -361,52 +434,88 @@ function AddProfileDialog({
         latitude: lat,
         longitude: lng,
         created_by: userId,
-      } as never,
+      } satisfies IncognitonProfileInsert,
       { onConflict: "incogniton_profile_id", ignoreDuplicates: false },
     );
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Profile saved ✓");
     onSaved();
   }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-card w-full max-w-md rounded-lg border p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="bg-card w-full max-w-md rounded-lg border p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div>
           <h2 className="text-lg font-semibold">Add Incogniton Profile</h2>
           <p className="text-[12px] text-muted-foreground mt-1">
-            Only Group is optional. Geo coordinates will plot the profile on the map with a 50-mile radius.
+            Only Group is optional. Geo coordinates will plot the profile on the map with a 50-mile
+            radius.
           </p>
         </div>
 
         <div className="space-y-3">
           <Field label="Profile ID *">
-            <Input value={profileId} onChange={(e) => setProfileId(e.target.value)} placeholder="e.g. 1234567890 or abc-def-123" autoFocus />
+            <Input
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
+              placeholder="e.g. 1234567890 or abc-def-123"
+              autoFocus
+            />
           </Field>
           <Field label="Profile Name *">
-            <Input value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="e.g. Account A – Facebook" />
+            <Input
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="e.g. Account A – Facebook"
+            />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Group (optional)">
-              <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. testing" />
+              <Input
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="e.g. testing"
+              />
             </Field>
             <Field label="Account Area *">
-              <Input value={accountArea} onChange={(e) => setAccountArea(e.target.value)} placeholder="e.g. CA · Fountain Valley" />
+              <Input
+                value={accountArea}
+                onChange={(e) => setAccountArea(e.target.value)}
+                placeholder="e.g. CA · Fountain Valley"
+              />
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Latitude *">
-              <Input value={latitude} onChange={(e) => setLatitude(e.target.value)} placeholder="e.g. 33.7092" inputMode="decimal" />
+              <Input
+                value={latitude}
+                onChange={(e) => setLatitude(e.target.value)}
+                placeholder="e.g. 33.7092"
+                inputMode="decimal"
+              />
             </Field>
             <Field label="Longitude *">
-              <Input value={longitude} onChange={(e) => setLongitude(e.target.value)} placeholder="e.g. -117.9536" inputMode="decimal" />
+              <Input
+                value={longitude}
+                onChange={(e) => setLongitude(e.target.value)}
+                placeholder="e.g. -117.9536"
+                inputMode="decimal"
+              />
             </Field>
           </div>
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
           <Button onClick={save} disabled={saving}>
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             Save Profile
@@ -419,22 +528,42 @@ function AddProfileDialog({
 
 // ── Export Dialog ─────────────────────────────────────────────────────────────
 
-function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; groups: string[]; onClose: () => void }) {
+function ExportDialog({
+  profiles,
+  groups,
+  onClose,
+}: {
+  profiles: Profile[];
+  groups: string[];
+  onClose: () => void;
+}) {
   const [group, setGroup] = useState(groups[0] ?? "__all__");
   const [format, setFormat] = useState<"csv" | "json">("csv");
 
   function download() {
-    const rows = group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
+    const rows =
+      group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
     if (rows.length === 0) return toast.error("No profiles in this group");
-    const fields = ["profile_name", "incogniton_profile_id", "group_name", "account_area"] as const;
+    const fields = [
+      "profile_name",
+      "incogniton_profile_id",
+      "group_name",
+      "account_area",
+      "latitude",
+      "longitude",
+      "last_launched_at",
+    ] as const;
     let blob: Blob;
     let filename: string;
     if (format === "csv") {
-      const escape = (v: string | null) => {
-        const s = v ?? "";
+      const escape = (v: string | number | null) => {
+        const s = v == null ? "" : String(v);
         return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
       };
-      const csv = [fields.join(","), ...rows.map((r) => fields.map((f) => escape(r[f])).join(","))].join("\n");
+      const csv = [
+        fields.join(","),
+        ...rows.map((r) => fields.map((f) => escape(r[f])).join(",")),
+      ].join("\n");
       blob = new Blob([csv], { type: "text/csv" });
       filename = `incogniton-${group}.csv`;
     } else {
@@ -454,7 +583,10 @@ function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; grou
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div className="bg-card w-full max-w-md rounded-lg border p-6" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="bg-card w-full max-w-md rounded-lg border p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-lg font-semibold mb-4">Export Profiles</h2>
         <div className="space-y-4">
           <div>
@@ -477,10 +609,16 @@ function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; grou
             <Label className="block mb-2">Format</Label>
             <div className="flex gap-4 text-sm">
               <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input type="radio" checked={format === "csv"} onChange={() => setFormat("csv")} /> CSV
+                <input type="radio" checked={format === "csv"} onChange={() => setFormat("csv")} />{" "}
+                CSV
               </label>
               <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input type="radio" checked={format === "json"} onChange={() => setFormat("json")} /> JSON
+                <input
+                  type="radio"
+                  checked={format === "json"}
+                  onChange={() => setFormat("json")}
+                />{" "}
+                JSON
               </label>
             </div>
           </div>
@@ -495,9 +633,6 @@ function ExportDialog({ profiles, groups, onClose }: { profiles: Profile[]; grou
     </div>
   );
 }
-
-
-
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

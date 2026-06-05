@@ -29,7 +29,11 @@ export function useTheme() {
   const toggle = () => {
     const next: Theme = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    try { window.localStorage.setItem(KEY, next); } catch {}
+    try {
+      window.localStorage.setItem(KEY, next);
+    } catch {
+      // Local storage can be unavailable in restricted browsing modes.
+    }
     apply(next);
   };
 

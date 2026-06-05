@@ -69,16 +69,24 @@ export async function pingIncogniton(): Promise<{
     }
     return {
       ok: false,
-      error: "Bridge is running but cannot reach Incogniton. Make sure Incogniton desktop app is open.",
+      error:
+        "Bridge is running but cannot reach Incogniton. Make sure Incogniton desktop app is open.",
       endpoint: `${BRIDGE_URL}/ping`,
     };
   } catch {
     return {
       ok: false,
-      error: "Incogniton Bridge is not running on this PC. Please run install.bat from the bridge folder.",
+      error:
+        "Incogniton Bridge is not running on this PC. Please run install.bat from the bridge folder.",
     };
   }
 }
 
 // Not needed anymore (bridge handles it) but kept for compatibility
-export type IncognitonProbe = { base: string; path: string; ok: boolean; status?: number; error?: string };
+export type IncognitonProbe = {
+  base: string;
+  path: string;
+  ok: boolean;
+  status?: number;
+  error?: string;
+};
