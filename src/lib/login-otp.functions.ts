@@ -56,11 +56,15 @@ export const consumeLoginOtp = createServerFn({ method: "POST" })
     const admin = adminClient();
     const { data: prof, error } = await admin
       .from("profiles")
-      .select("login_otp")
+      .select("login_otp, login_otp_updated_at")
       .eq("user_id", context.userId)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!prof?.login_otp) throw new Error("No login code issued. Ask an admin.");
+    const issuedAt = prof.login_otp_updated_at ? new Date(prof.login_otp_updated_at) : null;
+    if (!issuedAt || Date.now() - issuedAt.getTime() > OTP_MAX_AGE_MS) {
+      throw new Error("Login code has expired. Ask an admin to generate a new one.");
+    }
     if (prof.login_otp !== data.code.trim()) throw new Error("Invalid code");
     // Rotate to a new one-time code so it can't be reused
     const next = newCode();
