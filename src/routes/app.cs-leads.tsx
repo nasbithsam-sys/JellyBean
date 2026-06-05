@@ -28,7 +28,17 @@ import {
   UserPlus,
   UserCheck,
   Download,
+  Bell,
+  BellOff,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
@@ -48,7 +58,7 @@ function playNotificationBeep() {
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new Ctx();
-    const beep = (freq: number, start: number, dur: number, vol = 0.35) => {
+    const beep = (freq: number, start: number, dur: number, vol = 0.6) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
@@ -60,16 +70,36 @@ function playNotificationBeep() {
       osc.start(ctx.currentTime + start);
       osc.stop(ctx.currentTime + start + dur + 0.02);
     };
-    // Three-tone alert chime, repeated — clearly noticeable for CS agents.
-    beep(880, 0.0, 0.22);
-    beep(1175, 0.22, 0.22);
-    beep(1568, 0.46, 0.32);
-    beep(880, 0.95, 0.22);
-    beep(1175, 1.17, 0.22);
-    beep(1568, 1.41, 0.4);
-    setTimeout(() => ctx.close(), 2200);
+    // Loud three-tone alert chime, repeated three times — clearly audible
+    // even when CS has another tab focused.
+    for (let i = 0; i < 3; i++) {
+      const t0 = i * 1.0;
+      beep(880, t0 + 0.0, 0.22);
+      beep(1175, t0 + 0.22, 0.22);
+      beep(1568, t0 + 0.46, 0.38);
+    }
+    setTimeout(() => ctx.close(), 3500);
   } catch {
     // ignore — autoplay may be blocked until user interacts
+  }
+}
+
+function showBrowserNotification(title: string, body: string) {
+  try {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    const n = new Notification(title, {
+      body,
+      icon: "/favicon.ico",
+      tag: "cs-new-lead",
+      requireInteraction: false,
+    });
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch {
+    /* ignore */
   }
 }
 
@@ -221,6 +251,18 @@ function Inner() {
   // we mount a dedicated channel here so we get the *new row* payload to
   // surface the customer name in the toast.
   const armedRef = useRef(false);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">(
+    typeof window !== "undefined" && "Notification" in window
+      ? Notification.permission
+      : "unsupported",
+  );
+  const [incomingLead, setIncomingLead] = useState<{
+    name: string;
+    area: string | null;
+    context: string | null;
+    at: number;
+  } | null>(null);
+
   useEffect(() => {
     // Arm after first paint so we don't beep for historical rows during
     // initial subscription replay.
@@ -231,11 +273,28 @@ function Inner() {
     (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "qualified_leads" },
-      (payload: { new: { customer_name?: string } }) => {
+      (payload: {
+        new: {
+          customer_name?: string;
+          main_area?: string | null;
+          sub_area?: string | null;
+          context?: string | null;
+        };
+      }) => {
         if (!armedRef.current) return;
+        const name = payload.new?.customer_name ?? "incoming";
+        const area = payload.new?.main_area || payload.new?.sub_area || null;
         playNotificationBeep();
-        toast.success(`New lead: ${payload.new?.customer_name ?? "incoming"}`, {
-          duration: 6000,
+        showBrowserNotification(
+          "New lead forwarded to CS",
+          area ? `${name} — ${area}` : name,
+        );
+        toast.success(`New lead: ${name}`, { duration: 8000 });
+        setIncomingLead({
+          name,
+          area,
+          context: payload.new?.context ?? null,
+          at: Date.now(),
         });
       },
     );
@@ -245,6 +304,29 @@ function Inner() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const enableAlerts = async () => {
+    try {
+      if (!("Notification" in window)) {
+        toast.error("This browser does not support notifications");
+        return;
+      }
+      const perm = await Notification.requestPermission();
+      setNotifPermission(perm);
+      // Play a short test tone — this also unlocks the AudioContext so
+      // future real-time alerts can play without a user gesture.
+      playNotificationBeep();
+      if (perm === "granted") {
+        showBrowserNotification("Alerts enabled", "You'll be pinged for new CS leads.");
+        toast.success("Alerts enabled — you'll hear and see new leads.");
+      } else {
+        toast.message("Sound enabled. Allow notifications in the browser for pop-ups.");
+      }
+    } catch {
+      toast.error("Could not enable alerts");
+    }
+  };
+
 
   const [activeStatus, setActiveStatus] = useState<CsStatus>("new");
 
@@ -356,6 +438,26 @@ function Inner() {
             <span className="font-semibold tabular-nums">{sentToday.data ?? "—"}</span>
           </div>
           <Button
+            variant={notifPermission === "granted" ? "outline" : "default"}
+            size="sm"
+            className="h-9"
+            onClick={enableAlerts}
+            title={
+              notifPermission === "granted"
+                ? "Alerts on — click to test"
+                : notifPermission === "denied"
+                  ? "Notifications blocked in browser settings — click to enable sound"
+                  : "Enable sound + pop-up alerts for new leads"
+            }
+          >
+            {notifPermission === "granted" ? (
+              <Bell className="h-3.5 w-3.5 mr-1.5" />
+            ) : (
+              <BellOff className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {notifPermission === "granted" ? "Alerts on" : "Enable alerts"}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             className="h-9"
@@ -448,6 +550,54 @@ function Inner() {
           }}
         />
       )}
+
+      <Dialog open={!!incomingLead} onOpenChange={(o) => !o && setIncomingLead(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-4 w-4 text-primary" />
+              New lead forwarded to CS
+            </DialogTitle>
+            <DialogDescription>
+              A new qualified lead just landed in your pipeline.
+            </DialogDescription>
+          </DialogHeader>
+          {incomingLead && (
+            <div className="space-y-2 text-sm">
+              <div>
+                <div className="text-muted-foreground text-xs">Customer</div>
+                <div className="font-semibold">{incomingLead.name}</div>
+              </div>
+              {incomingLead.area && (
+                <div>
+                  <div className="text-muted-foreground text-xs">Area</div>
+                  <div>{incomingLead.area}</div>
+                </div>
+              )}
+              {incomingLead.context && (
+                <div>
+                  <div className="text-muted-foreground text-xs">Context</div>
+                  <div className="line-clamp-3">{incomingLead.context}</div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIncomingLead(null)}>
+              Dismiss
+            </Button>
+            <Button
+              onClick={() => {
+                setActiveStatus("new");
+                qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                setIncomingLead(null);
+              }}
+            >
+              View new leads
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
