@@ -26,8 +26,10 @@ async function ensureRequesterIsAdmin(admin: ReturnType<typeof adminClient>, use
 }
 
 function newCode(): string {
-  return String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0");
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
+
+const OTP_MAX_AGE_MS = 72 * 60 * 60 * 1000; // 72 hours
 
 // Admin: generate (or rotate) the one-time login code for a user
 export const adminRotateLoginOtp = createServerFn({ method: "POST" })
