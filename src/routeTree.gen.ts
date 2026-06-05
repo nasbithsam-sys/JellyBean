@@ -19,6 +19,7 @@ import { Route as AppRawLeadsRouteImport } from './routes/app.raw-leads'
 import { Route as AppMapRouteImport } from './routes/app.map'
 import { Route as AppLogsRouteImport } from './routes/app.logs'
 import { Route as AppHealthRouteImport } from './routes/app.health'
+import { Route as AppForwardedLeadsRouteImport } from './routes/app.forwarded-leads'
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
@@ -73,6 +74,11 @@ const AppHealthRoute = AppHealthRouteImport.update({
   path: '/health',
   getParentRoute: () => AppRoute,
 } as any)
+const AppForwardedLeadsRoute = AppForwardedLeadsRouteImport.update({
+  id: '/forwarded-leads',
+  path: '/forwarded-leads',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCsLeadsRoute = AppCsLeadsRouteImport.update({
   id: '/cs-leads',
   path: '/cs-leads',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
+  '/app/forwarded-leads': typeof AppForwardedLeadsRoute
   '/app/health': typeof AppHealthRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
+  '/app/forwarded-leads': typeof AppForwardedLeadsRoute
   '/app/health': typeof AppHealthRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
@@ -126,6 +134,7 @@ export interface FileRoutesById {
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
+  '/app/forwarded-leads': typeof AppForwardedLeadsRoute
   '/app/health': typeof AppHealthRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
@@ -143,6 +152,7 @@ export interface FileRouteTypes {
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
+    | '/app/forwarded-leads'
     | '/app/health'
     | '/app/logs'
     | '/app/map'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
+    | '/app/forwarded-leads'
     | '/app/health'
     | '/app/logs'
     | '/app/map'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
+    | '/app/forwarded-leads'
     | '/app/health'
     | '/app/logs'
     | '/app/map'
@@ -259,6 +271,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppHealthRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/forwarded-leads': {
+      id: '/app/forwarded-leads'
+      path: '/forwarded-leads'
+      fullPath: '/app/forwarded-leads'
+      preLoaderRoute: typeof AppForwardedLeadsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/cs-leads': {
       id: '/app/cs-leads'
       path: '/cs-leads'
@@ -287,6 +306,7 @@ interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppBrowserProfilesRoute: typeof AppBrowserProfilesRoute
   AppCsLeadsRoute: typeof AppCsLeadsRoute
+  AppForwardedLeadsRoute: typeof AppForwardedLeadsRoute
   AppHealthRoute: typeof AppHealthRoute
   AppLogsRoute: typeof AppLogsRoute
   AppMapRoute: typeof AppMapRoute
@@ -300,6 +320,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppBrowserProfilesRoute: AppBrowserProfilesRoute,
   AppCsLeadsRoute: AppCsLeadsRoute,
+  AppForwardedLeadsRoute: AppForwardedLeadsRoute,
   AppHealthRoute: AppHealthRoute,
   AppLogsRoute: AppLogsRoute,
   AppMapRoute: AppMapRoute,
