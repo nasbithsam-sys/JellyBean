@@ -58,7 +58,7 @@ function playNotificationBeep() {
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new Ctx();
-    const beep = (freq: number, start: number, dur: number, vol = 0.35) => {
+    const beep = (freq: number, start: number, dur: number, vol = 0.6) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = "sine";
@@ -70,16 +70,36 @@ function playNotificationBeep() {
       osc.start(ctx.currentTime + start);
       osc.stop(ctx.currentTime + start + dur + 0.02);
     };
-    // Three-tone alert chime, repeated — clearly noticeable for CS agents.
-    beep(880, 0.0, 0.22);
-    beep(1175, 0.22, 0.22);
-    beep(1568, 0.46, 0.32);
-    beep(880, 0.95, 0.22);
-    beep(1175, 1.17, 0.22);
-    beep(1568, 1.41, 0.4);
-    setTimeout(() => ctx.close(), 2200);
+    // Loud three-tone alert chime, repeated three times — clearly audible
+    // even when CS has another tab focused.
+    for (let i = 0; i < 3; i++) {
+      const t0 = i * 1.0;
+      beep(880, t0 + 0.0, 0.22);
+      beep(1175, t0 + 0.22, 0.22);
+      beep(1568, t0 + 0.46, 0.38);
+    }
+    setTimeout(() => ctx.close(), 3500);
   } catch {
     // ignore — autoplay may be blocked until user interacts
+  }
+}
+
+function showBrowserNotification(title: string, body: string) {
+  try {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    const n = new Notification(title, {
+      body,
+      icon: "/favicon.ico",
+      tag: "cs-new-lead",
+      requireInteraction: false,
+    });
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch {
+    /* ignore */
   }
 }
 
