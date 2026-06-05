@@ -438,6 +438,26 @@ function Inner() {
             <span className="font-semibold tabular-nums">{sentToday.data ?? "—"}</span>
           </div>
           <Button
+            variant={notifPermission === "granted" ? "outline" : "default"}
+            size="sm"
+            className="h-9"
+            onClick={enableAlerts}
+            title={
+              notifPermission === "granted"
+                ? "Alerts on — click to test"
+                : notifPermission === "denied"
+                  ? "Notifications blocked in browser settings — click to enable sound"
+                  : "Enable sound + pop-up alerts for new leads"
+            }
+          >
+            {notifPermission === "granted" ? (
+              <Bell className="h-3.5 w-3.5 mr-1.5" />
+            ) : (
+              <BellOff className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {notifPermission === "granted" ? "Alerts on" : "Enable alerts"}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             className="h-9"
