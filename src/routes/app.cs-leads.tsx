@@ -550,6 +550,54 @@ function Inner() {
           }}
         />
       )}
+
+      <Dialog open={!!incomingLead} onOpenChange={(o) => !o && setIncomingLead(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-4 w-4 text-primary" />
+              New lead forwarded to CS
+            </DialogTitle>
+            <DialogDescription>
+              A new qualified lead just landed in your pipeline.
+            </DialogDescription>
+          </DialogHeader>
+          {incomingLead && (
+            <div className="space-y-2 text-sm">
+              <div>
+                <div className="text-muted-foreground text-xs">Customer</div>
+                <div className="font-semibold">{incomingLead.name}</div>
+              </div>
+              {incomingLead.area && (
+                <div>
+                  <div className="text-muted-foreground text-xs">Area</div>
+                  <div>{incomingLead.area}</div>
+                </div>
+              )}
+              {incomingLead.context && (
+                <div>
+                  <div className="text-muted-foreground text-xs">Context</div>
+                  <div className="line-clamp-3">{incomingLead.context}</div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIncomingLead(null)}>
+              Dismiss
+            </Button>
+            <Button
+              onClick={() => {
+                setActiveStatus("new");
+                qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                setIncomingLead(null);
+              }}
+            >
+              View new leads
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
