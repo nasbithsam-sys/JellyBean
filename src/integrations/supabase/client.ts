@@ -4,13 +4,14 @@ import type { Database } from './types';
 
 const SUPABASE_URL = "https://fjscqsatzsmfivpczaud.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqc2Nxc2F0enNtZml2cGN6YXVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTkzOTUsImV4cCI6MjA5NTE5NTM5NX0.9i3t27pIB1ztOimJJhQIlPS9HiM3nCSPa2HoMVC5Bgg";
+const supabaseStorage = typeof window !== "undefined" ? window.localStorage : undefined;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: supabaseStorage,
     persistSession: true,
     autoRefreshToken: true,
   }
