@@ -88,6 +88,7 @@ type Lead = {
   followup_at: string | null;
   assigned_at: string;
   assigned_to: string | null;
+  cs_outcome: "already_done" | "wrong_number" | "processed" | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -111,7 +112,7 @@ function Page() {
         description="Qualified leads handed off to CS — reach out, log the outcome, and add a comment."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "cs", "marketing"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "cs"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
@@ -164,7 +165,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to",
+          "id, customer_name, customer_number, context, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome",
         )
         .order("assigned_at", { ascending: false })
         .limit(500);
