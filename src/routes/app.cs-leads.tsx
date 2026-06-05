@@ -722,6 +722,7 @@ function LeadDrawer({
   const auth = useAuth();
   const qc = useQueryClient();
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
+  const [csOutcome, setCsOutcome] = useState<Lead["cs_outcome"]>(lead.cs_outcome);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
@@ -752,7 +753,8 @@ function LeadDrawer({
           cs_notes: newNotes as Json,
           followup_at: followup ? new Date(followup).toISOString() : null,
           assigned_to: assignedTo,
-        })
+          cs_outcome: csOutcome,
+        } as never)
         .eq("id", lead.id);
       if (error) throw error;
       await supabase.from("activity_logs").insert({
@@ -826,6 +828,27 @@ function LeadDrawer({
                     {STATUS_LABEL[s] ?? s.replace(/_/g, " ")}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Outcome (visible to forwarder)
+            </Label>
+            <Select
+              value={csOutcome ?? "__none__"}
+              onValueChange={(v) =>
+                setCsOutcome(v === "__none__" ? null : (v as Lead["cs_outcome"]))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— Not set —</SelectItem>
+                <SelectItem value="already_done">Already done</SelectItem>
+                <SelectItem value="wrong_number">Wrong number</SelectItem>
+                <SelectItem value="processed">Processed</SelectItem>
               </SelectContent>
             </Select>
           </div>
