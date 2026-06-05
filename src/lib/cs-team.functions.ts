@@ -19,8 +19,17 @@ export type CsTeamMember = { user_id: string; full_name: string; email: string }
 // user can call this — it only exposes name + email of teammates.
 export const listCsTeam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => {
+  .handler(async ({ context }) => {
     const admin = adminClient();
+    // Require the caller to hold any CRM role before exposing teammate PII.
+    const { data: callerRole, error: callerErr } = await admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .limit(1)
+      .maybeSingle();
+    if (callerErr) throw new Error(callerErr.message);
+    if (!callerRole) throw new Error("Forbidden: no CRM role");
     // Leads are only assignable to CS users (admins can assign but never receive).
     const { data: roleRows, error: rErr } = await admin
       .from("user_roles")
