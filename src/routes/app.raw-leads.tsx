@@ -119,9 +119,11 @@ function leadValueFromRow(r: Row): "yes" | "no" | null {
 }
 
 function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
+  // User override (from Supabase action cache) always wins over the sheet value,
+  // otherwise once the sheet says "yes"/"no" the dropdown can never be changed.
+  if (a?.lead === "yes" || a?.lead === "no") return a.lead;
   const base = leadValueFromRow(r);
   if (base) return base;
-  if (a?.lead === "yes" || a?.lead === "no") return a.lead;
   return "";
 }
 
