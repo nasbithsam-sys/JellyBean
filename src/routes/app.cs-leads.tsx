@@ -88,6 +88,7 @@ type Lead = {
   followup_at: string | null;
   assigned_at: string;
   assigned_to: string | null;
+  cs_outcome: "already_done" | "wrong_number" | "processed" | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -111,7 +112,7 @@ function Page() {
         description="Qualified leads handed off to CS — reach out, log the outcome, and add a comment."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "cs", "marketing"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "cs"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
@@ -164,7 +165,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to",
+          "id, customer_name, customer_number, context, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome",
         )
         .order("assigned_at", { ascending: false })
         .limit(500);
@@ -721,6 +722,7 @@ function LeadDrawer({
   const auth = useAuth();
   const qc = useQueryClient();
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
+  const [csOutcome, setCsOutcome] = useState<Lead["cs_outcome"]>(lead.cs_outcome);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
@@ -751,7 +753,8 @@ function LeadDrawer({
           cs_notes: newNotes as Json,
           followup_at: followup ? new Date(followup).toISOString() : null,
           assigned_to: assignedTo,
-        })
+          cs_outcome: csOutcome,
+        } as never)
         .eq("id", lead.id);
       if (error) throw error;
       await supabase.from("activity_logs").insert({
@@ -825,6 +828,27 @@ function LeadDrawer({
                     {STATUS_LABEL[s] ?? s.replace(/_/g, " ")}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Outcome (visible to forwarder)
+            </Label>
+            <Select
+              value={csOutcome ?? "__none__"}
+              onValueChange={(v) =>
+                setCsOutcome(v === "__none__" ? null : (v as Lead["cs_outcome"]))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— Not set —</SelectItem>
+                <SelectItem value="already_done">Already done</SelectItem>
+                <SelectItem value="wrong_number">Wrong number</SelectItem>
+                <SelectItem value="processed">Processed</SelectItem>
               </SelectContent>
             </Select>
           </div>

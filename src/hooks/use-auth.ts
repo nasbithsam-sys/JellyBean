@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AppRole = "admin" | "marketing" | "cs";
+export type AppRole = "admin" | "scraping" | "processor" | "cs";
 
 export interface AuthProfile {
   id: string;
@@ -99,11 +99,13 @@ export function useAuth(): AuthState {
 
   const primaryRole: AppRole | null = roles.includes("admin")
     ? "admin"
-    : roles.includes("marketing")
-      ? "marketing"
-      : roles.includes("cs")
-        ? "cs"
-        : null;
+    : roles.includes("scraping")
+      ? "scraping"
+      : roles.includes("processor")
+        ? "processor"
+        : roles.includes("cs")
+          ? "cs"
+          : null;
 
   return { loading, session, user, profile, roles, primaryRole, refresh, signOut };
 }

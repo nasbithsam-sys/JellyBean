@@ -40,16 +40,23 @@ const ADMIN: Item[] = [
   { to: "/app/settings", label: "Settings", icon: Settings, shortcut: "S" },
 ];
 
-const MARKETING: Item[] = [
+const SCRAPING_PROCESSOR: Item[] = [
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2 },
+  { to: "/app/forwarded-leads", label: "Forwarded Leads", icon: Headphones },
   { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe },
 ];
 
 const CS: Item[] = [{ to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard }];
 
+const ADMIN_FULL: Item[] = [
+  ...ADMIN.slice(0, 3),
+  { to: "/app/forwarded-leads", label: "Forwarded Leads", icon: Headphones },
+  ...ADMIN.slice(3),
+];
+
 function itemsForRole(role: AppRole | null): Item[] {
-  if (role === "admin") return ADMIN;
-  if (role === "marketing") return MARKETING;
+  if (role === "admin") return ADMIN_FULL;
+  if (role === "scraping" || role === "processor") return SCRAPING_PROCESSOR;
   if (role === "cs") return CS;
   return [];
 }

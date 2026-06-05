@@ -230,7 +230,9 @@ export type Database = {
           assigned_to: string | null
           context: string | null
           created_at: string
+          created_by: string | null
           cs_notes: Json
+          cs_outcome: string | null
           cs_status: Database["public"]["Enums"]["cs_status"]
           customer_name: string
           customer_number: string
@@ -250,7 +252,9 @@ export type Database = {
           assigned_to?: string | null
           context?: string | null
           created_at?: string
+          created_by?: string | null
           cs_notes?: Json
+          cs_outcome?: string | null
           cs_status?: Database["public"]["Enums"]["cs_status"]
           customer_name: string
           customer_number: string
@@ -270,7 +274,9 @@ export type Database = {
           assigned_to?: string | null
           context?: string | null
           created_at?: string
+          created_by?: string | null
           cs_notes?: Json
+          cs_outcome?: string | null
           cs_status?: Database["public"]["Enums"]["cs_status"]
           customer_name?: string
           customer_number?: string
@@ -450,6 +456,7 @@ export type Database = {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      current_user_has_role_text: { Args: { _role: string }; Returns: boolean }
       email_for_username: { Args: { _username: string }; Returns: string }
       generate_login_otp: { Args: never; Returns: string }
       has_role: {
@@ -461,7 +468,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "marketing" | "cs"
+      app_role: "admin" | "scraping" | "cs" | "processor"
       cs_status:
         | "new"
         | "called"
@@ -614,7 +621,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "marketing", "cs"],
+      app_role: ["admin", "scraping", "cs", "processor"],
       cs_status: [
         "new",
         "called",

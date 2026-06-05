@@ -30,7 +30,8 @@ function DashboardHome() {
   useEffect(() => {
     if (auth.loading) return;
     if (role === "cs") navigate({ to: "/app/cs-leads", replace: true });
-    else if (role === "marketing") navigate({ to: "/app/raw-leads", replace: true });
+    else if (role === "scraping" || role === "processor")
+      navigate({ to: "/app/raw-leads", replace: true });
   }, [auth.loading, role, navigate]);
 
   if (role !== "admin") {
@@ -146,7 +147,7 @@ function AdminDashboard() {
     <div>
       <PageHeader
         title={`${greeting}${firstName ? `, ${firstName}` : ""}`}
-        description="Overview of lead operations across marketing and CS."
+        description="Overview of lead operations across scraping, processor, and CS."
       />
       <PageBody className="space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
