@@ -251,6 +251,18 @@ function Inner() {
   // we mount a dedicated channel here so we get the *new row* payload to
   // surface the customer name in the toast.
   const armedRef = useRef(false);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">(
+    typeof window !== "undefined" && "Notification" in window
+      ? Notification.permission
+      : "unsupported",
+  );
+  const [incomingLead, setIncomingLead] = useState<{
+    name: string;
+    area: string | null;
+    context: string | null;
+    at: number;
+  } | null>(null);
+
   useEffect(() => {
     // Arm after first paint so we don't beep for historical rows during
     // initial subscription replay.
@@ -261,11 +273,28 @@ function Inner() {
     (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "qualified_leads" },
-      (payload: { new: { customer_name?: string } }) => {
+      (payload: {
+        new: {
+          customer_name?: string;
+          main_area?: string | null;
+          sub_area?: string | null;
+          context?: string | null;
+        };
+      }) => {
         if (!armedRef.current) return;
+        const name = payload.new?.customer_name ?? "incoming";
+        const area = payload.new?.main_area || payload.new?.sub_area || null;
         playNotificationBeep();
-        toast.success(`New lead: ${payload.new?.customer_name ?? "incoming"}`, {
-          duration: 6000,
+        showBrowserNotification(
+          "New lead forwarded to CS",
+          area ? `${name} — ${area}` : name,
+        );
+        toast.success(`New lead: ${name}`, { duration: 8000 });
+        setIncomingLead({
+          name,
+          area,
+          context: payload.new?.context ?? null,
+          at: Date.now(),
         });
       },
     );
@@ -275,6 +304,29 @@ function Inner() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const enableAlerts = async () => {
+    try {
+      if (!("Notification" in window)) {
+        toast.error("This browser does not support notifications");
+        return;
+      }
+      const perm = await Notification.requestPermission();
+      setNotifPermission(perm);
+      // Play a short test tone — this also unlocks the AudioContext so
+      // future real-time alerts can play without a user gesture.
+      playNotificationBeep();
+      if (perm === "granted") {
+        showBrowserNotification("Alerts enabled", "You'll be pinged for new CS leads.");
+        toast.success("Alerts enabled — you'll hear and see new leads.");
+      } else {
+        toast.message("Sound enabled. Allow notifications in the browser for pop-ups.");
+      }
+    } catch {
+      toast.error("Could not enable alerts");
+    }
+  };
+
 
   const [activeStatus, setActiveStatus] = useState<CsStatus>("new");
 
