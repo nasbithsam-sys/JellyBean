@@ -189,6 +189,43 @@ function Inner() {
   const [areaFilter, setAreaFilter] = useState("all");
   const [visibleLimit, setVisibleLimit] = useState(60);
   const [opened, setOpened] = useState<Lead | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const isCs = auth.primaryRole === "cs";
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  async function bulkAssignToMe() {
+    if (!auth.user?.id || selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const CHUNK = 25;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        const { error } = await supabase
+          .from("qualified_leads")
+          .update({ assigned_to: auth.user.id })
+          .in("id", slice);
+        if (error) throw error;
+      }
+      toast.success(`Assigned ${ids.length} lead${ids.length === 1 ? "" : "s"} to you`);
+      clearSelection();
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   const list = useQuery({
     queryKey: ["cs_leads"],
