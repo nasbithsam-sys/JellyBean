@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 const DefaultIcon = L.icon({
@@ -29,6 +29,15 @@ interface Props {
 }
 
 const FIFTY_MILES_IN_METERS = 80467;
+
+function ClickToPlace({ onPlace }: { onPlace: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(e) {
+      onPlace(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
 
 export default function LeafletMap({ placed, visuals }: Props) {
   const items: React.ReactNode[] = [];
