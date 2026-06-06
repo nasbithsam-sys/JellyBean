@@ -108,6 +108,7 @@ type Lead = {
   customer_name: string;
   customer_number: string;
   context: string | null;
+  post_text: string | null;
   pass_it_to: string | null;
   main_area: string | null;
   sub_area: string | null;
@@ -188,6 +189,43 @@ function Inner() {
   const [areaFilter, setAreaFilter] = useState("all");
   const [visibleLimit, setVisibleLimit] = useState(60);
   const [opened, setOpened] = useState<Lead | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const isCs = auth.primaryRole === "cs";
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  async function bulkAssignToMe() {
+    if (!auth.user?.id || selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const CHUNK = 25;
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        const { error } = await supabase
+          .from("qualified_leads")
+          .update({ assigned_to: auth.user.id })
+          .in("id", slice);
+        if (error) throw error;
+      }
+      toast.success(`Assigned ${ids.length} lead${ids.length === 1 ? "" : "s"} to you`);
+      clearSelection();
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   const list = useQuery({
     queryKey: ["cs_leads"],
@@ -195,7 +233,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome",
+          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome",
         )
         .order("assigned_at", { ascending: false })
         .limit(500);
@@ -517,17 +555,65 @@ function Inner() {
           No leads in this status.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {shownLeads.map((l) => (
-            <LeadCard
-              key={l.id}
-              lead={l}
-              team={team.data ?? []}
-              teamById={teamById}
-              onOpen={() => setOpened(l)}
-            />
-          ))}
-        </div>
+        <>
+          {isCs && (
+            <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-surface border border-border text-[12px]">
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground">
+                  {selectedIds.size > 0
+                    ? `${selectedIds.size} selected`
+                    : "Select leads to bulk-assign"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ids = new Set(shownLeads.map((l) => l.id));
+                    setSelectedIds(ids);
+                  }}
+                  className="text-primary hover:underline"
+                >
+                  Select all visible
+                </button>
+                {selectedIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <Button
+                size="sm"
+                className="h-8"
+                disabled={selectedIds.size === 0 || bulkBusy}
+                onClick={bulkAssignToMe}
+              >
+                {bulkBusy ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Assign {selectedIds.size > 0 ? selectedIds.size : ""} to myself
+              </Button>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {shownLeads.map((l) => (
+              <LeadCard
+                key={l.id}
+                lead={l}
+                team={team.data ?? []}
+                teamById={teamById}
+                onOpen={() => setOpened(l)}
+                selected={selectedIds.has(l.id)}
+                onToggleSelect={() => toggleSelect(l.id)}
+                showSelect={isCs}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       {visibleLeads.length > shownLeads.length && (
@@ -607,11 +693,17 @@ function LeadCard({
   team,
   teamById,
   onOpen,
+  selected = false,
+  onToggleSelect,
+  showSelect = false,
 }: {
   lead: Lead;
   team: CsTeamMember[];
   teamById: Map<string, CsTeamMember>;
   onOpen: () => void;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+  showSelect?: boolean;
 }) {
   const qc = useQueryClient();
   const auth = useAuth();
@@ -698,10 +790,23 @@ function LeadCard({
 
   return (
     <div
-      className="glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up"
+      className={cn(
+        "glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up",
+        selected && "ring-2 ring-primary border-primary",
+      )}
       onClick={onOpen}
     >
       <div className="flex items-start gap-3">
+        {showSelect && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-1.5 h-4 w-4 accent-primary cursor-pointer"
+            title="Select for bulk assignment"
+          />
+        )}
         <div className="h-10 w-10 shrink-0 rounded-sm bg-surface border border-border-strong grid place-items-center text-[12px] font-mono font-semibold text-primary">
           {initials || "·"}
         </div>
@@ -729,11 +834,28 @@ function LeadCard({
         </div>
       )}
 
-      {lead.context && (
-        <p className="mt-3 text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-2">
-          {lead.context}
-        </p>
+      {lead.post_text && (
+        <div className="mt-3">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+            Customer exact requirement
+          </div>
+          <p className="text-[12.5px] text-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
+            {lead.post_text}
+          </p>
+        </div>
       )}
+
+      {lead.context && (
+        <div className="mt-2">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+            Context
+          </div>
+          <p className="text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-2">
+            {lead.context}
+          </p>
+        </div>
+      )}
+
 
       <div className="mt-3" onClick={(e) => e.stopPropagation()}>
         <Select
@@ -958,6 +1080,9 @@ function LeadDrawer({
           )}
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
         </div>
+        {lead.post_text && (
+          <Info label="Customer exact requirement" value={lead.post_text} multiline />
+        )}
         {lead.context && <Info label="Context" value={lead.context} multiline />}
         {lead.marketing_notes && (
           <Info label="Marketing notes" value={lead.marketing_notes} multiline />

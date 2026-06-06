@@ -1058,7 +1058,8 @@ function QualifyDialog({
   const row = entry.data;
   const [customerName, setCustomerName] = useState(row["Account Name"] ?? "");
   const [customerNumber, setCustomerNumber] = useState(entry.phone ?? "");
-  const [context, setContext] = useState(row["Post Text"] ?? "");
+  const [postText, setPostText] = useState(row["Post Text"] ?? "");
+  const [context, setContext] = useState("");
   const [passItTo, setPassItTo] = useState("");
   const [subArea, setSubArea] = useState(row["Sub Area / Neighborhood"] ?? "");
   const [busy, setBusy] = useState(false);
@@ -1073,6 +1074,7 @@ function QualifyDialog({
       const { error } = await supabase.from("qualified_leads").insert({
         customer_name: customerName.trim(),
         customer_number: formatPhone(customerNumber.trim()) || customerNumber.trim(),
+        post_text: postText.trim() || null,
         context: context.trim() || null,
         pass_it_to: passItTo.trim() || null,
         sub_area: subArea.trim() || null,
@@ -1120,8 +1122,18 @@ function QualifyDialog({
             />
           </Field>
           <div className="col-span-2">
-            <Field label="Context">
-              <Textarea rows={4} value={context} onChange={(e) => setContext(e.target.value)} />
+            <Field label="Post Text (auto-filled from original post)">
+              <Textarea rows={4} value={postText} onChange={(e) => setPostText(e.target.value)} />
+            </Field>
+          </div>
+          <div className="col-span-2">
+            <Field label="Context (your notes for CS)">
+              <Textarea
+                rows={3}
+                value={context}
+                onChange={(e) => setContext(e.target.value)}
+                placeholder="Add any extra context for CS — e.g. urgency, special instructions…"
+              />
             </Field>
           </div>
         </div>

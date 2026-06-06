@@ -179,7 +179,6 @@ function Inner() {
                 <th className="text-left px-3 py-2 font-medium">Customer</th>
                 <th className="text-left px-3 py-2 font-medium">Phone</th>
                 <th className="text-left px-3 py-2 font-medium">Area</th>
-                <th className="text-left px-3 py-2 font-medium">CS Status</th>
                 <th className="text-left px-3 py-2 font-medium">Outcome</th>
                 <th className="text-left px-3 py-2 font-medium">Forwarded</th>
                 <th className="text-left px-3 py-2 font-medium">Updated</th>
@@ -205,7 +204,6 @@ function Inner() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 capitalize">{r.cs_status.replace(/_/g, " ")}</td>
                   <td className="px-3 py-2">
                     {r.cs_outcome ? (
                       <span
