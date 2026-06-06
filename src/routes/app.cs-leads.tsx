@@ -108,6 +108,7 @@ type Lead = {
   customer_name: string;
   customer_number: string;
   context: string | null;
+  post_text: string | null;
   pass_it_to: string | null;
   main_area: string | null;
   sub_area: string | null;
@@ -195,7 +196,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome",
+          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome",
         )
         .order("assigned_at", { ascending: false })
         .limit(500);
