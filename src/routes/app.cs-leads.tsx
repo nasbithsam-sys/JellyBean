@@ -790,10 +790,23 @@ function LeadCard({
 
   return (
     <div
-      className="glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up"
+      className={cn(
+        "glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up",
+        selected && "ring-2 ring-primary border-primary",
+      )}
       onClick={onOpen}
     >
       <div className="flex items-start gap-3">
+        {showSelect && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-1.5 h-4 w-4 accent-primary cursor-pointer"
+            title="Select for bulk assignment"
+          />
+        )}
         <div className="h-10 w-10 shrink-0 rounded-sm bg-surface border border-border-strong grid place-items-center text-[12px] font-mono font-semibold text-primary">
           {initials || "·"}
         </div>
@@ -821,11 +834,28 @@ function LeadCard({
         </div>
       )}
 
-      {lead.context && (
-        <p className="mt-3 text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-2">
-          {lead.context}
-        </p>
+      {lead.post_text && (
+        <div className="mt-3">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+            Customer exact requirement
+          </div>
+          <p className="text-[12.5px] text-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
+            {lead.post_text}
+          </p>
+        </div>
       )}
+
+      {lead.context && (
+        <div className="mt-2">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+            Context
+          </div>
+          <p className="text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-2">
+            {lead.context}
+          </p>
+        </div>
+      )}
+
 
       <div className="mt-3" onClick={(e) => e.stopPropagation()}>
         <Select
