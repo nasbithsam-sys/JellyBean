@@ -26,6 +26,8 @@ export type PlacedAccount = {
 interface Props {
   placed: PlacedAccount[];
   visuals: boolean;
+  tempPin?: { lat: number; lng: number } | null;
+  onMapClick?: (lat: number, lng: number) => void;
 }
 
 const FIFTY_MILES_IN_METERS = 80467;
@@ -39,7 +41,7 @@ function ClickToPlace({ onPlace }: { onPlace: (lat: number, lng: number) => void
   return null;
 }
 
-export default function LeafletMap({ placed, visuals }: Props) {
+export default function LeafletMap({ placed, visuals, tempPin, onMapClick }: Props) {
   const items: React.ReactNode[] = [];
 
   for (const account of placed) {
@@ -85,6 +87,29 @@ export default function LeafletMap({ placed, visuals }: Props) {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      {onMapClick && <ClickToPlace onPlace={onMapClick} />}
+      {tempPin && (
+        <>
+          <Circle
+            center={[tempPin.lat, tempPin.lng]}
+            radius={FIFTY_MILES_IN_METERS}
+            pathOptions={{
+              color: "#ef4444",
+              fillColor: "#ef4444",
+              fillOpacity: 0.18,
+              weight: 2,
+            }}
+          />
+          <Marker position={[tempPin.lat, tempPin.lng]}>
+            <Popup>
+              <div className="text-[12px]">
+                <div className="font-semibold">Temporary 50-mile radius</div>
+                <div className="text-slate-500 mt-1">Clears when you leave this page.</div>
+              </div>
+            </Popup>
+          </Marker>
+        </>
+      )}
       {items}
     </MapContainer>
   );
