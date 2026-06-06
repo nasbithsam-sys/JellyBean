@@ -693,11 +693,17 @@ function LeadCard({
   team,
   teamById,
   onOpen,
+  selected = false,
+  onToggleSelect,
+  showSelect = false,
 }: {
   lead: Lead;
   team: CsTeamMember[];
   teamById: Map<string, CsTeamMember>;
   onOpen: () => void;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+  showSelect?: boolean;
 }) {
   const qc = useQueryClient();
   const auth = useAuth();
