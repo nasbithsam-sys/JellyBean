@@ -23,7 +23,12 @@ type BrowserProfile = {
   launch_history: Json;
 };
 
-type LeafletMapComp = ComponentType<{ placed: PlacedAccount[]; visuals: boolean }>;
+type LeafletMapComp = ComponentType<{
+  placed: PlacedAccount[];
+  visuals: boolean;
+  tempPin?: { lat: number; lng: number } | null;
+  onMapClick?: (lat: number, lng: number) => void;
+}>;
 
 function Page() {
   const auth = useAuth();
@@ -45,6 +50,7 @@ function Page() {
 function Inner() {
   const [visuals, setVisuals] = useState(false);
   const [LeafletMap, setLeafletMap] = useState<LeafletMapComp | null>(null);
+  const [tempPin, setTempPin] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     const value = localStorage.getItem("map.visuals");
@@ -157,13 +163,30 @@ function Inner() {
           <div className="h-[480px] grid place-items-center text-muted-foreground">Loading...</div>
         ) : (
           <div className="aspect-[16/10] w-full rounded-lg overflow-hidden border border-border bg-surface">
-            <LeafletMap placed={placed} visuals={visuals} />
+            <LeafletMap
+              placed={placed}
+              visuals={visuals}
+              tempPin={tempPin}
+              onMapClick={(lat, lng) => setTempPin({ lat, lng })}
+            />
           </div>
         )}
         <p className="text-[11.5px] text-muted-foreground mt-3">
           {visuals
-            ? "Click any radius or marker to see account name, account area, and today's launch count."
+            ? "Click anywhere on the map to drop a temporary 50-mile red radius. It clears when you leave this page."
             : "Map visuals stay off by default so tile egress only happens when you need the map."}
+          {tempPin && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                onClick={() => setTempPin(null)}
+                className="underline text-destructive hover:text-destructive/80"
+              >
+                Clear temporary radius
+              </button>
+            </>
+          )}
           {" · "}
           {coveredToday} covered today · {missingToday} missing · {placed.length} pinned profiles
         </p>
