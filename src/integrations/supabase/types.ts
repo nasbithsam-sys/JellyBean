@@ -242,6 +242,7 @@ export type Database = {
           marketing_notes: string | null
           original_lead_link: string | null
           pass_it_to: string | null
+          post_text: string | null
           raw_lead_id: string | null
           sub_area: string | null
           updated_at: string
@@ -264,6 +265,7 @@ export type Database = {
           marketing_notes?: string | null
           original_lead_link?: string | null
           pass_it_to?: string | null
+          post_text?: string | null
           raw_lead_id?: string | null
           sub_area?: string | null
           updated_at?: string
@@ -286,6 +288,7 @@ export type Database = {
           marketing_notes?: string | null
           original_lead_link?: string | null
           pass_it_to?: string | null
+          post_text?: string | null
           raw_lead_id?: string | null
           sub_area?: string | null
           updated_at?: string
