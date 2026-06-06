@@ -1080,6 +1080,9 @@ function LeadDrawer({
           )}
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
         </div>
+        {lead.post_text && (
+          <Info label="Customer exact requirement" value={lead.post_text} multiline />
+        )}
         {lead.context && <Info label="Context" value={lead.context} multiline />}
         {lead.marketing_notes && (
           <Info label="Marketing notes" value={lead.marketing_notes} multiline />
