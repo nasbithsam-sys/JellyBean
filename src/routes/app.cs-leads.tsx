@@ -555,17 +555,65 @@ function Inner() {
           No leads in this status.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {shownLeads.map((l) => (
-            <LeadCard
-              key={l.id}
-              lead={l}
-              team={team.data ?? []}
-              teamById={teamById}
-              onOpen={() => setOpened(l)}
-            />
-          ))}
-        </div>
+        <>
+          {isCs && (
+            <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-surface border border-border text-[12px]">
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground">
+                  {selectedIds.size > 0
+                    ? `${selectedIds.size} selected`
+                    : "Select leads to bulk-assign"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ids = new Set(shownLeads.map((l) => l.id));
+                    setSelectedIds(ids);
+                  }}
+                  className="text-primary hover:underline"
+                >
+                  Select all visible
+                </button>
+                {selectedIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <Button
+                size="sm"
+                className="h-8"
+                disabled={selectedIds.size === 0 || bulkBusy}
+                onClick={bulkAssignToMe}
+              >
+                {bulkBusy ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Assign {selectedIds.size > 0 ? selectedIds.size : ""} to myself
+              </Button>
+            </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {shownLeads.map((l) => (
+              <LeadCard
+                key={l.id}
+                lead={l}
+                team={team.data ?? []}
+                teamById={teamById}
+                onOpen={() => setOpened(l)}
+                selected={selectedIds.has(l.id)}
+                onToggleSelect={() => toggleSelect(l.id)}
+                showSelect={isCs}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       {visibleLeads.length > shownLeads.length && (
