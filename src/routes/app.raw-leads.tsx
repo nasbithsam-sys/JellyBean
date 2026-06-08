@@ -121,66 +121,6 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
   return "";
 }
 
-// ── Shared start-row state (synced across all users via Supabase) ─────────────
-async function loadSharedStartRow(): Promise<number> {
-  const { data, error } = await supabase
-    .from("shared_state")
-    .select("value")
-    .eq("key", SHARED_START_ROW_KEY)
-    .maybeSingle();
-  if (error) throw error;
-  const value = data?.value;
-  const n = value && typeof value === "object" && !Array.isArray(value) ? value.row : undefined;
-  return typeof n === "number" && n > 0 ? n : 1;
-}
-
-async function saveSharedStartRow(row: number, userId: string | null): Promise<void> {
-  const { error } = await supabase.from("shared_state").upsert(
-    {
-      key: SHARED_START_ROW_KEY,
-      value: { row },
-      updated_at: new Date().toISOString(),
-      updated_by: userId,
-    },
-    { onConflict: "key" },
-  );
-  if (error) throw error;
-}
-
-// ── Google Sheets fetch ───────────────────────────────────────────────────────
-async function fetchSheetRows(
-  apiUrl: string,
-  startRow: number,
-): Promise<{ rows: Row[]; nextRow: number }> {
-  const url = `${apiUrl}${apiUrl.includes("?") ? "&" : "?"}startRow=${startRow}`;
-  let res: Response;
-  try {
-    res = await fetch(url, { method: "GET", redirect: "follow" });
-  } catch (e) {
-    throw new Error(
-      `Network error — could not reach Apps Script. Original: ${(e as Error).message}`,
-    );
-  }
-  if (!res.ok) {
-    throw new Error(`Apps Script returned HTTP ${res.status}.`);
-  }
-  const json = (await res.json()) as { rows?: Row[]; nextRow?: number };
-  const allRows = Array.isArray(json.rows) ? json.rows : [];
-  // Only take contiguous rows from the start whose "Lead" column (E) is filled.
-  // Stop at the first empty Lead cell — even if later rows have data, we wait
-  // until the gap is filled before advancing the shared cursor.
-  let cutoff = allRows.length;
-  for (let i = 0; i < allRows.length; i++) {
-    if (!(allRows[i].Lead ?? "").trim()) {
-      cutoff = i;
-      break;
-    }
-  }
-  const rows = allRows.slice(0, cutoff);
-  const nextRow = startRow + rows.length;
-  return { rows, nextRow };
-}
-
 // ── Supabase cache helpers ────────────────────────────────────────────────────
 async function loadCache(): Promise<CacheEntry[]> {
   const { data, error } = await supabase
@@ -192,23 +132,6 @@ async function loadCache(): Promise<CacheEntry[]> {
   return (data ?? []) as CacheEntry[];
 }
 
-async function upsertNewRows(rows: Row[], startRow: number) {
-  if (!rows.length) return;
-  const payload = rows.map((r, i) => ({
-    row_key: keyFor(r),
-    data: r as Json,
-    lead: leadValueFromRow(r),
-    captured_at: capturedIsoFromRow(r),
-    lead_link: r["Lead Link"] || null,
-    sheet_row: startRow + i,
-  }));
-  // Insert only fresh keys; ignore conflicts on row_key to preserve existing edits.
-  const { error } = await supabase.from(TABLE).upsert(payload, {
-    onConflict: "row_key",
-    ignoreDuplicates: true,
-  });
-  if (error) throw error;
-}
 
 async function patchEntry(row_key: string, patch: Partial<CacheEntry>) {
   const { error } = await supabase
