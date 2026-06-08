@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -8,6 +8,7 @@ import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -82,6 +83,7 @@ function Inner() {
   const [exportOpen, setExportOpen] = useState(false);
   const [historyFor, setHistoryFor] = useState<Profile | null>(null);
   const [howToOpen, setHowToOpen] = useState(false);
+  const [selectedProfileIds, setSelectedProfileIds] = useState<Set<string>>(new Set());
 
   const profiles = useQuery({
     queryKey: ["incog_profiles"],
@@ -116,6 +118,41 @@ function Inner() {
       );
     });
   }, [profiles.data, query]);
+
+  useEffect(() => {
+    const validIds = new Set((profiles.data ?? []).map((profile) => profile.id));
+    setSelectedProfileIds((current) => {
+      const next = new Set([...current].filter((id) => validIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [profiles.data]);
+
+  const selectedProfiles = useMemo(() => {
+    return (profiles.data ?? []).filter((profile) => selectedProfileIds.has(profile.id));
+  }, [profiles.data, selectedProfileIds]);
+
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((profile) => selectedProfileIds.has(profile.id));
+
+  function toggleProfileSelection(profileId: string, checked: boolean) {
+    setSelectedProfileIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(profileId);
+      else next.delete(profileId);
+      return next;
+    });
+  }
+
+  function toggleAllFiltered(checked: boolean) {
+    setSelectedProfileIds((current) => {
+      const next = new Set(current);
+      for (const profile of filtered) {
+        if (checked) next.add(profile.id);
+        else next.delete(profile.id);
+      }
+      return next;
+    });
+  }
 
   async function launch(p: Profile) {
     toast.loading("Launching profile…", { id: "launch" });
@@ -155,6 +192,28 @@ function Inner() {
     qc.invalidateQueries({ queryKey: ["incog_profiles"] });
   }
 
+  async function removeSelected() {
+    const ids = [...selectedProfileIds];
+    if (ids.length === 0) return;
+    const names = selectedProfiles
+      .slice(0, 5)
+      .map((profile) => profile.profile_name)
+      .join(", ");
+    const extra = ids.length > 5 ? ` and ${ids.length - 5} more` : "";
+    if (
+      !confirm(
+        `Delete ${ids.length} selected profile${ids.length === 1 ? "" : "s"}?\n\n${names}${extra}`,
+      )
+    ) {
+      return;
+    }
+    const { error } = await supabase.from("incogniton_profiles").delete().in("id", ids);
+    if (error) return toast.error(error.message);
+    toast.success(`Deleted ${ids.length} profile${ids.length === 1 ? "" : "s"}`);
+    setSelectedProfileIds(new Set());
+    qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+  }
+
   function statusOf(p: Profile) {
     if (!p.last_launched_at) return "Idle";
     return Date.now() - new Date(p.last_launched_at).getTime() < 30 * 60 * 1000 ? "Active" : "Idle";
@@ -187,6 +246,11 @@ function Inner() {
           />
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {selectedProfiles.length > 0 && (
+            <Button variant="outline" onClick={removeSelected} className="text-destructive">
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete {selectedProfiles.length}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="h-3.5 w-3.5 mr-1.5" /> Import
           </Button>
@@ -203,6 +267,14 @@ function Inner() {
         <table className="crm-table">
           <thead>
             <tr>
+              <th className="w-10">
+                <Checkbox
+                  checked={allFilteredSelected}
+                  disabled={filtered.length === 0}
+                  aria-label="Select all visible profiles"
+                  onCheckedChange={(checked) => toggleAllFiltered(checked === true)}
+                />
+              </th>
               <th>Profile Name</th>
               <th>Profile ID</th>
               <th>Group</th>
@@ -215,14 +287,14 @@ function Inner() {
           <tbody>
             {profiles.isLoading && (
               <tr>
-                <td colSpan={7} className="text-center py-6 text-muted-foreground">
+                <td colSpan={8} className="text-center py-6 text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             )}
             {!profiles.isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center py-10 text-muted-foreground">
+                <td colSpan={8} className="text-center py-10 text-muted-foreground">
                   <Globe className="h-5 w-5 inline mr-2 opacity-50" />
                   No profiles yet. Click <strong>Add Profile</strong> to add your first one.
                 </td>
@@ -232,6 +304,13 @@ function Inner() {
               const status = statusOf(p);
               return (
                 <tr key={p.id}>
+                  <td>
+                    <Checkbox
+                      checked={selectedProfileIds.has(p.id)}
+                      aria-label={`Select ${p.profile_name}`}
+                      onCheckedChange={(checked) => toggleProfileSelection(p.id, checked === true)}
+                    />
+                  </td>
                   <td className="font-medium">{p.profile_name}</td>
                   <td className="font-mono text-[11px] text-muted-foreground">
                     {p.incogniton_profile_id}
