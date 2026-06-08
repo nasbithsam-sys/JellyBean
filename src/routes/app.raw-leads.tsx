@@ -630,31 +630,45 @@ function Inner() {
         {entries.length} loaded from database
       </div>
 
-      {/* Source settings */}
+      {/* Ingest endpoint info */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Web App URL (source)</DialogTitle>
+            <DialogTitle>Extension ingest endpoint</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <Label className="text-[12px] text-muted-foreground">
-              Google Apps Script Web App URL. Must return{" "}
-              <code>{`{ rows: [...], nextRow: N }`}</code>.
-            </Label>
-            <Input
-              value={apiUrlDraft}
-              onChange={(e) => setApiUrlDraft(e.target.value)}
-              placeholder="https://script.google.com/macros/s/.../exec"
-            />
+          <div className="space-y-3 text-[12.5px]">
+            <p className="text-muted-foreground">
+              Point your scraper extension at this URL. It must send{" "}
+              <code>POST</code> with a Supabase access token in{" "}
+              <code>Authorization: Bearer …</code> (sign in with a user that has the{" "}
+              <strong>admin</strong> or <strong>scraping</strong> role).
+            </p>
+            <div className="flex items-center gap-2">
+              <Input value={ingestUrl} readOnly className="font-mono text-[12px]" />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(ingestUrl);
+                  toast.success("Endpoint URL copied");
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <p className="text-muted-foreground">
+              Body accepts a single row object, <code>{`{ rows: [...] }`}</code>, or a bare
+              array of rows. Each row keeps the original Google Sheet column names
+              (<code>Account Name</code>, <code>Post Text</code>, <code>Lead Link</code>, …).
+              Duplicates (same <code>Lead Link</code>) are ignored so your manual edits stay.
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setApiUrlDraft(DEFAULT_API_URL)}>
-              Reset
-            </Button>
-            <Button onClick={saveApiUrl}>Save</Button>
+            <Button onClick={() => setSettingsOpen(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
 
       {/* Lead detail dialog */}
       {detailFor && (
