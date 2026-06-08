@@ -6,16 +6,15 @@ import type { AppRole } from "@/hooks/use-auth";
 // Map each replicated table to the React Query keys that should refresh
 // when any user inserts/updates/deletes a row.
 const TABLE_QUERY_KEYS: Record<string, string[][]> = {
-  raw_lead_cache: [["raw-lead-cache"]],
   qualified_leads: [["cs_leads"], ["cs_sent_today"], ["cs_new_lead_ping"]],
   incogniton_profiles: [["incog_profiles"]],
   shared_state: [["raw-leads-shared-start-row"]],
 };
 
 const ROLE_TABLES: Record<AppRole, string[]> = {
-  admin: ["raw_lead_cache", "qualified_leads", "incogniton_profiles", "shared_state"],
-  scraping: ["raw_lead_cache", "qualified_leads", "incogniton_profiles", "shared_state"],
-  processor: ["raw_lead_cache", "qualified_leads", "incogniton_profiles", "shared_state"],
+  admin: ["qualified_leads", "incogniton_profiles", "shared_state"],
+  scraping: ["qualified_leads", "incogniton_profiles", "shared_state"],
+  processor: ["qualified_leads", "incogniton_profiles", "shared_state"],
   cs: ["qualified_leads"],
 };
 

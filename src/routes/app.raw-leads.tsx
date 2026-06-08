@@ -42,6 +42,7 @@ import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
 const TABLE = "raw_lead_cache";
+const RAW_LEADS_PAGE_SIZE = 200;
 type RawLeadCacheUpdate = Database["public"]["Tables"]["raw_lead_cache"]["Update"];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -122,12 +123,12 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
 }
 
 // ── Supabase cache helpers ────────────────────────────────────────────────────
-async function loadCache(): Promise<CacheEntry[]> {
+async function loadCache(limit: number): Promise<CacheEntry[]> {
   const { data, error } = await supabase
     .from(TABLE)
     .select("row_key, data, lead, phone, category, captured_at, lead_link, sheet_row")
     .order("captured_at", { ascending: false, nullsFirst: false })
-    .limit(1000);
+    .limit(limit);
   if (error) throw error;
   return (data ?? []) as CacheEntry[];
 }
@@ -171,13 +172,14 @@ function Inner() {
   const [leadFilter, setLeadFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
   const [visibleLimit, setVisibleLimit] = useState(80);
+  const [databaseLimit, setDatabaseLimit] = useState(RAW_LEADS_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache"],
-    queryFn: loadCache,
+    queryKey: ["raw-lead-cache", databaseLimit],
+    queryFn: () => loadCache(databaseLimit),
     staleTime: Infinity,
     gcTime: Infinity,
     refetchOnMount: false,
@@ -199,7 +201,7 @@ function Inner() {
   const updateAction = useCallback(
     async (k: string, patch: Partial<Action>) => {
       // Optimistic update
-      qc.setQueryData<CacheEntry[]>(["raw-lead-cache"], (prev) =>
+      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
         (prev ?? []).map((e) => (e.row_key === k ? { ...e, ...patch } : e)),
       );
       try {
@@ -209,7 +211,7 @@ function Inner() {
         cacheQuery.refetch();
       }
     },
-    [qc, cacheQuery],
+    [qc, cacheQuery, databaseLimit],
   );
 
   const isFetching = cacheQuery.isFetching;
@@ -371,7 +373,7 @@ function Inner() {
                 return;
               }
               const keys = targets.map((e) => e.row_key);
-              qc.setQueryData<CacheEntry[]>(["raw-lead-cache"], (prev) =>
+              qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
                 (prev ?? []).map((e) =>
                   keys.includes(e.row_key) ? { ...e, category: "wrong" } : e,
                 ),
@@ -620,9 +622,25 @@ function Inner() {
         </div>
       )}
 
+      {visible.length === shownRows.length && entries.length >= databaseLimit && (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setDatabaseLimit((limit) => limit + RAW_LEADS_PAGE_SIZE);
+              setVisibleLimit((limit) => limit + 80);
+            }}
+            disabled={isFetching}
+          >
+            {isFetching && <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />}
+            Load more from database
+          </Button>
+        </div>
+      )}
+
       <div className="text-[11.5px] text-muted-foreground">
         {shownRows.length} of {visible.length} {visible.length === 1 ? "row" : "rows"} shown ·{" "}
-        {entries.length} loaded from database
+        {entries.length} loaded from the latest {databaseLimit}
       </div>
 
       {/* Ingest endpoint info */}
