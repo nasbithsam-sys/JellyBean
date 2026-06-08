@@ -1,0 +1,859 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import * as XLSX from "xlsx";
+import { useAuth } from "@/hooks/use-auth";
+import { PageHeader, PageBody, RoleGate } from "@/components/page";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, Download, Rocket, Trash2, Search, Globe, Plus, Info, Upload } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database, Json } from "@/integrations/supabase/types";
+import { cn } from "@/lib/utils";
+import { launchIncognitonProfile } from "@/lib/incogniton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+
+export const Route = createFileRoute("/app/browser-profiles")({ component: Page });
+
+type LaunchHistoryEntry = { at: string; by: string | null };
+type IncognitonProfileInsert = Database["public"]["Tables"]["incogniton_profiles"]["Insert"];
+type FileFormat = "xlsx" | "csv";
+type ProfileSheetRow = {
+  "account name": string;
+  "profile id": string;
+  "account area": string;
+  latitude: string | number;
+  longitude: string | number;
+};
+
+type Profile = {
+  id: string;
+  profile_name: string;
+  incogniton_profile_id: string;
+  group_name: string | null;
+  last_launched_at: string | null;
+  launched_by_name: string | null;
+  launched_by_email: string | null;
+  created_at: string;
+  latitude: number | null;
+  longitude: number | null;
+  account_area: string | null;
+  launch_history: LaunchHistoryEntry[] | null;
+};
+
+function Page() {
+  const auth = useAuth();
+  return (
+    <div>
+      <PageHeader
+        title="Browser Profiles"
+        description="Add your Incogniton profile IDs here and launch them with one click."
+      />
+      <PageBody className="!pt-5">
+        <RoleGate allow={["admin", "scraping", "processor"]} current={auth.primaryRole}>
+          <Inner />
+        </RoleGate>
+      </PageBody>
+    </div>
+  );
+}
+
+function Inner() {
+  const qc = useQueryClient();
+  const auth = useAuth();
+  const [query, setQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [historyFor, setHistoryFor] = useState<Profile | null>(null);
+  const [howToOpen, setHowToOpen] = useState(false);
+
+  const profiles = useQuery({
+    queryKey: ["incog_profiles"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("incogniton_profiles")
+        .select(
+          "id, profile_name, incogniton_profile_id, group_name, account_area, latitude, longitude, last_launched_at, launched_by_name, launched_by_email, created_at, launch_history",
+        )
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as Profile[];
+    },
+  });
+
+  const groups = useMemo(
+    () =>
+      Array.from(
+        new Set((profiles.data ?? []).map((p) => p.group_name).filter((g): g is string => !!g)),
+      ).sort(),
+    [profiles.data],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (profiles.data ?? []).filter((p) => {
+      if (!q) return true;
+      return (
+        p.profile_name.toLowerCase().includes(q) ||
+        p.incogniton_profile_id.toLowerCase().includes(q) ||
+        (p.account_area ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [profiles.data, query]);
+
+  async function launch(p: Profile) {
+    toast.loading("Launching profile…", { id: "launch" });
+    try {
+      await launchIncognitonProfile(p.incogniton_profile_id);
+      const user = auth.user;
+      const who = user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "Unknown";
+      const nowIso = new Date().toISOString();
+      const prevHistory = Array.isArray(p.launch_history) ? p.launch_history : [];
+      const nextHistory = [{ at: nowIso, by: who }, ...prevHistory].slice(0, 100);
+      supabase
+        .from("incogniton_profiles")
+        .update({
+          last_launched_at: nowIso,
+          launched_by_name: who,
+          launched_by_email: user?.email ?? null,
+          launch_history: nextHistory as Json,
+        })
+        .eq("id", p.id)
+        .then(() => qc.invalidateQueries({ queryKey: ["incog_profiles"] }));
+      toast.success("Launch command sent ✓ — Incogniton should open the profile now.", {
+        id: "launch",
+      });
+    } catch (e) {
+      toast.error(
+        "Could not launch. Make sure: (1) Incogniton is open, (2) the Bridge is installed on this PC. See README.txt in the bridge folder.",
+        { id: "launch", duration: 6000 },
+      );
+    }
+  }
+
+  async function remove(p: Profile) {
+    if (!confirm(`Delete profile "${p.profile_name}"? This only removes it from this CRM.`)) return;
+    const { error } = await supabase.from("incogniton_profiles").delete().eq("id", p.id);
+    if (error) return toast.error(error.message);
+    toast.success("Deleted");
+    qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+  }
+
+  function statusOf(p: Profile) {
+    if (!p.last_launched_at) return "Idle";
+    return Date.now() - new Date(p.last_launched_at).getTime() < 30 * 60 * 1000 ? "Active" : "Idle";
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* How launch works — info banner */}
+      <div className="text-[12px] bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-start gap-2">
+        <Info className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
+        <div>
+          <span className="font-medium">How launching works:</span> Click{" "}
+          <strong>Add Profile</strong> below to save your Incogniton profile ID and name. Then hit{" "}
+          <strong>Launch</strong> — it sends the open command directly to Incogniton on your PC.
+          Make sure Incogniton is running. Not sure of your profile ID?{" "}
+          <button className="underline text-primary" onClick={() => setHowToOpen(true)}>
+            See how to find it.
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search profile name or ID…"
+            className="h-9 pl-9"
+          />
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="h-3.5 w-3.5 mr-1.5" /> Import
+          </Button>
+          <Button variant="outline" onClick={() => setExportOpen(true)}>
+            <Download className="h-3.5 w-3.5 mr-1.5" /> Export
+          </Button>
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Profile
+          </Button>
+        </div>
+      </div>
+
+      <div className="bg-card border rounded-lg overflow-hidden">
+        <table className="crm-table">
+          <thead>
+            <tr>
+              <th>Profile Name</th>
+              <th>Profile ID</th>
+              <th>Group</th>
+              <th>Account Area</th>
+              <th>Geo</th>
+              <th>Last Launched</th>
+              <th className="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {profiles.isLoading && (
+              <tr>
+                <td colSpan={7} className="text-center py-6 text-muted-foreground">
+                  Loading…
+                </td>
+              </tr>
+            )}
+            {!profiles.isLoading && filtered.length === 0 && (
+              <tr>
+                <td colSpan={7} className="text-center py-10 text-muted-foreground">
+                  <Globe className="h-5 w-5 inline mr-2 opacity-50" />
+                  No profiles yet. Click <strong>Add Profile</strong> to add your first one.
+                </td>
+              </tr>
+            )}
+            {filtered.map((p) => {
+              const status = statusOf(p);
+              return (
+                <tr key={p.id}>
+                  <td className="font-medium">{p.profile_name}</td>
+                  <td className="font-mono text-[11px] text-muted-foreground">
+                    {p.incogniton_profile_id}
+                  </td>
+                  <td className="text-[12.5px]">{p.group_name ?? "—"}</td>
+                  <td className="text-[12.5px]">{p.account_area ?? "—"}</td>
+                  <td className="text-[11.5px] font-mono text-muted-foreground">
+                    {p.latitude != null && p.longitude != null
+                      ? `${p.latitude.toFixed(3)}, ${p.longitude.toFixed(3)}`
+                      : "—"}
+                  </td>
+                  <td>
+                    {p.last_launched_at ? (
+                      <button
+                        type="button"
+                        onClick={() => setHistoryFor(p)}
+                        className="flex flex-col gap-0.5 text-left hover:opacity-80"
+                        title="View last 5 launches"
+                      >
+                        <span
+                          className={cn(
+                            "text-[10.5px] px-2 py-0.5 rounded-full border w-fit",
+                            status === "Active"
+                              ? "bg-success/10 text-success border-success/30"
+                              : "bg-muted text-muted-foreground border-border",
+                          )}
+                        >
+                          {status}
+                        </span>
+                        <span className="text-[11px] font-medium text-foreground pl-0.5">
+                          {p.launched_by_name ?? p.launched_by_email ?? "Unknown"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground pl-0.5">
+                          {new Date(p.last_launched_at).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground/50 italic">
+                        Never launched
+                      </span>
+                    )}
+                  </td>
+                  <td className="text-right space-x-1.5 whitespace-nowrap">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => launch(p)}
+                      title="Launch in Incogniton"
+                    >
+                      <Rocket className="h-3.5 w-3.5 mr-1" /> Launch
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => remove(p)} title="Delete">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {addOpen && (
+        <AddProfileDialog
+          userId={auth.user?.id ?? null}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => {
+            setAddOpen(false);
+            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+          }}
+        />
+      )}
+      {importOpen && (
+        <ImportDialog
+          userId={auth.user?.id ?? null}
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            setImportOpen(false);
+            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+          }}
+        />
+      )}
+      {exportOpen && (
+        <ExportDialog
+          profiles={profiles.data ?? []}
+          groups={groups}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
+      {historyFor && (
+        <Dialog open onOpenChange={(o) => !o && setHistoryFor(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Last 5 launches · {historyFor.profile_name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              {(historyFor.launch_history ?? []).length === 0 ? (
+                <div className="text-[12.5px] text-muted-foreground">No history yet.</div>
+              ) : (
+                (historyFor.launch_history ?? []).slice(0, 5).map((h, i) => (
+                  <div
+                    key={i}
+                    className="flex justify-between text-[12.5px] bg-muted/30 rounded px-3 py-2"
+                  >
+                    <span className="font-medium">{h.by ?? "Unknown"}</span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {new Date(h.at).toLocaleString()}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* How to find profile ID */}
+      <Dialog open={howToOpen} onOpenChange={setHowToOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>How to find your Incogniton Profile ID</DialogTitle>
+            <DialogDescription>
+              The Profile ID is the unique identifier Incogniton uses to open a profile.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-[13px]">
+            <div className="space-y-2">
+              <div className="font-medium">Method 1 — From the Incogniton app (easiest)</div>
+              <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                <li>Open the Incogniton desktop app.</li>
+                <li>
+                  Right-click any profile → <strong>Profile Info</strong> or <strong>Edit</strong>.
+                </li>
+                <li>Copy the ID shown at the top (looks like a long number or UUID).</li>
+              </ol>
+            </div>
+            <div className="space-y-2">
+              <div className="font-medium">Method 2 — From the local API</div>
+              <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                <li>Make sure Incogniton is running.</li>
+                <li>
+                  Open this URL in your browser tab:{" "}
+                  <code className="font-mono text-[11px] bg-muted px-1 py-0.5 rounded">
+                    http://localhost:35000/profile/all
+                  </code>
+                </li>
+                <li>
+                  You'll see a JSON list. Find your profile and copy the{" "}
+                  <code className="font-mono text-[11px]">profile_browser_id</code> field.
+                </li>
+              </ol>
+            </div>
+            <div className="bg-muted/40 rounded p-3 text-[12px] text-muted-foreground">
+              <strong>Tip:</strong> The profile name is just a label for your CRM — it doesn't need
+              to match the name in Incogniton exactly, but keeping them the same avoids confusion.
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+const PROFILE_SHEET_HEADERS = [
+  "account name",
+  "profile id",
+  "account area",
+  "latitude",
+  "longitude",
+] as const;
+
+function normalizeHeader(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function toSheetRow(profile: Profile): ProfileSheetRow {
+  return {
+    "account name": profile.profile_name,
+    "profile id": profile.incogniton_profile_id,
+    "account area": profile.account_area ?? "",
+    latitude: profile.latitude ?? "",
+    longitude: profile.longitude ?? "",
+  };
+}
+
+function parseCsv(text: string): Record<string, unknown>[] {
+  const rows: string[][] = [];
+  let field = "";
+  let row: string[] = [];
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        field += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === "," && !inQuotes) {
+      row.push(field);
+      field = "";
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") i += 1;
+      row.push(field);
+      if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+      field = "";
+      row = [];
+    } else {
+      field += char;
+    }
+  }
+
+  row.push(field);
+  if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+  if (rows.length === 0) return [];
+
+  const headers = rows[0].map(normalizeHeader);
+  return rows
+    .slice(1)
+    .map((cells) =>
+      Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ""])),
+    );
+}
+
+function normalizeSheetRows(rows: Record<string, unknown>[]) {
+  return rows.map((row) =>
+    Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value])),
+  );
+}
+
+function validateSheetRows(rawRows: Record<string, unknown>[]) {
+  if (rawRows.length === 0) throw new Error("The selected file has no profile rows.");
+  const missingHeaders = PROFILE_SHEET_HEADERS.filter((header) => !(header in rawRows[0]));
+  if (missingHeaders.length > 0) {
+    throw new Error(`Missing required column header: ${missingHeaders.join(", ")}`);
+  }
+
+  return rawRows.map((row, index) => {
+    const rowNumber = index + 2;
+    const accountName = String(row["account name"] ?? "").trim();
+    const profileId = String(row["profile id"] ?? "").trim();
+    const accountArea = String(row["account area"] ?? "").trim();
+    const latitude = Number(row.latitude);
+    const longitude = Number(row.longitude);
+
+    if (!accountName) throw new Error(`Row ${rowNumber}: account name is required.`);
+    if (!profileId) throw new Error(`Row ${rowNumber}: profile id is required.`);
+    if (!accountArea) throw new Error(`Row ${rowNumber}: account area is required.`);
+    if (!Number.isFinite(latitude)) throw new Error(`Row ${rowNumber}: latitude must be a number.`);
+    if (!Number.isFinite(longitude))
+      throw new Error(`Row ${rowNumber}: longitude must be a number.`);
+    if (latitude < -90 || latitude > 90) {
+      throw new Error(`Row ${rowNumber}: latitude must be between -90 and 90.`);
+    }
+    if (longitude < -180 || longitude > 180) {
+      throw new Error(`Row ${rowNumber}: longitude must be between -180 and 180.`);
+    }
+
+    return {
+      profile_name: accountName,
+      incogniton_profile_id: profileId,
+      account_area: accountArea,
+      latitude,
+      longitude,
+    };
+  });
+}
+
+function downloadProfiles(filenameBase: string, format: FileFormat, rows: ProfileSheetRow[]) {
+  const worksheet = XLSX.utils.json_to_sheet(rows, { header: [...PROFILE_SHEET_HEADERS] });
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Browser Profiles");
+
+  if (format === "csv") {
+    const csv = XLSX.utils.sheet_to_csv(worksheet);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${filenameBase}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  XLSX.writeFile(workbook, `${filenameBase}.xlsx`, { bookType: "xlsx" });
+}
+
+// ── Add Profile Dialog (manual entry — works 100% without CORS/extensions) ───
+
+function AddProfileDialog({
+  userId,
+  onClose,
+  onSaved,
+}: {
+  userId: string | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [profileId, setProfileId] = useState("");
+  const [profileName, setProfileName] = useState("");
+  const [groupName, setGroupName] = useState("");
+  const [accountArea, setAccountArea] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const id = profileId.trim();
+    const name = profileName.trim();
+    const area = accountArea.trim();
+    const latStr = latitude.trim();
+    const lngStr = longitude.trim();
+    if (!id) {
+      toast.error("Profile ID is required");
+      return;
+    }
+    if (!name) {
+      toast.error("Profile name is required");
+      return;
+    }
+    if (!area) {
+      toast.error("Account Area is required");
+      return;
+    }
+    if (!latStr || !lngStr) {
+      toast.error("Latitude and longitude are required");
+      return;
+    }
+    const lat = parseFloat(latStr);
+    const lng = parseFloat(lngStr);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      toast.error("Latitude and longitude must be valid numbers");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("incogniton_profiles").upsert(
+      {
+        incogniton_profile_id: id,
+        profile_name: name,
+        group_name: groupName.trim() || null,
+        account_area: area,
+        latitude: lat,
+        longitude: lng,
+        created_by: userId,
+      } satisfies IncognitonProfileInsert,
+      { onConflict: "incogniton_profile_id", ignoreDuplicates: false },
+    );
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Profile saved ✓");
+    onSaved();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
+      <div
+        className="bg-card w-full max-w-md rounded-lg border p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h2 className="text-lg font-semibold">Add Incogniton Profile</h2>
+          <p className="text-[12px] text-muted-foreground mt-1">
+            Only Group is optional. Geo coordinates will plot the profile on the map with a 50-mile
+            radius.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <Field label="Profile ID *">
+            <Input
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
+              placeholder="e.g. 1234567890 or abc-def-123"
+              autoFocus
+            />
+          </Field>
+          <Field label="Profile Name *">
+            <Input
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="e.g. Account A – Facebook"
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Group (optional)">
+              <Input
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                placeholder="e.g. testing"
+              />
+            </Field>
+            <Field label="Account Area *">
+              <Input
+                value={accountArea}
+                onChange={(e) => setAccountArea(e.target.value)}
+                placeholder="e.g. CA · Fountain Valley"
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Latitude *">
+              <Input
+                value={latitude}
+                onChange={(e) => setLatitude(e.target.value)}
+                placeholder="e.g. 33.7092"
+                inputMode="decimal"
+              />
+            </Field>
+            <Field label="Longitude *">
+              <Input
+                value={longitude}
+                onChange={(e) => setLongitude(e.target.value)}
+                placeholder="e.g. -117.9536"
+                inputMode="decimal"
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Save Profile
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Export Dialog ─────────────────────────────────────────────────────────────
+
+function ImportDialog({
+  userId,
+  onClose,
+  onImported,
+}: {
+  userId: string | null;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const [format, setFormat] = useState<FileFormat>("xlsx");
+  const [file, setFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  async function readRows() {
+    if (!file) throw new Error("Choose a file to import.");
+    if (format === "csv") return parseCsv(await file.text());
+
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) throw new Error("The workbook does not contain any sheets.");
+    return normalizeSheetRows(
+      XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheetName], {
+        defval: "",
+        raw: false,
+      }),
+    );
+  }
+
+  async function importProfiles() {
+    setImporting(true);
+    try {
+      const rows = validateSheetRows(await readRows()).map(
+        (row) =>
+          ({
+            ...row,
+            created_by: userId,
+          }) satisfies IncognitonProfileInsert,
+      );
+      const { error } = await supabase.from("incogniton_profiles").upsert(rows, {
+        onConflict: "incogniton_profile_id",
+        ignoreDuplicates: false,
+      });
+      if (error) throw error;
+      toast.success(`Imported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
+      onImported();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not import profiles");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
+      <div
+        className="bg-card w-full max-w-md rounded-lg border p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold mb-4">Import Profiles</h2>
+        <div className="space-y-4">
+          <div>
+            <Label className="block mb-1.5">Format</Label>
+            <Select value={format} onValueChange={(value) => setFormat(value as FileFormat)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="xlsx">XLSX</SelectItem>
+                <SelectItem value="csv">CSV</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="block mb-1.5">File</Label>
+            <Input
+              type="file"
+              accept={format === "xlsx" ? ".xlsx" : ".csv,text/csv"}
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            />
+          </div>
+          <div className="bg-muted/40 rounded p-3 text-[12px] text-muted-foreground">
+            Required headers: account name, profile id, account area, latitude, longitude.
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-5">
+          <Button variant="outline" onClick={onClose} disabled={importing}>
+            Cancel
+          </Button>
+          <Button onClick={importProfiles} disabled={importing || !file}>
+            {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Import
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExportDialog({
+  profiles,
+  groups,
+  onClose,
+}: {
+  profiles: Profile[];
+  groups: string[];
+  onClose: () => void;
+}) {
+  const [group, setGroup] = useState(groups[0] ?? "__all__");
+  const [format, setFormat] = useState<FileFormat>("xlsx");
+
+  function download() {
+    const rows =
+      group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
+    if (rows.length === 0) return toast.error("No profiles in this group");
+    downloadProfiles(`incogniton-${group}`, format, rows.map(toSheetRow));
+    toast.success(`Exported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
+      <div
+        className="bg-card w-full max-w-md rounded-lg border p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold mb-4">Export Profiles</h2>
+        <div className="space-y-4">
+          <div>
+            <Label className="block mb-1.5">Group</Label>
+            <Select value={group} onValueChange={setGroup}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All profiles</SelectItem>
+                {groups.map((g) => (
+                  <SelectItem key={g} value={g}>
+                    {g}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="block mb-1.5">Format</Label>
+            <Select value={format} onValueChange={(value) => setFormat(value as FileFormat)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="xlsx">XLSX</SelectItem>
+                <SelectItem value="csv">CSV</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-5">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={download}>Export</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <Label className="block mb-1.5 text-[12px]">{label}</Label>
+      {children}
+    </div>
+  );
+}
