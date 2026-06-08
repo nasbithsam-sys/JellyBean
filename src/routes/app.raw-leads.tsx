@@ -148,7 +148,7 @@ function Page() {
     <div>
       <PageHeader
         title="Raw Leads"
-        description="Live feed from your Google Sheets scraper. Stored in Supabase — shared across all your devices."
+        description="Live feed from your scraper extension. Stored in Supabase — shared across all your devices."
       />
       <PageBody className="!pt-5">
         <RoleGate allow={["admin", "scraping", "processor"]} current={auth.primaryRole}>
