@@ -493,7 +493,7 @@ function Inner() {
                 <tr>
                   <td colSpan={12} className="text-center py-12 text-muted-foreground">
                     {tab === "new"
-                      ? "No leads in this view. Click Refresh to pull from sheet."
+                      ? "No leads yet. Run your scraper extension to push leads here."
                       : "Nothing here yet."}
                   </td>
                 </tr>
