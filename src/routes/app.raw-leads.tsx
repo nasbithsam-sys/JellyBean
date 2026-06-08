@@ -29,23 +29,17 @@ import {
   Search,
   Settings as Gear,
   Send,
-  BookmarkCheck,
   Eye,
   PhoneOff,
   Download,
+  Copy,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database, Json } from "@/integrations/supabase/types";
+import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
-
-// ── Storage keys (device-local preferences only) ──────────────────────────────
-const DEFAULT_API_URL =
-  "https://script.google.com/macros/s/AKfycbykybYjjrkdOMEC5M-mgFWIngGTY-g_jPdNL9mksND0jaoJ-ht8wspYAj88MCla8r2F2g/exec";
-const API_URL_KEY = "rawleads.apiUrl";
-const SHARED_START_ROW_KEY = "raw_leads.start_row";
 
 const TABLE = "raw_lead_cache";
 type RawLeadCacheUpdate = Database["public"]["Tables"]["raw_lead_cache"]["Update"];
