@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { PlacedAccount } from "@/components/leaflet-map";
@@ -26,9 +27,12 @@ type BrowserProfile = {
 type LeafletMapComp = ComponentType<{
   placed: PlacedAccount[];
   visuals: boolean;
+  radiusMode: MapRadiusMode;
   tempPin?: { lat: number; lng: number } | null;
   onMapClick?: (lat: number, lng: number) => void;
 }>;
+
+type MapRadiusMode = "daily" | "all";
 
 function Page() {
   const auth = useAuth();
@@ -49,18 +53,27 @@ function Page() {
 
 function Inner() {
   const [visuals, setVisuals] = useState(false);
+  const [radiusMode, setRadiusMode] = useState<MapRadiusMode>("daily");
   const [LeafletMap, setLeafletMap] = useState<LeafletMapComp | null>(null);
   const [tempPin, setTempPin] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
-    const value = localStorage.getItem("map.visuals");
-    if (value === "1") setVisuals(true);
+    const visualsValue = localStorage.getItem("map.visuals");
+    const modeValue = localStorage.getItem("map.radiusMode");
+    if (visualsValue === "1") setVisuals(true);
+    if (modeValue === "all" || modeValue === "daily") setRadiusMode(modeValue);
     import("@/components/leaflet-map").then((module) => setLeafletMap(() => module.default));
   }, []);
 
   const toggle = (next: boolean) => {
     setVisuals(next);
     localStorage.setItem("map.visuals", next ? "1" : "0");
+  };
+
+  const changeRadiusMode = (next: string) => {
+    const mode = next === "all" ? "all" : "daily";
+    setRadiusMode(mode);
+    localStorage.setItem("map.radiusMode", mode);
   };
 
   const profiles = useQuery({
@@ -119,18 +132,33 @@ function Inner() {
 
   const coveredToday = placed.filter((profile) => profile.launched_today).length;
   const missingToday = placed.length - coveredToday;
+  const fullRadiusCount = radiusMode === "all" ? placed.length : coveredToday;
 
   return (
     <div className="grid lg:grid-cols-3 gap-4">
       <div className="lg:col-span-2 glass-card p-5">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <div>
-            <h3 className="text-sm font-semibold tracking-tight">Daily profile coverage</h3>
+            <h3 className="text-sm font-semibold tracking-tight">
+              {radiusMode === "all" ? "Added account radius" : "Daily profile coverage"}
+            </h3>
             <div className="text-[11.5px] text-muted-foreground mt-0.5">
-              50-mile radius appears only for profiles launched today.
+              {radiusMode === "all"
+                ? "Every added browser profile with coordinates shows a 50-mile radius."
+                : "50-mile radius appears only for profiles launched today."}
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <Tabs value={radiusMode} onValueChange={changeRadiusMode}>
+              <TabsList className="h-9">
+                <TabsTrigger value="daily" className="h-7 text-[11.5px]">
+                  Daily launches
+                </TabsTrigger>
+                <TabsTrigger value="all" className="h-7 text-[11.5px]">
+                  All added accounts
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-primary" />
@@ -166,6 +194,7 @@ function Inner() {
             <LeafletMap
               placed={placed}
               visuals={visuals}
+              radiusMode={radiusMode}
               tempPin={tempPin}
               onMapClick={(lat, lng) => setTempPin({ lat, lng })}
             />
@@ -188,7 +217,8 @@ function Inner() {
             </>
           )}
           {" · "}
-          {coveredToday} covered today · {missingToday} missing · {placed.length} pinned profiles
+          {fullRadiusCount} full 50-mile radii · {coveredToday} covered today · {missingToday}{" "}
+          missing · {placed.length} pinned profiles
         </p>
       </div>
 

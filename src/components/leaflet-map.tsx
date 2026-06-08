@@ -26,6 +26,7 @@ export type PlacedAccount = {
 interface Props {
   placed: PlacedAccount[];
   visuals: boolean;
+  radiusMode: "daily" | "all";
   tempPin?: { lat: number; lng: number } | null;
   onMapClick?: (lat: number, lng: number) => void;
 }
@@ -41,21 +42,22 @@ function ClickToPlace({ onPlace }: { onPlace: (lat: number, lng: number) => void
   return null;
 }
 
-export default function LeafletMap({ placed, visuals, tempPin, onMapClick }: Props) {
+export default function LeafletMap({ placed, visuals, radiusMode, tempPin, onMapClick }: Props) {
   const items: React.ReactNode[] = [];
 
   for (const account of placed) {
     if (visuals) {
+      const fullRadius = radiusMode === "all" || account.launched_today;
       items.push(
         <Circle
           key={`c-${account.id}`}
           center={[account.latitude, account.longitude]}
-          radius={account.launched_today ? FIFTY_MILES_IN_METERS : 12000}
+          radius={fullRadius ? FIFTY_MILES_IN_METERS : 12000}
           pathOptions={{
             color: account.launched_today ? "#14b8a6" : "#94a3b8",
             fillColor: account.launched_today ? "#14b8a6" : "#94a3b8",
-            fillOpacity: account.launched_today ? 0.16 : 0.05,
-            weight: account.launched_today ? 2 : 1,
+            fillOpacity: fullRadius ? 0.14 : 0.05,
+            weight: fullRadius ? 2 : 1,
             dashArray: account.launched_today ? undefined : "4 6",
           }}
         >
