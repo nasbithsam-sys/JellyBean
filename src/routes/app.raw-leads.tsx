@@ -163,26 +163,11 @@ function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
 
-  const [apiUrl, setApiUrl] = useState<string>(() =>
-    typeof window === "undefined"
-      ? DEFAULT_API_URL
-      : localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL,
-  );
-  const [apiUrlDraft, setApiUrlDraft] = useState(apiUrl);
   const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Shared start row — kept in sync across all users via Supabase
-  const startRowQuery = useQuery({
-    queryKey: ["raw-leads-shared-start-row"],
-    queryFn: loadSharedStartRow,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-  });
-  const startRow = startRowQuery.data ?? 1;
-  const [startRowDraft, setStartRowDraft] = useState<string>(String(startRow));
-  useEffect(() => {
-    setStartRowDraft(String(startRow));
-  }, [startRow]);
+  const ingestUrl =
+    typeof window === "undefined"
+      ? ""
+      : `${window.location.origin}/api/public/ingest/raw-leads`;
 
   const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong">("new");
   const [query, setQuery] = useState("");
@@ -230,29 +215,8 @@ function Inner() {
     [qc, cacheQuery],
   );
 
-  // ── Sheet sync ─────────────────────────────────────────────────────────────
-  const { isFetching, refetch, error, data } = useQuery({
-    queryKey: ["raw-leads-api", apiUrl, startRow],
-    queryFn: () => fetchSheetRows(apiUrl, startRow),
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    staleTime: Infinity,
-    enabled: false, // only run on explicit Refresh
-  });
-
-  useEffect(() => {
-    if (!data) return;
-    if (data.rows.length > 0) {
-      upsertNewRows(data.rows, startRow)
-        .then(() => cacheQuery.refetch())
-        .catch((e) => toast.error(`Save failed: ${(e as Error).message}`));
-    }
-    // Persist the advancing cursor to the shared row so every user picks up from here.
-    saveSharedStartRow(data.nextRow, auth.user?.id ?? null)
-      .then(() => startRowQuery.refetch())
-      .catch((e) => toast.error(`Could not sync row cursor: ${(e as Error).message}`));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  const isFetching = cacheQuery.isFetching;
+  const error = cacheQuery.error as Error | null;
 
   // Bucket entries
   const buckets = useMemo(() => {
@@ -328,74 +292,13 @@ function Inner() {
     toast.success(`Exported ${visible.length} raw lead${visible.length === 1 ? "" : "s"}`);
   }
 
-  function saveApiUrl() {
-    const v = apiUrlDraft.trim();
-    if (!v) return;
-    localStorage.setItem(API_URL_KEY, v);
-    setApiUrl(v);
-    setSettingsOpen(false);
-    toast.success("Web App URL saved");
-  }
-
-  async function applyManualStartRow() {
-    const n = parseInt(startRowDraft, 10);
-    if (isNaN(n) || n < 1) {
-      toast.error("Enter a valid row number (1 or above)");
-      return;
-    }
-    try {
-      await saveSharedStartRow(n, auth.user?.id ?? null);
-      await startRowQuery.refetch();
-      toast.success(`Will load from row ${n} on next refresh (synced for all users)`);
-      setTimeout(() => refetch(), 100);
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
   function handleRefresh() {
-    refetch();
-  }
-
-  async function markCurrentPosition() {
-    try {
-      await saveSharedStartRow(startRow, auth.user?.id ?? null);
-      toast.success(`Bookmark saved at row ${startRow} for all users.`);
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
+    cacheQuery.refetch();
   }
 
   return (
     <div className="space-y-4">
-      {/* Row offset control */}
-      <div className="bg-card border rounded-lg px-4 py-3 flex flex-wrap items-center gap-3 text-[12.5px]">
-        <div className="flex items-center gap-2">
-          <Label className="text-muted-foreground whitespace-nowrap">Start from row:</Label>
-          <Input
-            type="number"
-            min={1}
-            value={startRowDraft}
-            onChange={(e) => setStartRowDraft(e.target.value)}
-            className="h-8 w-24 text-[12.5px]"
-          />
-          <Button size="sm" className="h-8 text-[12px]" onClick={applyManualStartRow}>
-            Apply &amp; Reload
-          </Button>
-        </div>
-        <div className="text-muted-foreground">
-          Next refresh will load from row <strong>{startRow}</strong>.
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 text-[12px] ml-auto"
-          onClick={markCurrentPosition}
-        >
-          <BookmarkCheck className="h-3.5 w-3.5 mr-1.5" />
-          Bookmark position
-        </Button>
-      </div>
+
 
       {/* Tabs + search bar */}
       <div className="flex flex-wrap items-center gap-2">
