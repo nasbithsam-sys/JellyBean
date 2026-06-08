@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -29,23 +29,17 @@ import {
   Search,
   Settings as Gear,
   Send,
-  BookmarkCheck,
   Eye,
   PhoneOff,
   Download,
+  Copy,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database, Json } from "@/integrations/supabase/types";
+import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
-
-// ── Storage keys (device-local preferences only) ──────────────────────────────
-const DEFAULT_API_URL =
-  "https://script.google.com/macros/s/AKfycbykybYjjrkdOMEC5M-mgFWIngGTY-g_jPdNL9mksND0jaoJ-ht8wspYAj88MCla8r2F2g/exec";
-const API_URL_KEY = "rawleads.apiUrl";
-const SHARED_START_ROW_KEY = "raw_leads.start_row";
 
 const TABLE = "raw_lead_cache";
 type RawLeadCacheUpdate = Database["public"]["Tables"]["raw_lead_cache"]["Update"];
@@ -127,66 +121,6 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
   return "";
 }
 
-// ── Shared start-row state (synced across all users via Supabase) ─────────────
-async function loadSharedStartRow(): Promise<number> {
-  const { data, error } = await supabase
-    .from("shared_state")
-    .select("value")
-    .eq("key", SHARED_START_ROW_KEY)
-    .maybeSingle();
-  if (error) throw error;
-  const value = data?.value;
-  const n = value && typeof value === "object" && !Array.isArray(value) ? value.row : undefined;
-  return typeof n === "number" && n > 0 ? n : 1;
-}
-
-async function saveSharedStartRow(row: number, userId: string | null): Promise<void> {
-  const { error } = await supabase.from("shared_state").upsert(
-    {
-      key: SHARED_START_ROW_KEY,
-      value: { row },
-      updated_at: new Date().toISOString(),
-      updated_by: userId,
-    },
-    { onConflict: "key" },
-  );
-  if (error) throw error;
-}
-
-// ── Google Sheets fetch ───────────────────────────────────────────────────────
-async function fetchSheetRows(
-  apiUrl: string,
-  startRow: number,
-): Promise<{ rows: Row[]; nextRow: number }> {
-  const url = `${apiUrl}${apiUrl.includes("?") ? "&" : "?"}startRow=${startRow}`;
-  let res: Response;
-  try {
-    res = await fetch(url, { method: "GET", redirect: "follow" });
-  } catch (e) {
-    throw new Error(
-      `Network error — could not reach Apps Script. Original: ${(e as Error).message}`,
-    );
-  }
-  if (!res.ok) {
-    throw new Error(`Apps Script returned HTTP ${res.status}.`);
-  }
-  const json = (await res.json()) as { rows?: Row[]; nextRow?: number };
-  const allRows = Array.isArray(json.rows) ? json.rows : [];
-  // Only take contiguous rows from the start whose "Lead" column (E) is filled.
-  // Stop at the first empty Lead cell — even if later rows have data, we wait
-  // until the gap is filled before advancing the shared cursor.
-  let cutoff = allRows.length;
-  for (let i = 0; i < allRows.length; i++) {
-    if (!(allRows[i].Lead ?? "").trim()) {
-      cutoff = i;
-      break;
-    }
-  }
-  const rows = allRows.slice(0, cutoff);
-  const nextRow = startRow + rows.length;
-  return { rows, nextRow };
-}
-
 // ── Supabase cache helpers ────────────────────────────────────────────────────
 async function loadCache(): Promise<CacheEntry[]> {
   const { data, error } = await supabase
@@ -198,23 +132,6 @@ async function loadCache(): Promise<CacheEntry[]> {
   return (data ?? []) as CacheEntry[];
 }
 
-async function upsertNewRows(rows: Row[], startRow: number) {
-  if (!rows.length) return;
-  const payload = rows.map((r, i) => ({
-    row_key: keyFor(r),
-    data: r as Json,
-    lead: leadValueFromRow(r),
-    captured_at: capturedIsoFromRow(r),
-    lead_link: r["Lead Link"] || null,
-    sheet_row: startRow + i,
-  }));
-  // Insert only fresh keys; ignore conflicts on row_key to preserve existing edits.
-  const { error } = await supabase.from(TABLE).upsert(payload, {
-    onConflict: "row_key",
-    ignoreDuplicates: true,
-  });
-  if (error) throw error;
-}
 
 async function patchEntry(row_key: string, patch: Partial<CacheEntry>) {
   const { error } = await supabase
@@ -231,7 +148,7 @@ function Page() {
     <div>
       <PageHeader
         title="Raw Leads"
-        description="Live feed from your Google Sheets scraper. Stored in Supabase — shared across all your devices."
+        description="Live feed from your scraper extension. Stored in Supabase — shared across all your devices."
       />
       <PageBody className="!pt-5">
         <RoleGate allow={["admin", "scraping", "processor"]} current={auth.primaryRole}>
@@ -246,26 +163,11 @@ function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
 
-  const [apiUrl, setApiUrl] = useState<string>(() =>
-    typeof window === "undefined"
-      ? DEFAULT_API_URL
-      : localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL,
-  );
-  const [apiUrlDraft, setApiUrlDraft] = useState(apiUrl);
   const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Shared start row — kept in sync across all users via Supabase
-  const startRowQuery = useQuery({
-    queryKey: ["raw-leads-shared-start-row"],
-    queryFn: loadSharedStartRow,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-  });
-  const startRow = startRowQuery.data ?? 1;
-  const [startRowDraft, setStartRowDraft] = useState<string>(String(startRow));
-  useEffect(() => {
-    setStartRowDraft(String(startRow));
-  }, [startRow]);
+  const ingestUrl =
+    typeof window === "undefined"
+      ? ""
+      : `${window.location.origin}/api/public/ingest/raw-leads`;
 
   const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong">("new");
   const [query, setQuery] = useState("");
@@ -313,29 +215,8 @@ function Inner() {
     [qc, cacheQuery],
   );
 
-  // ── Sheet sync ─────────────────────────────────────────────────────────────
-  const { isFetching, refetch, error, data } = useQuery({
-    queryKey: ["raw-leads-api", apiUrl, startRow],
-    queryFn: () => fetchSheetRows(apiUrl, startRow),
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    staleTime: Infinity,
-    enabled: false, // only run on explicit Refresh
-  });
-
-  useEffect(() => {
-    if (!data) return;
-    if (data.rows.length > 0) {
-      upsertNewRows(data.rows, startRow)
-        .then(() => cacheQuery.refetch())
-        .catch((e) => toast.error(`Save failed: ${(e as Error).message}`));
-    }
-    // Persist the advancing cursor to the shared row so every user picks up from here.
-    saveSharedStartRow(data.nextRow, auth.user?.id ?? null)
-      .then(() => startRowQuery.refetch())
-      .catch((e) => toast.error(`Could not sync row cursor: ${(e as Error).message}`));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  const isFetching = cacheQuery.isFetching;
+  const error = cacheQuery.error as Error | null;
 
   // Bucket entries
   const buckets = useMemo(() => {
@@ -411,74 +292,13 @@ function Inner() {
     toast.success(`Exported ${visible.length} raw lead${visible.length === 1 ? "" : "s"}`);
   }
 
-  function saveApiUrl() {
-    const v = apiUrlDraft.trim();
-    if (!v) return;
-    localStorage.setItem(API_URL_KEY, v);
-    setApiUrl(v);
-    setSettingsOpen(false);
-    toast.success("Web App URL saved");
-  }
-
-  async function applyManualStartRow() {
-    const n = parseInt(startRowDraft, 10);
-    if (isNaN(n) || n < 1) {
-      toast.error("Enter a valid row number (1 or above)");
-      return;
-    }
-    try {
-      await saveSharedStartRow(n, auth.user?.id ?? null);
-      await startRowQuery.refetch();
-      toast.success(`Will load from row ${n} on next refresh (synced for all users)`);
-      setTimeout(() => refetch(), 100);
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
   function handleRefresh() {
-    refetch();
-  }
-
-  async function markCurrentPosition() {
-    try {
-      await saveSharedStartRow(startRow, auth.user?.id ?? null);
-      toast.success(`Bookmark saved at row ${startRow} for all users.`);
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
+    cacheQuery.refetch();
   }
 
   return (
     <div className="space-y-4">
-      {/* Row offset control */}
-      <div className="bg-card border rounded-lg px-4 py-3 flex flex-wrap items-center gap-3 text-[12.5px]">
-        <div className="flex items-center gap-2">
-          <Label className="text-muted-foreground whitespace-nowrap">Start from row:</Label>
-          <Input
-            type="number"
-            min={1}
-            value={startRowDraft}
-            onChange={(e) => setStartRowDraft(e.target.value)}
-            className="h-8 w-24 text-[12.5px]"
-          />
-          <Button size="sm" className="h-8 text-[12px]" onClick={applyManualStartRow}>
-            Apply &amp; Reload
-          </Button>
-        </div>
-        <div className="text-muted-foreground">
-          Next refresh will load from row <strong>{startRow}</strong>.
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 text-[12px] ml-auto"
-          onClick={markCurrentPosition}
-        >
-          <BookmarkCheck className="h-3.5 w-3.5 mr-1.5" />
-          Bookmark position
-        </Button>
-      </div>
+
 
       {/* Tabs + search bar */}
       <div className="flex flex-wrap items-center gap-2">
@@ -673,7 +493,7 @@ function Inner() {
                 <tr>
                   <td colSpan={12} className="text-center py-12 text-muted-foreground">
                     {tab === "new"
-                      ? "No leads in this view. Click Refresh to pull from sheet."
+                      ? "No leads yet. Run your scraper extension to push leads here."
                       : "Nothing here yet."}
                   </td>
                 </tr>
@@ -810,31 +630,45 @@ function Inner() {
         {entries.length} loaded from database
       </div>
 
-      {/* Source settings */}
+      {/* Ingest endpoint info */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Web App URL (source)</DialogTitle>
+            <DialogTitle>Extension ingest endpoint</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <Label className="text-[12px] text-muted-foreground">
-              Google Apps Script Web App URL. Must return{" "}
-              <code>{`{ rows: [...], nextRow: N }`}</code>.
-            </Label>
-            <Input
-              value={apiUrlDraft}
-              onChange={(e) => setApiUrlDraft(e.target.value)}
-              placeholder="https://script.google.com/macros/s/.../exec"
-            />
+          <div className="space-y-3 text-[12.5px]">
+            <p className="text-muted-foreground">
+              Point your scraper extension at this URL. It must send{" "}
+              <code>POST</code> with a Supabase access token in{" "}
+              <code>Authorization: Bearer …</code> (sign in with a user that has the{" "}
+              <strong>admin</strong> or <strong>scraping</strong> role).
+            </p>
+            <div className="flex items-center gap-2">
+              <Input value={ingestUrl} readOnly className="font-mono text-[12px]" />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(ingestUrl);
+                  toast.success("Endpoint URL copied");
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <p className="text-muted-foreground">
+              Body accepts a single row object, <code>{`{ rows: [...] }`}</code>, or a bare
+              array of rows. Each row keeps the original Google Sheet column names
+              (<code>Account Name</code>, <code>Post Text</code>, <code>Lead Link</code>, …).
+              Duplicates (same <code>Lead Link</code>) are ignored so your manual edits stay.
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setApiUrlDraft(DEFAULT_API_URL)}>
-              Reset
-            </Button>
-            <Button onClick={saveApiUrl}>Save</Button>
+            <Button onClick={() => setSettingsOpen(false)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
 
       {/* Lead detail dialog */}
       {detailFor && (

@@ -23,6 +23,7 @@ import { Route as AppForwardedLeadsRouteImport } from './routes/app.forwarded-le
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
+import { Route as ApiPublicIngestRawLeadsRouteImport } from './routes/api.public.ingest.raw-leads'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -94,6 +95,11 @@ const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicIngestRawLeadsRoute = ApiPublicIngestRawLeadsRouteImport.update({
+  id: '/api/public/ingest/raw-leads',
+  path: '/api/public/ingest/raw-leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/': typeof AppIndexRoute
+  '/api/public/ingest/raw-leads': typeof ApiPublicIngestRawLeadsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -125,6 +132,7 @@ export interface FileRoutesByTo {
   '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
   '/app': typeof AppIndexRoute
+  '/api/public/ingest/raw-leads': typeof ApiPublicIngestRawLeadsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -142,6 +150,7 @@ export interface FileRoutesById {
   '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/': typeof AppIndexRoute
+  '/api/public/ingest/raw-leads': typeof ApiPublicIngestRawLeadsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -160,6 +169,7 @@ export interface FileRouteTypes {
     | '/app/reports'
     | '/app/settings'
     | '/app/'
+    | '/api/public/ingest/raw-leads'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/app/reports'
     | '/app/settings'
     | '/app'
+    | '/api/public/ingest/raw-leads'
   id:
     | '__root__'
     | '/'
@@ -191,12 +202,14 @@ export interface FileRouteTypes {
     | '/app/reports'
     | '/app/settings'
     | '/app/'
+    | '/api/public/ingest/raw-leads'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiPublicIngestRawLeadsRoute: typeof ApiPublicIngestRawLeadsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -299,6 +312,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAnalyticsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/ingest/raw-leads': {
+      id: '/api/public/ingest/raw-leads'
+      path: '/api/public/ingest/raw-leads'
+      fullPath: '/api/public/ingest/raw-leads'
+      preLoaderRoute: typeof ApiPublicIngestRawLeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -336,17 +356,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiPublicIngestRawLeadsRoute: ApiPublicIngestRawLeadsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
