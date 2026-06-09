@@ -23,6 +23,7 @@ import { Route as AppForwardedLeadsRouteImport } from './routes/app.forwarded-le
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
+import { Route as ApiNextdoorLeadsRouteImport } from './routes/api.nextdoor-leads'
 import { Route as ApiPublicNextdoorLeadsRouteImport } from './routes/api.public.nextdoor-leads'
 import { Route as ApiPublicIngestRawLeadsRouteImport } from './routes/api.public.ingest.raw-leads'
 
@@ -96,6 +97,11 @@ const AppAnalyticsRoute = AppAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiNextdoorLeadsRoute = ApiNextdoorLeadsRouteImport.update({
+  id: '/api/nextdoor-leads',
+  path: '/api/nextdoor-leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicNextdoorLeadsRoute = ApiPublicNextdoorLeadsRouteImport.update({
   id: '/api/public/nextdoor-leads',
   path: '/api/public/nextdoor-leads',
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/api/nextdoor-leads': typeof ApiNextdoorLeadsRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/api/nextdoor-leads': typeof ApiNextdoorLeadsRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/api/nextdoor-leads': typeof ApiNextdoorLeadsRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
+    | '/api/nextdoor-leads'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -184,6 +194,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/api/nextdoor-leads'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -202,6 +213,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
+    | '/api/nextdoor-leads'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -221,6 +233,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiNextdoorLeadsRoute: typeof ApiNextdoorLeadsRoute
   ApiPublicNextdoorLeadsRoute: typeof ApiPublicNextdoorLeadsRoute
   ApiPublicIngestRawLeadsRoute: typeof ApiPublicIngestRawLeadsRoute
 }
@@ -325,6 +338,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAnalyticsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/nextdoor-leads': {
+      id: '/api/nextdoor-leads'
+      path: '/api/nextdoor-leads'
+      fullPath: '/api/nextdoor-leads'
+      preLoaderRoute: typeof ApiNextdoorLeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/nextdoor-leads': {
       id: '/api/public/nextdoor-leads'
       path: '/api/public/nextdoor-leads'
@@ -376,6 +396,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiNextdoorLeadsRoute: ApiNextdoorLeadsRoute,
   ApiPublicNextdoorLeadsRoute: ApiPublicNextdoorLeadsRoute,
   ApiPublicIngestRawLeadsRoute: ApiPublicIngestRawLeadsRoute,
 }
