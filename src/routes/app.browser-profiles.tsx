@@ -792,6 +792,7 @@ function ImportDialog({
   async function importProfiles() {
     setImporting(true);
     try {
+      if (!userId) throw new Error("You must be signed in to import profiles.");
       const rows = validateSheetRows(await readRows()).map(
         (row) =>
           ({
@@ -803,11 +804,26 @@ function ImportDialog({
         onConflict: "incogniton_profile_id",
         ignoreDuplicates: false,
       });
-      if (error) throw error;
+      if (error) {
+        console.error("[Import profiles] Supabase error:", error);
+        throw new Error(
+          error.message ||
+            error.hint ||
+            error.details ||
+            "Database rejected the import (check your role / RLS).",
+        );
+      }
       toast.success(`Imported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
       onImported();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not import profiles");
+      console.error("[Import profiles] Failed:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "object" && error && "message" in error
+            ? String((error as { message: unknown }).message)
+            : "Could not import profiles";
+      toast.error(message);
     } finally {
       setImporting(false);
     }
