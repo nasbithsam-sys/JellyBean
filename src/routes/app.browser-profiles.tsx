@@ -78,6 +78,7 @@ function Inner() {
   const qc = useQueryClient();
   const auth = useAuth();
   const [query, setQuery] = useState("");
+  const [addedDateFilter, setAddedDateFilter] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -110,6 +111,7 @@ function Inner() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (profiles.data ?? []).filter((p) => {
+      if (addedDateFilter && dateKey(p.created_at) !== addedDateFilter) return false;
       if (!q) return true;
       return (
         p.profile_name.toLowerCase().includes(q) ||
@@ -117,7 +119,7 @@ function Inner() {
         (p.account_area ?? "").toLowerCase().includes(q)
       );
     });
-  }, [profiles.data, query]);
+  }, [addedDateFilter, profiles.data, query]);
 
   useEffect(() => {
     const validIds = new Set((profiles.data ?? []).map((profile) => profile.id));
@@ -219,6 +221,25 @@ function Inner() {
     return Date.now() - new Date(p.last_launched_at).getTime() < 30 * 60 * 1000 ? "Active" : "Idle";
   }
 
+  function dateKey(value: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function formatAddedDate(value: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Unknown";
+    return date.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
   return (
     <div className="space-y-4">
       {/* How launch works — info banner */}
@@ -244,6 +265,23 @@ function Inner() {
             placeholder="Search profile name or ID…"
             className="h-9 pl-9"
           />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="added-date-filter" className="text-[12px] text-muted-foreground">
+            Added
+          </Label>
+          <Input
+            id="added-date-filter"
+            type="date"
+            value={addedDateFilter}
+            onChange={(event) => setAddedDateFilter(event.target.value)}
+            className="h-9 w-[150px]"
+          />
+          {addedDateFilter && (
+            <Button variant="ghost" size="sm" onClick={() => setAddedDateFilter("")}>
+              Clear
+            </Button>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-2">
           {selectedProfiles.length > 0 && (
@@ -280,6 +318,7 @@ function Inner() {
               <th>Group</th>
               <th>Account Area</th>
               <th>Geo</th>
+              <th>Added Date</th>
               <th>Last Launched</th>
               <th className="text-right">Actions</th>
             </tr>
@@ -287,16 +326,18 @@ function Inner() {
           <tbody>
             {profiles.isLoading && (
               <tr>
-                <td colSpan={8} className="text-center py-6 text-muted-foreground">
+                <td colSpan={9} className="text-center py-6 text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             )}
             {!profiles.isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-10 text-muted-foreground">
+                <td colSpan={9} className="text-center py-10 text-muted-foreground">
                   <Globe className="h-5 w-5 inline mr-2 opacity-50" />
-                  No profiles yet. Click <strong>Add Profile</strong> to add your first one.
+                  {profiles.data?.length
+                    ? "No profiles match the current filters."
+                    : "No profiles yet. Click Add Profile to add your first one."}
                 </td>
               </tr>
             )}
@@ -321,6 +362,15 @@ function Inner() {
                     {p.latitude != null && p.longitude != null
                       ? `${p.latitude.toFixed(3)}, ${p.longitude.toFixed(3)}`
                       : "—"}
+                  </td>
+                  <td className="text-[12px] whitespace-nowrap">
+                    <div className="font-medium">{formatAddedDate(p.created_at)}</div>
+                    <div className="text-[10.5px] text-muted-foreground">
+                      {new Date(p.created_at).toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
                   </td>
                   <td>
                     {p.last_launched_at ? (
