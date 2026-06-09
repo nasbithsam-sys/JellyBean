@@ -793,13 +793,19 @@ function ImportDialog({
     setImporting(true);
     try {
       if (!userId) throw new Error("You must be signed in to import profiles.");
-      const rows = validateSheetRows(await readRows()).map(
+      const allRows = validateSheetRows(await readRows()).map(
         (row) =>
           ({
             ...row,
             created_by: userId,
           }) satisfies IncognitonProfileInsert,
       );
+      // Dedupe by incogniton_profile_id (last one wins) — Postgres ON CONFLICT
+      // rejects batches that hit the same conflict target twice.
+      const dedup = new Map<string, IncognitonProfileInsert>();
+      for (const row of allRows) dedup.set(row.incogniton_profile_id, row);
+      const rows = Array.from(dedup.values());
+      const skipped = allRows.length - rows.length;
       const { error } = await supabase.from("incogniton_profiles").upsert(rows, {
         onConflict: "incogniton_profile_id",
         ignoreDuplicates: false,
