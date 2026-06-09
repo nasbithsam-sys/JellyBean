@@ -800,12 +800,21 @@ function ImportDialog({
             created_by: userId,
           }) satisfies IncognitonProfileInsert,
       );
-      // Dedupe by incogniton_profile_id (last one wins) — Postgres ON CONFLICT
+      // Dedupe by incogniton_profile_id (FIRST occurrence wins) — Postgres ON CONFLICT
       // rejects batches that hit the same conflict target twice.
       const dedup = new Map<string, IncognitonProfileInsert>();
-      for (const row of allRows) dedup.set(row.incogniton_profile_id, row);
+      const skippedRows: { profile_name: string; incogniton_profile_id: string }[] = [];
+      for (const row of allRows) {
+        if (dedup.has(row.incogniton_profile_id)) {
+          skippedRows.push({
+            profile_name: row.profile_name,
+            incogniton_profile_id: row.incogniton_profile_id,
+          });
+        } else {
+          dedup.set(row.incogniton_profile_id, row);
+        }
+      }
       const rows = Array.from(dedup.values());
-      const skipped = allRows.length - rows.length;
       const { error } = await supabase.from("incogniton_profiles").upsert(rows, {
         onConflict: "incogniton_profile_id",
         ignoreDuplicates: false,
@@ -819,10 +828,17 @@ function ImportDialog({
             "Database rejected the import (check your role / RLS).",
         );
       }
-      toast.success(
-        `Imported ${rows.length} profile${rows.length === 1 ? "" : "s"}` +
-          (skipped > 0 ? ` (skipped ${skipped} duplicate profile id${skipped === 1 ? "" : "s"})` : ""),
-      );
+      if (skippedRows.length > 0) {
+        const preview = skippedRows.slice(0, 8).map((r) => `• ${r.profile_name}`).join("\n");
+        const extra = skippedRows.length > 8 ? `\n…and ${skippedRows.length - 8} more` : "";
+        toast.warning(
+          `Imported ${rows.length} • Skipped ${skippedRows.length} duplicate profile id${skippedRows.length === 1 ? "" : "s"}`,
+          { description: preview + extra, duration: 12000 },
+        );
+        console.warn("[Import profiles] Skipped duplicates:", skippedRows);
+      } else {
+        toast.success(`Imported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
+      }
       onImported();
     } catch (error) {
       console.error("[Import profiles] Failed:", error);
