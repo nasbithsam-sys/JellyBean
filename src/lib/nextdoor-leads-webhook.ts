@@ -80,24 +80,6 @@ function uniqueRows(rows: ExtRow[]) {
   return { unique, duplicateKeys };
 }
 
-async function selectExistingKeys(keys: string[]) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const existing = new Set<string>();
-  const CHUNK = 100;
-
-  for (let i = 0; i < keys.length; i += CHUNK) {
-    const slice = keys.slice(i, i + CHUNK);
-    const { data, error } = await supabaseAdmin
-      .from("raw_lead_cache")
-      .select("row_key")
-      .in("row_key", slice);
-    if (error) throw error;
-    for (const row of data ?? []) existing.add(row.row_key);
-  }
-
-  return existing;
-}
-
 export function handleNextdoorLeadsOptions() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
@@ -127,11 +109,31 @@ export async function handleNextdoorLeadsPost(request: Request) {
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { unique, duplicateKeys } = uniqueRows(rawRows);
-    const existingKeys = await selectExistingKeys(unique.map(({ key }) => key));
-    const rowsToInsert = unique.filter(({ key }) => !existingKeys.has(key));
-    const skippedIds = [...existingKeys, ...duplicateKeys];
 
-    const payload = rowsToInsert.map(({ key, row }) => ({
+    // ── Race-condition-safe upsert ────────────────────────────────────────────
+    //
+    // OLD approach (BUGGY with multiple extension instances):
+    //   1. SELECT existing keys
+    //   2. Filter out already-seen rows
+    //   3. INSERT only new rows
+    //
+    // Problem: two instances sending the same lead simultaneously both pass
+    // the SELECT check (neither exists yet), then both try to INSERT, and one
+    // gets a unique-constraint error and the lead is either dropped or causes
+    // a 500 response — the extension marks it as failed and never retries.
+    //
+    // NEW approach (race-safe):
+    //   Skip the SELECT entirely. Let the database's UNIQUE constraint on
+    //   row_key be the single source of truth. Use upsert with ignoreDuplicates:
+    //   true so a concurrent insert from another instance is silently ignored
+    //   rather than errored. The first writer wins; subsequent identical keys
+    //   are no-ops. No lead is ever dropped or lost.
+    //
+    // The count returned by Supabase upsert with ignoreDuplicates tells us
+    // exactly how many rows were actually new (inserted), which we use to
+    // build acceptedIds vs skippedIds correctly for the extension's sync log.
+
+    const payload = unique.map(({ key, row }) => ({
       row_key: key,
       data: toSheetRow(row),
       lead: null,
@@ -141,16 +143,33 @@ export async function handleNextdoorLeadsPost(request: Request) {
     }));
 
     const CHUNK = 100;
+    const acceptedIds: string[] = [];
+    const dbSkippedIds: string[] = [];
 
     for (let i = 0; i < payload.length; i += CHUNK) {
       const slice = payload.slice(i, i + CHUNK);
-      const { error } = await supabaseAdmin
+      const keys = unique.slice(i, i + CHUNK).map(({ key }) => key);
+
+      const { error, count } = await supabaseAdmin
         .from("raw_lead_cache")
-        .upsert(slice, { onConflict: "row_key", ignoreDuplicates: true });
+        .upsert(slice, { onConflict: "row_key", ignoreDuplicates: true, count: "exact" });
+
       if (error) return json({ ok: false, reason: error.message }, 500);
+
+      // `count` is the number of rows actually inserted (not ignored).
+      // Walk the keys in order: first `count` are accepted, the rest were
+      // already present (duplicate from another instance or prior sync).
+      const inserted = count ?? 0;
+      for (let j = 0; j < keys.length; j++) {
+        if (j < inserted) {
+          acceptedIds.push(keys[j]);
+        } else {
+          dbSkippedIds.push(keys[j]);
+        }
+      }
     }
 
-    const acceptedIds = rowsToInsert.map(({ key }) => key);
+    const skippedIds = [...dbSkippedIds, ...duplicateKeys];
     const skippedCount = skippedIds.length;
 
     return json({
