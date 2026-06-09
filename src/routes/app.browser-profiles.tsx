@@ -819,7 +819,10 @@ function ImportDialog({
             "Database rejected the import (check your role / RLS).",
         );
       }
-      toast.success(`Imported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
+      toast.success(
+        `Imported ${rows.length} profile${rows.length === 1 ? "" : "s"}` +
+          (skipped > 0 ? ` (skipped ${skipped} duplicate profile id${skipped === 1 ? "" : "s"})` : ""),
+      );
       onImported();
     } catch (error) {
       console.error("[Import profiles] Failed:", error);
