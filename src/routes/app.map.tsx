@@ -43,7 +43,7 @@ function Page() {
         description="Daily 50-mile launch coverage from browser profile coordinates."
       />
       <PageBody>
-        <RoleGate allow={["admin"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "acc_handler"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>

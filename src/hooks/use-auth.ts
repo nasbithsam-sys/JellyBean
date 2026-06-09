@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AppRole = "admin" | "scraping" | "processor" | "cs";
+export type AppRole = "admin" | "scraping" | "processor" | "cs" | "acc_handler";
 
 export interface AuthProfile {
   id: string;
@@ -122,7 +122,9 @@ export function useAuth(): AuthState {
         ? "processor"
         : roles.includes("cs")
           ? "cs"
-          : null;
+          : roles.includes("acc_handler")
+            ? "acc_handler"
+            : null;
 
   return { loading, session, user, profile, roles, primaryRole, refresh, signOut };
 }

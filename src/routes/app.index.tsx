@@ -32,6 +32,7 @@ function DashboardHome() {
     if (role === "cs") navigate({ to: "/app/cs-leads", replace: true });
     else if (role === "scraping" || role === "processor")
       navigate({ to: "/app/raw-leads", replace: true });
+    else if (role === "acc_handler") navigate({ to: "/app/map", replace: true });
   }, [auth.loading, role, navigate]);
 
   if (role !== "admin") {

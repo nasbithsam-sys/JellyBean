@@ -19,6 +19,7 @@ const ROLE_TABLES: Record<AppRole, string[]> = {
   scraping: ["qualified_leads", "incogniton_profiles", "shared_state", "raw_lead_cache"],
   processor: ["qualified_leads", "incogniton_profiles", "shared_state", "raw_lead_cache"],
   cs: ["qualified_leads"],
+  acc_handler: ["incogniton_profiles"],
 };
 
 /**

@@ -879,7 +879,10 @@ function ImportDialog({
         );
       }
       if (skippedRows.length > 0) {
-        const preview = skippedRows.slice(0, 8).map((r) => `• ${r.profile_name}`).join("\n");
+        const preview = skippedRows
+          .slice(0, 8)
+          .map((r) => `• ${r.profile_name}`)
+          .join("\n");
         const extra = skippedRows.length > 8 ? `\n…and ${skippedRows.length - 8} more` : "";
         toast.warning(
           `Imported ${rows.length} • Skipped ${skippedRows.length} duplicate profile id${skippedRows.length === 1 ? "" : "s"}`,

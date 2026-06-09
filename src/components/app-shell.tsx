@@ -47,6 +47,7 @@ const SCRAPING_PROCESSOR: Item[] = [
 ];
 
 const CS: Item[] = [{ to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard }];
+const ACC_HANDLER: Item[] = [{ to: "/app/map", label: "Map", icon: Map, shortcut: "M" }];
 
 const ADMIN_FULL: Item[] = [
   ...ADMIN.slice(0, 3),
@@ -58,6 +59,7 @@ function itemsForRole(role: AppRole | null): Item[] {
   if (role === "admin") return ADMIN_FULL;
   if (role === "scraping" || role === "processor") return SCRAPING_PROCESSOR;
   if (role === "cs") return CS;
+  if (role === "acc_handler") return ACC_HANDLER;
   return [];
 }
 
