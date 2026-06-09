@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -33,11 +34,13 @@ import {
   PhoneOff,
   Download,
   Copy,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
+import { analyzeRawLeadsWithAi } from "@/lib/raw-leads-ai.functions";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
@@ -162,6 +165,7 @@ function Page() {
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
+  const analyzeWithAi = useServerFn(analyzeRawLeadsWithAi);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const nextdoorWebhookUrl =
@@ -175,6 +179,10 @@ function Inner() {
   const [databaseLimit, setDatabaseLimit] = useState(RAW_LEADS_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
+  const [aiPrompt, setAiPrompt] = useState(
+    "Mark Yes only if the post is from someone likely needing a service, quote, repair, install, or recommendation. Mark No for ads, providers, spam, general discussion, or posts without buying/service intent.",
+  );
+  const [aiRunning, setAiRunning] = useState(false);
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
@@ -269,6 +277,7 @@ function Inner() {
   }, [actions, areaFilter, buckets, leadFilter, query, tab]);
 
   const shownRows = visible.slice(0, visibleLimit);
+  const aiTargets = visible.filter((entry) => entry.data["Post Text"]?.trim()).slice(0, 25);
 
   function exportRows() {
     downloadCsv(
@@ -291,6 +300,40 @@ function Inner() {
 
   function handleRefresh() {
     cacheQuery.refetch();
+  }
+
+  async function runAiLeadCheck() {
+    const prompt = aiPrompt.trim();
+    if (!prompt) {
+      toast.error("Write a prompt first.");
+      return;
+    }
+    if (aiTargets.length === 0) {
+      toast.info("No visible raw leads with post text to analyze.");
+      return;
+    }
+
+    setAiRunning(true);
+    try {
+      const result = await analyzeWithAi({
+        data: {
+          prompt,
+          rowKeys: aiTargets.map((entry) => entry.row_key),
+        },
+      });
+      const leadByKey = new Map(result.results.map((item) => [item.row_key, item.lead]));
+      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
+        (prev ?? []).map((entry) => {
+          const lead = leadByKey.get(entry.row_key);
+          return lead ? { ...entry, lead } : entry;
+        }),
+      );
+      toast.success(`AI checked ${result.analyzed}: ${result.yes} Yes, ${result.no} No`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAiRunning(false);
+    }
   }
 
   return (
@@ -432,6 +475,30 @@ function Inner() {
             Export
           </Button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
+        <Textarea
+          value={aiPrompt}
+          onChange={(e) => setAiPrompt(e.target.value)}
+          rows={2}
+          maxLength={2000}
+          placeholder="Prompt for AI lead checking..."
+          className="min-h-[56px] text-[12.5px]"
+        />
+        <Button
+          className="h-14 lg:w-[190px]"
+          onClick={runAiLeadCheck}
+          disabled={aiRunning || aiTargets.length === 0}
+          title="Analyze the first 25 visible raw leads with post text"
+        >
+          {aiRunning ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 mr-2" />
+          )}
+          Check 25 Leads
+        </Button>
       </div>
 
       {error && (
