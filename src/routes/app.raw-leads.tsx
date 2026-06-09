@@ -164,8 +164,8 @@ function Inner() {
   const qc = useQueryClient();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const ingestUrl =
-    typeof window === "undefined" ? "" : `${window.location.origin}/api/public/ingest/raw-leads`;
+  const nextdoorWebhookUrl =
+    typeof window === "undefined" ? "" : `${window.location.origin}/api/public/nextdoor-leads`;
 
   const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong">("new");
   const [query, setQuery] = useState("");
@@ -651,17 +651,17 @@ function Inner() {
           </DialogHeader>
           <div className="space-y-3 text-[12.5px]">
             <p className="text-muted-foreground">
-              Point your scraper extension at this URL. It must send <code>POST</code> with a
-              Supabase access token in <code>Authorization: Bearer …</code> (sign in with a user
-              that has the <strong>admin</strong> or <strong>scraping</strong> role).
+              Paste this URL into the Nextdoor scraper extension webhook field. The extension keeps
+              scraped leads in its local retry queue until this CRM endpoint accepts or dedupes
+              them.
             </p>
             <div className="flex items-center gap-2">
-              <Input value={ingestUrl} readOnly className="font-mono text-[12px]" />
+              <Input value={nextdoorWebhookUrl} readOnly className="font-mono text-[12px]" />
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  navigator.clipboard.writeText(ingestUrl);
+                  navigator.clipboard.writeText(nextdoorWebhookUrl);
                   toast.success("Endpoint URL copied");
                 }}
               >
@@ -669,10 +669,10 @@ function Inner() {
               </Button>
             </div>
             <p className="text-muted-foreground">
-              Body accepts a single row object, <code>{`{ rows: [...] }`}</code>, or a bare array of
-              rows. Each row keeps the original Google Sheet column names (<code>Account Name</code>
-              , <code>Post Text</code>, <code>Lead Link</code>, …). Duplicates (same{" "}
-              <code>Lead Link</code>) are ignored so your manual edits stay.
+              Raw Leads does not use live realtime reloads for this table, which keeps Supabase
+              usage lighter. Use Refresh or Load more to pull the latest accepted rows from the
+              database. Duplicate Nextdoor post IDs or links are reported back to the extension as
+              skipped.
             </p>
           </div>
           <DialogFooter>

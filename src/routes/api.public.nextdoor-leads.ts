@@ -64,6 +64,42 @@ function capturedIso(r: ExtRow): string | null {
   return Number.isNaN(t) ? null : new Date(t).toISOString();
 }
 
+function uniqueRows(rows: ExtRow[]) {
+  const seen = new Set<string>();
+  const unique: Array<{ key: string; row: ExtRow }> = [];
+  const duplicateKeys: string[] = [];
+
+  for (const row of rows) {
+    const key = rowKey(row);
+    if (seen.has(key)) {
+      duplicateKeys.push(key);
+      continue;
+    }
+    seen.add(key);
+    unique.push({ key, row });
+  }
+
+  return { unique, duplicateKeys };
+}
+
+async function selectExistingKeys(keys: string[]) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const existing = new Set<string>();
+  const CHUNK = 100;
+
+  for (let i = 0; i < keys.length; i += CHUNK) {
+    const slice = keys.slice(i, i + CHUNK);
+    const { data, error } = await supabaseAdmin
+      .from("raw_lead_cache")
+      .select("row_key")
+      .in("row_key", slice);
+    if (error) throw error;
+    for (const row of data ?? []) existing.add(row.row_key);
+  }
+
+  return existing;
+}
+
 export const Route = createFileRoute("/api/public/nextdoor-leads")({
   server: {
     handlers: {
@@ -95,37 +131,38 @@ export const Route = createFileRoute("/api/public/nextdoor-leads")({
           if (rawRows.length > 500) return json({ ok: false, reason: "too_many_rows" }, 400);
 
           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+          const { unique, duplicateKeys } = uniqueRows(rawRows);
+          const existingKeys = await selectExistingKeys(unique.map(({ key }) => key));
+          const rowsToInsert = unique.filter(({ key }) => !existingKeys.has(key));
+          const skippedIds = [...existingKeys, ...duplicateKeys];
 
-          const payload = rawRows.map((r) => ({
-            row_key: rowKey(r),
-            data: toSheetRow(r),
+          const payload = rowsToInsert.map(({ key, row }) => ({
+            row_key: key,
+            data: toSheetRow(row),
             lead: null,
-            captured_at: capturedIso(r),
-            lead_link: r.finalLink || r.postLink || r.profileLink || null,
+            captured_at: capturedIso(row),
+            lead_link: row.finalLink || row.postLink || row.profileLink || null,
             sheet_row: null,
           }));
 
           const CHUNK = 100;
-          let inserted = 0;
 
           for (let i = 0; i < payload.length; i += CHUNK) {
             const slice = payload.slice(i, i + CHUNK);
-            const { error, count } = await supabaseAdmin
+            const { error } = await supabaseAdmin
               .from("raw_lead_cache")
-              .upsert(slice, { onConflict: "row_key", ignoreDuplicates: true, count: "exact" });
+              .upsert(slice, { onConflict: "row_key", ignoreDuplicates: true });
             if (error) return json({ ok: false, reason: error.message }, 500);
-            inserted += count ?? 0;
           }
 
-          const skippedCount = rawRows.length - inserted;
-          const acceptedIds = rawRows.slice(0, inserted).map((r) => rowKey(r));
-          const skippedIds = rawRows.slice(inserted).map((r) => rowKey(r));
+          const acceptedIds = rowsToInsert.map(({ key }) => key);
+          const skippedCount = skippedIds.length;
 
           return json({
             schemaVersion: SCHEMA_VERSION,
             ok: true,
             status: "ok",
-            added: inserted,
+            added: acceptedIds.length,
             acceptedIds,
             skippedIds,
             skippedReasons: skippedCount > 0 ? { duplicate: skippedCount } : {},
