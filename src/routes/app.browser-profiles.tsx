@@ -793,13 +793,19 @@ function ImportDialog({
     setImporting(true);
     try {
       if (!userId) throw new Error("You must be signed in to import profiles.");
-      const rows = validateSheetRows(await readRows()).map(
+      const allRows = validateSheetRows(await readRows()).map(
         (row) =>
           ({
             ...row,
             created_by: userId,
           }) satisfies IncognitonProfileInsert,
       );
+      // Dedupe by incogniton_profile_id (last one wins) — Postgres ON CONFLICT
+      // rejects batches that hit the same conflict target twice.
+      const dedup = new Map<string, IncognitonProfileInsert>();
+      for (const row of allRows) dedup.set(row.incogniton_profile_id, row);
+      const rows = Array.from(dedup.values());
+      const skipped = allRows.length - rows.length;
       const { error } = await supabase.from("incogniton_profiles").upsert(rows, {
         onConflict: "incogniton_profile_id",
         ignoreDuplicates: false,
@@ -813,7 +819,10 @@ function ImportDialog({
             "Database rejected the import (check your role / RLS).",
         );
       }
-      toast.success(`Imported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
+      toast.success(
+        `Imported ${rows.length} profile${rows.length === 1 ? "" : "s"}` +
+          (skipped > 0 ? ` (skipped ${skipped} duplicate profile id${skipped === 1 ? "" : "s"})` : ""),
+      );
       onImported();
     } catch (error) {
       console.error("[Import profiles] Failed:", error);
