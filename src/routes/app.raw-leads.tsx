@@ -180,12 +180,10 @@ function Inner() {
   const cacheQuery = useQuery({
     queryKey: ["raw-lead-cache", databaseLimit],
     queryFn: () => loadCache(databaseLimit),
-    staleTime: Infinity,
+    // staleTime: 0 (default) — allows invalidateQueries() from useRealtimeSync
+    // to trigger a background refetch whenever new leads arrive from the extension.
     gcTime: Infinity,
-    refetchOnMount: false,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchInterval: false,
   });
 
   // Build action map keyed by row_key for fast lookup
