@@ -9,12 +9,15 @@ const TABLE_QUERY_KEYS: Record<string, string[][]> = {
   qualified_leads: [["cs_leads"], ["cs_sent_today"], ["cs_new_lead_ping"]],
   incogniton_profiles: [["incog_profiles"]],
   shared_state: [["raw-leads-shared-start-row"]],
+  // raw_lead_cache is where scraped leads land — invalidate so the
+  // Raw Leads page auto-refreshes whenever the extension pushes new data.
+  raw_lead_cache: [["raw-lead-cache"]],
 };
 
 const ROLE_TABLES: Record<AppRole, string[]> = {
-  admin: ["qualified_leads", "incogniton_profiles", "shared_state"],
-  scraping: ["qualified_leads", "incogniton_profiles", "shared_state"],
-  processor: ["qualified_leads", "incogniton_profiles", "shared_state"],
+  admin: ["qualified_leads", "incogniton_profiles", "shared_state", "raw_lead_cache"],
+  scraping: ["qualified_leads", "incogniton_profiles", "shared_state", "raw_lead_cache"],
+  processor: ["qualified_leads", "incogniton_profiles", "shared_state", "raw_lead_cache"],
   cs: ["qualified_leads"],
 };
 
