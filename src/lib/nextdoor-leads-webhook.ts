@@ -145,18 +145,26 @@ export async function handleNextdoorLeadsPost(request: Request) {
     for (let index = 0; index < payload.length; index += chunkSize) {
       const slice = payload.slice(index, index + chunkSize);
       const keys = unique.slice(index, index + chunkSize).map(({ key }) => key);
-      const { error, count } = await supabaseAdmin
+
+      const { error } = await supabaseAdmin
         .from("raw_lead_cache")
-        .upsert(slice, { onConflict: "row_key", ignoreDuplicates: true, count: "exact" });
+        .upsert(slice, { onConflict: "row_key", ignoreDuplicates: true });
 
       if (error) {
         return json({ ok: false, reason: error.message }, 500);
       }
 
-      const inserted = count ?? 0;
-      for (let offset = 0; offset < keys.length; offset++) {
-        if (offset < inserted) acceptedIds.push(keys[offset]);
-        else dbSkippedIds.push(keys[offset]);
+      // Determine which keys were actually inserted by checking which already existed
+      const { data: existing } = await supabaseAdmin
+        .from("raw_lead_cache")
+        .select("row_key")
+        .in("row_key", keys)
+        .lt("created_at", new Date(Date.now() - 2000).toISOString());
+
+      const existingSet = new Set((existing ?? []).map((r) => r.row_key));
+      for (const key of keys) {
+        if (existingSet.has(key)) dbSkippedIds.push(key);
+        else acceptedIds.push(key);
       }
     }
 

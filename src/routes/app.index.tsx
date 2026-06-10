@@ -72,16 +72,19 @@ function AdminDashboard() {
 
       const [rawNew, rawSent, rawCancelled, todayRaw, todayQualified, ...csResults] =
         await Promise.all([
-          ...rawStatuses.map((status) =>
-            supabase
-              .from("raw_leads")
-              .select("id", { count: "exact", head: true })
-              .eq("status", status),
-          ),
+          ...rawStatuses.map((status) => {
+            let q = supabase
+              .from("raw_lead_cache")
+              .select("id", { count: "exact", head: true });
+            if (status === "qualified") q = q.eq("lead", "yes");
+            else if (status === "cancelled") q = q.eq("lead", "no");
+            else q = q.is("lead", null);
+            return q;
+          }),
           supabase
-            .from("raw_leads")
+            .from("raw_lead_cache")
             .select("id", { count: "exact", head: true })
-            .gte("created_at", today),
+            .gte("captured_at", today),
           supabase
             .from("qualified_leads")
             .select("id", { count: "exact", head: true })
