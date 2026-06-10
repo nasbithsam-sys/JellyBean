@@ -180,7 +180,7 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
     const { error: updateError } = await supabaseAdmin
       .from("raw_lead_cache")
       .upsert(
-        results.map(({ row_key, lead }) => ({ row_key, lead })),
+        results.map(({ row_key, lead }) => ({ row_key, lead })) as never,
         { onConflict: "row_key" },
       );
     if (updateError) throw new Error(updateError.message);
