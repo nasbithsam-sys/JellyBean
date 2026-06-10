@@ -83,6 +83,20 @@ function Inner() {
       return c;
     },
   });
+  const byAccount = useQuery({
+    queryKey: ["report-leads-by-account"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("report_leads_by_account");
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        account: string;
+        yes_count: number;
+        no_count: number;
+        pending_count: number;
+        total_count: number;
+      }>;
+    },
+  });
   const accountsCount = useQuery({
     queryKey: ["report-accounts"],
     queryFn: async () => {
