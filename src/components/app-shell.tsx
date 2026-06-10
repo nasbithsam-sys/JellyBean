@@ -80,8 +80,9 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   useRealtimeSync(auth.primaryRole);
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
-      <aside className="w-[248px] shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col sticky top-0 h-screen">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+      <aside className="w-[248px] shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col h-screen">
+
         <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-sm border border-sidebar-border bg-sidebar-accent grid place-items-center">
@@ -187,7 +188,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           </div>
         </div>
       </aside>
-      <main className="flex-1 min-w-0">{children}</main>
+      <main className="flex-1 min-w-0 h-screen overflow-y-auto overflow-x-hidden">{children}</main>
     </div>
   );
 }
