@@ -66,11 +66,16 @@ export const consumeLoginOtp = createServerFn({ method: "POST" })
       throw new Error("Login code has expired. Ask an admin to generate a new one.");
     }
     if (prof.login_otp !== data.code.trim()) throw new Error("Invalid code");
-    // Rotate to a new one-time code so it can't be reused
+    // Rotate to a new one-time code so it can't be reused, and record server-side verification
     const next = newCode();
+    const nowIso = new Date().toISOString();
     const { error: uErr } = await admin
       .from("profiles")
-      .update({ login_otp: next, login_otp_updated_at: new Date().toISOString() })
+      .update({
+        login_otp: next,
+        login_otp_updated_at: nowIso,
+        otp_verified_at: nowIso,
+      })
       .eq("user_id", context.userId);
     if (uErr) throw new Error(uErr.message);
     return { ok: true };
