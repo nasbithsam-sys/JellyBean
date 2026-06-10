@@ -792,9 +792,16 @@ function LeadCard({
       className={cn(
         "glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up",
         selected && "ring-2 ring-primary border-primary",
+        lead.is_important && "border-warning/60 bg-warning/5",
       )}
       onClick={onOpen}
     >
+      {lead.is_important && (
+        <div className="-mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/40 text-[10.5px] font-semibold uppercase tracking-wide">
+          <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+          Important job
+        </div>
+      )}
       <div className="flex items-start gap-3">
         {showSelect && (
           <input
