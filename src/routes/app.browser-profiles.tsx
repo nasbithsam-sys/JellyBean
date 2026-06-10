@@ -441,23 +441,21 @@ function Inner() {
           }}
         />
       )}
-      {importOpen && (
-        <ImportDialog
-          userId={auth.user?.id ?? null}
-          onClose={() => setImportOpen(false)}
-          onImported={() => {
-            setImportOpen(false);
-            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-          }}
-        />
-      )}
-      {exportOpen && (
-        <ExportDialog
-          profiles={profiles.data ?? []}
-          groups={groups}
-          onClose={() => setExportOpen(false)}
-        />
-      )}
+      <ImportDialog
+        open={importOpen}
+        userId={auth.user?.id ?? null}
+        onClose={() => setImportOpen(false)}
+        onImported={() => {
+          setImportOpen(false);
+          qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+        }}
+      />
+      <ExportDialog
+        open={exportOpen}
+        profiles={profiles.data ?? []}
+        groups={groups}
+        onClose={() => setExportOpen(false)}
+      />
       {historyFor && (
         <Dialog open onOpenChange={(o) => !o && setHistoryFor(null)}>
           <DialogContent className="max-w-md">
