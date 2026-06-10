@@ -475,6 +475,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      report_leads_by_account: {
+        Args: never
+        Returns: {
+          account: string
+          no_count: number
+          pending_count: number
+          total_count: number
+          yes_count: number
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "scraping" | "cs" | "processor" | "acc_handler"
