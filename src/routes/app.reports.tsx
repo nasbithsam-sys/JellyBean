@@ -130,8 +130,8 @@ function Inner() {
     queryKey: ["report-leads-by-account", range.from, range.to],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("report_leads_by_account", {
-        _from: range.from,
-        _to: range.to,
+        _from: range.from ?? undefined,
+        _to: range.to ?? undefined,
       });
       if (error) throw error;
       return (data ?? []) as Array<{
