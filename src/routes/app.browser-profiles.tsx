@@ -990,14 +990,26 @@ function ExportDialog({
 }) {
   const [group, setGroup] = useState(groups[0] ?? "__all__");
   const [format, setFormat] = useState<FileFormat>("xlsx");
+  const [exporting, setExporting] = useState(false);
 
   function download() {
-    const rows =
-      group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
-    if (rows.length === 0) return toast.error("No profiles in this group");
-    downloadProfiles(`incogniton-${group}`, format, rows.map(toSheetRow));
-    toast.success(`Exported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
-    onClose();
+    setExporting(true);
+    try {
+      const rows =
+        group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
+      if (rows.length === 0) {
+        toast.error("No profiles in this group");
+        return;
+      }
+      downloadProfiles(`incogniton-${group}`, format, rows.map(toSheetRow));
+      toast.success(`Exported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
+      onClose();
+    } catch (error) {
+      console.error("[Export profiles] Failed:", error);
+      toast.error(error instanceof Error ? error.message : "Could not export profiles");
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -1038,10 +1050,13 @@ function ExportDialog({
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-5">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={exporting}>
             Cancel
           </Button>
-          <Button onClick={download}>Export</Button>
+          <Button onClick={download} disabled={exporting}>
+            {exporting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Export
+          </Button>
         </div>
       </div>
     </div>
