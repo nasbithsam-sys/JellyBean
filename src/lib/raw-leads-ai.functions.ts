@@ -177,13 +177,14 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
 
     if (results.length === 0) throw new Error("AI returned no usable lead decisions");
 
-    const { error: updateError } = await supabaseAdmin
-      .from("raw_lead_cache")
-      .upsert(
-        results.map(({ row_key, lead }) => ({ row_key, lead })) as never,
-        { onConflict: "row_key" },
-      );
-    if (updateError) throw new Error(updateError.message);
+    for (const { row_key, lead } of results) {
+      const { error: updateError } = await supabaseAdmin
+        .from("raw_lead_cache")
+        .update({ lead } as never)
+        .eq("row_key", row_key);
+      if (updateError) throw new Error(updateError.message);
+    }
+
 
     return {
       ok: true,
