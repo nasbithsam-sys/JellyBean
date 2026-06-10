@@ -253,6 +253,7 @@ export type Database = {
           login_otp: string | null
           login_otp_updated_at: string | null
           otp_required: boolean
+          otp_verified_at: string | null
           updated_at: string
           user_id: string
           username: string | null
@@ -266,6 +267,7 @@ export type Database = {
           login_otp?: string | null
           login_otp_updated_at?: string | null
           otp_required?: boolean
+          otp_verified_at?: string | null
           updated_at?: string
           user_id: string
           username?: string | null
@@ -279,6 +281,7 @@ export type Database = {
           login_otp?: string | null
           login_otp_updated_at?: string | null
           otp_required?: boolean
+          otp_verified_at?: string | null
           updated_at?: string
           user_id?: string
           username?: string | null
