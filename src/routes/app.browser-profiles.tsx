@@ -1019,12 +1019,12 @@ function ExportDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div
-        className="bg-card w-full max-w-md rounded-lg border p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold mb-4">Export Profiles</h2>
+    <Dialog open onOpenChange={(o) => !o && !exporting && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Export Profiles</DialogTitle>
+          <DialogDescription>Download profiles as an XLSX or CSV file.</DialogDescription>
+        </DialogHeader>
         <div className="space-y-4">
           <div>
             <Label className="block mb-1.5">Group</Label>
@@ -1055,7 +1055,7 @@ function ExportDialog({
             </Select>
           </div>
         </div>
-        <div className="flex justify-end gap-2 pt-5">
+        <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onClose} disabled={exporting}>
             Cancel
           </Button>
@@ -1064,10 +1064,11 @@ function ExportDialog({
             Export
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
+
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
