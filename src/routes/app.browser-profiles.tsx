@@ -837,6 +837,9 @@ function ImportDialog({
   const [format, setFormat] = useState<FileFormat>("xlsx");
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const safeClose = () => {
+    if (!importing) onClose();
+  };
 
   async function readRows() {
     if (!file) throw new Error("Choose a file to import.");
@@ -882,10 +885,14 @@ function ImportDialog({
       const BATCH_SIZE = 50;
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
-        const { error } = await supabase.from("incogniton_profiles").upsert(batch, {
-          onConflict: "incogniton_profile_id",
-          ignoreDuplicates: false,
-        });
+        const { error } = await withTimeout(
+          supabase.from("incogniton_profiles").upsert(batch, {
+            onConflict: "incogniton_profile_id",
+            ignoreDuplicates: false,
+          }),
+          20000,
+          "Import timed out. Please try a smaller file or check your connection.",
+        );
         if (error) {
           console.error("[Import profiles] Supabase error:", error);
           throw new Error(
@@ -927,7 +934,7 @@ function ImportDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={safeClose}>
       <div
         className="bg-card w-full max-w-md rounded-lg border p-6"
         onClick={(e) => e.stopPropagation()}
@@ -959,7 +966,7 @@ function ImportDialog({
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-5">
-          <Button variant="outline" onClick={onClose} disabled={importing}>
+          <Button variant="outline" onClick={safeClose} disabled={importing}>
             Cancel
           </Button>
           <Button onClick={importProfiles} disabled={importing || !file}>
