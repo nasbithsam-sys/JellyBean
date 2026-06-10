@@ -1,11 +1,48 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadCsv } from "@/lib/crm-lite";
+
+type DatePreset = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
+
+function toIsoDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10);
+}
+function computeRange(preset: DatePreset, from: string, to: string) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTomorrow = new Date(startOfToday); startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+  switch (preset) {
+    case "today":
+      return { from: startOfToday.toISOString(), to: startOfTomorrow.toISOString() };
+    case "yesterday": {
+      const y = new Date(startOfToday); y.setDate(y.getDate() - 1);
+      return { from: y.toISOString(), to: startOfToday.toISOString() };
+    }
+    case "7d": {
+      const s = new Date(startOfToday); s.setDate(s.getDate() - 6);
+      return { from: s.toISOString(), to: startOfTomorrow.toISOString() };
+    }
+    case "30d": {
+      const s = new Date(startOfToday); s.setDate(s.getDate() - 29);
+      return { from: s.toISOString(), to: startOfTomorrow.toISOString() };
+    }
+    case "custom": {
+      const f = from ? new Date(from + "T00:00:00").toISOString() : null;
+      const t = to ? (() => { const d = new Date(to + "T00:00:00"); d.setDate(d.getDate() + 1); return d.toISOString(); })() : null;
+      return { from: f, to: t };
+    }
+    default:
+      return { from: null, to: null };
+  }
+}
+
 
 export const Route = createFileRoute("/app/reports")({ component: Page });
 
