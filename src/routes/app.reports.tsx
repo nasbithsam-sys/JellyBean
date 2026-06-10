@@ -45,12 +45,15 @@ function Inner() {
     queryKey: ["report-raw"],
     queryFn: async () => {
       const results = await Promise.all(
-        RAW_STATUSES.map((status) =>
-          supabase
-            .from("raw_leads")
-            .select("id", { count: "exact", head: true })
-            .eq("status", status),
-        ),
+        RAW_STATUSES.map((status) => {
+          let q = supabase
+            .from("raw_lead_cache")
+            .select("id", { count: "exact", head: true });
+          if (status === "qualified") q = q.eq("lead", "yes");
+          else if (status === "cancelled") q = q.eq("lead", "no");
+          else q = q.is("lead", null);
+          return q;
+        }),
       );
       const c: Record<string, number> = {};
       results.forEach((result, index) => {
