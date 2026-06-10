@@ -66,7 +66,7 @@ function Page() {
         description="Add your Incogniton profile IDs here and launch them with one click."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "scraping", "processor"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "scraping", "processor", "acc_handler"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
