@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const analyzeInputSchema = z.object({
   prompt: z.string().trim().min(1).max(2000),
-  rowKeys: z.array(z.string().min(1)).min(1).max(25),
+  rowKeys: z.array(z.string().min(1)).min(1).max(50),
 });
 
 type RawLeadAiResult = {
