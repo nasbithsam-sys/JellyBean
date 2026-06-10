@@ -937,7 +937,7 @@ function ImportDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(o) => !o && safeClose()}>
+    <Dialog open={open} onOpenChange={(o) => !o && safeClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Import Profiles</DialogTitle>
