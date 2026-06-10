@@ -20,7 +20,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Leadgrid CRM" },
       { name: "description", content: "Internal lead operations dashboard" },
       { name: "robots", content: "noindex, nofollow" },
-      { name: "theme-color", content: "#1a1c24" },
+      { name: "theme-color", content: "#0f1b3d" },
       { property: "og:title", content: "Leadgrid CRM" },
       { name: "twitter:title", content: "Leadgrid CRM" },
       { property: "og:description", content: "Internal lead operations dashboard" },
@@ -39,8 +39,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
     ],
     links: [
-      { rel: "preconnect", href: "https://rsms.me/" },
-      { rel: "stylesheet", href: "https://rsms.me/inter/inter.css" },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap",
+      },
       { rel: "stylesheet", href: appCss },
     ],
   }),
