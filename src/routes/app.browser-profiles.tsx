@@ -865,19 +865,24 @@ function ImportDialog({
         }
       }
       const rows = Array.from(dedup.values());
-      const { error } = await supabase.from("incogniton_profiles").upsert(rows, {
-        onConflict: "incogniton_profile_id",
-        ignoreDuplicates: false,
-      });
-      if (error) {
-        console.error("[Import profiles] Supabase error:", error);
-        throw new Error(
-          error.message ||
-            error.hint ||
-            error.details ||
-            "Database rejected the import (check your role / RLS).",
-        );
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        const { error } = await supabase.from("incogniton_profiles").upsert(batch, {
+          onConflict: "incogniton_profile_id",
+          ignoreDuplicates: false,
+        });
+        if (error) {
+          console.error("[Import profiles] Supabase error:", error);
+          throw new Error(
+            error.message ||
+              error.hint ||
+              error.details ||
+              "Database rejected the import (check your role / RLS).",
+          );
+        }
       }
+
       if (skippedRows.length > 0) {
         const preview = skippedRows
           .slice(0, 8)
