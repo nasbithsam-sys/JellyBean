@@ -441,23 +441,21 @@ function Inner() {
           }}
         />
       )}
-      {importOpen && (
-        <ImportDialog
-          userId={auth.user?.id ?? null}
-          onClose={() => setImportOpen(false)}
-          onImported={() => {
-            setImportOpen(false);
-            qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-          }}
-        />
-      )}
-      {exportOpen && (
-        <ExportDialog
-          profiles={profiles.data ?? []}
-          groups={groups}
-          onClose={() => setExportOpen(false)}
-        />
-      )}
+      <ImportDialog
+        open={importOpen}
+        userId={auth.user?.id ?? null}
+        onClose={() => setImportOpen(false)}
+        onImported={() => {
+          setImportOpen(false);
+          qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+        }}
+      />
+      <ExportDialog
+        open={exportOpen}
+        profiles={profiles.data ?? []}
+        groups={groups}
+        onClose={() => setExportOpen(false)}
+      />
       {historyFor && (
         <Dialog open onOpenChange={(o) => !o && setHistoryFor(null)}>
           <DialogContent className="max-w-md">
@@ -829,10 +827,12 @@ function AddProfileDialog({
 // ── Export Dialog ─────────────────────────────────────────────────────────────
 
 function ImportDialog({
+  open,
   userId,
   onClose,
   onImported,
 }: {
+  open: boolean;
   userId: string | null;
   onClose: () => void;
   onImported: () => void;
@@ -937,7 +937,7 @@ function ImportDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(o) => !o && safeClose()}>
+    <Dialog open={open} onOpenChange={(o) => !o && safeClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Import Profiles</DialogTitle>
@@ -986,10 +986,12 @@ function ImportDialog({
 
 
 function ExportDialog({
+  open,
   profiles,
   groups,
   onClose,
 }: {
+  open: boolean;
   profiles: Profile[];
   groups: string[];
   onClose: () => void;
@@ -1019,7 +1021,7 @@ function ExportDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(o) => !o && !exporting && onClose()}>
+    <Dialog open={open} onOpenChange={(o) => !o && !exporting && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Export Profiles</DialogTitle>
