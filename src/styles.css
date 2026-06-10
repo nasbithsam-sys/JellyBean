@@ -187,25 +187,35 @@
   html,
   body {
     font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
   }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    letter-spacing: -0.005em;
     background-image:
       radial-gradient(
-        1200px 600px at 80% -10%,
-        color-mix(in oklab, var(--primary) 10%, transparent),
+        1100px 520px at 85% -10%,
+        color-mix(in oklab, var(--primary) 12%, transparent),
         transparent 60%
       ),
       radial-gradient(
-        900px 500px at -10% 100%,
-        color-mix(in oklab, var(--primary-glow) 8%, transparent),
+        800px 480px at -10% 110%,
+        color-mix(in oklab, var(--primary-glow) 9%, transparent),
         transparent 60%
       );
     background-attachment: fixed;
+  }
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    font-weight: 500;
+  }
+  code, pre, kbd, .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "ss01", "cv11";
   }
 
   ::-webkit-scrollbar {
