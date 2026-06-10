@@ -66,11 +66,16 @@ export const consumeLoginOtp = createServerFn({ method: "POST" })
       throw new Error("Login code has expired. Ask an admin to generate a new one.");
     }
     if (prof.login_otp !== data.code.trim()) throw new Error("Invalid code");
-    // Rotate to a new one-time code so it can't be reused
+    // Rotate to a new one-time code so it can't be reused, and record server-side verification
     const next = newCode();
+    const nowIso = new Date().toISOString();
     const { error: uErr } = await admin
       .from("profiles")
-      .update({ login_otp: next, login_otp_updated_at: new Date().toISOString() })
+      .update({
+        login_otp: next,
+        login_otp_updated_at: nowIso,
+        otp_verified_at: nowIso,
+      })
       .eq("user_id", context.userId);
     if (uErr) throw new Error(uErr.message);
     return { ok: true };
@@ -106,4 +111,46 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     const { error } = await admin.auth.admin.deleteUser(data.userId);
     if (error) throw new Error(error.message);
     return { ok: true };
+  });
+
+// Server-side check that the current session has completed OTP (when required).
+// Compares otp_verified_at against the JWT iat so each fresh sign-in must re-verify.
+export const requireOtpVerified = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const admin = adminClient();
+    const { data: prof, error } = await admin
+      .from("profiles")
+      .select("otp_required, otp_verified_at, is_active")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!prof) throw new Error("Profile not found");
+    if (!prof.is_active) throw new Error("Account inactive");
+
+    const { data: roles, error: rErr } = await admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId);
+    if (rErr) throw new Error(rErr.message);
+    const roleList = (roles ?? []).map((r) => r.role as string);
+    const { data: settings } = await admin
+      .from("app_settings")
+      .select("admin_otp_required")
+      .maybeSingle();
+    const isAdmin = roleList.includes("admin");
+    const roleNeedsOtp =
+      roleList.includes("scraping") ||
+      roleList.includes("processor") ||
+      roleList.includes("cs");
+    const adminNeedsOtp = isAdmin && Boolean(settings?.admin_otp_required);
+    const needsOtp = prof.otp_required || roleNeedsOtp || adminNeedsOtp;
+    if (!needsOtp) return { ok: true as const };
+
+    const iatSec = Number((context.claims as { iat?: number } | null)?.iat ?? 0);
+    const verifiedMs = prof.otp_verified_at ? Date.parse(prof.otp_verified_at) : 0;
+    if (!verifiedMs || verifiedMs < iatSec * 1000) {
+      throw new Error("OTP verification required");
+    }
+    return { ok: true as const };
   });
