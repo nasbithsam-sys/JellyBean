@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const analyzeInputSchema = z.object({
   prompt: z.string().trim().min(1).max(2000),
-  rowKeys: z.array(z.string().min(1)).min(1).max(25),
+  rowKeys: z.array(z.string().min(1)).min(1).max(50),
 });
 
 type RawLeadAiResult = {
@@ -142,7 +142,7 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await ensureRequesterCanAnalyze(context.userId);
 
-    const orderedKeys = [...new Set(data.rowKeys)].slice(0, 25);
+    const orderedKeys = [...new Set(data.rowKeys)].slice(0, 50);
     const { data: rows, error } = await supabaseAdmin
       .from("raw_lead_cache")
       .select("row_key, data")

@@ -278,13 +278,14 @@ function Inner() {
 
   const shownRows = visible.slice(0, visibleLimit);
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
-  // AND no user/AI override), so each click marches through the next 25.
+  // AND no user/AI override), so each click marches through the next 50.
   const aiTargets = visible
     .filter(
       (entry) =>
         entry.data["Post Text"]?.trim() && effectiveLead(entry.data, actions[entry.row_key]) === "",
     )
-    .slice(0, 25);
+    .slice(0, 50);
+
 
   function exportRows() {
     downloadCsv(
@@ -497,14 +498,15 @@ function Inner() {
           className="h-14 lg:w-[190px]"
           onClick={runAiLeadCheck}
           disabled={aiRunning || aiTargets.length === 0}
-          title="Analyze the first 25 visible raw leads with post text"
+          title="Analyze the first 50 visible raw leads with post text"
         >
           {aiRunning ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
             <Sparkles className="h-4 w-4 mr-2" />
           )}
-          Check 25 Leads
+          Check 50 Leads
+
         </Button>
       </div>
 
