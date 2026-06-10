@@ -979,6 +979,7 @@ function QualifyDialog({
   const [context, setContext] = useState("");
   const [passItTo, setPassItTo] = useState("");
   const [subArea, setSubArea] = useState(row["Sub Area / Neighborhood"] ?? "");
+  const [isImportant, setIsImportant] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function send() {
@@ -998,9 +999,8 @@ function QualifyDialog({
         main_area: row["Account Area"]?.trim() || null,
         original_lead_link: row["Lead Link"] || null,
         assigned_by: actorId,
-        // Track who forwarded the lead so scraping/processor can see status
-        // updates of their own forwarded leads in the Forwarded Leads tab.
         created_by: actorId,
+        is_important: isImportant,
       } as never);
       if (error) throw error;
       onSent();
