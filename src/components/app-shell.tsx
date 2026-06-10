@@ -47,7 +47,10 @@ const SCRAPING_PROCESSOR: Item[] = [
 ];
 
 const CS: Item[] = [{ to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard }];
-const ACC_HANDLER: Item[] = [{ to: "/app/map", label: "Map", icon: Map, shortcut: "M" }];
+const ACC_HANDLER: Item[] = [
+  { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
+  { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe, shortcut: "B" },
+];
 
 const ADMIN_FULL: Item[] = [
   ...ADMIN.slice(0, 3),
