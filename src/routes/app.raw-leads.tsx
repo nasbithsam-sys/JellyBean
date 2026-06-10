@@ -1052,6 +1052,7 @@ function QualifyDialog({
                 placeholder="Add any extra context for CS — e.g. urgency, special instructions…"
               />
             </Field>
+          </div>
           <div className="col-span-2">
             <label className="flex items-start gap-2.5 rounded-md border border-border bg-surface/60 px-3 py-2.5 cursor-pointer hover:border-warning/60 transition-colors">
               <input
