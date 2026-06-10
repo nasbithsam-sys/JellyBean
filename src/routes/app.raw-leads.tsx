@@ -278,13 +278,14 @@ function Inner() {
 
   const shownRows = visible.slice(0, visibleLimit);
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
-  // AND no user/AI override), so each click marches through the next 25.
+  // AND no user/AI override), so each click marches through the next 50.
   const aiTargets = visible
     .filter(
       (entry) =>
         entry.data["Post Text"]?.trim() && effectiveLead(entry.data, actions[entry.row_key]) === "",
     )
-    .slice(0, 25);
+    .slice(0, 50);
+
 
   function exportRows() {
     downloadCsv(
