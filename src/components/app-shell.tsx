@@ -188,7 +188,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           </div>
         </div>
       </aside>
-      <main className="flex-1 min-w-0 h-screen overflow-y-auto overflow-x-hidden [contain:paint] [content-visibility:auto]">{children}</main>
+      <main className="flex-1 min-w-0 h-screen overflow-y-auto overflow-x-hidden">{children}</main>
     </div>
   );
 }
