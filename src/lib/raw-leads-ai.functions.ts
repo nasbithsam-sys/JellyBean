@@ -84,7 +84,7 @@ async function classifyWithOpenAi({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      model: "gpt-5-nano",
       input: [
         {
           role: "system",
