@@ -1,7 +1,7 @@
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Webhook-Secret",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -95,6 +95,20 @@ export function handleNextdoorLeadsOptions() {
 
 export async function handleNextdoorLeadsPost(request: Request) {
   try {
+    // Shared-secret gate: callers (the Chrome extension) MUST send the secret.
+    // Without it, anyone who knows the schema string can inject arbitrary leads.
+    const expectedSecret = process.env.NEXTDOOR_WEBHOOK_SECRET;
+    if (!expectedSecret) {
+      console.error("[Nextdoor webhook] NEXTDOOR_WEBHOOK_SECRET is not configured");
+      return json({ ok: false, reason: "server_misconfigured" }, 503);
+    }
+    const provided =
+      request.headers.get("x-webhook-secret") ??
+      (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (!provided || provided !== expectedSecret) {
+      return json({ ok: false, reason: "unauthorized" }, 401);
+    }
+
     let body: Record<string, unknown>;
     try {
       body = await request.json();
