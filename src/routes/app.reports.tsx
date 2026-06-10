@@ -1,11 +1,48 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadCsv } from "@/lib/crm-lite";
+
+type DatePreset = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
+
+function toIsoDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0, 10);
+}
+function computeRange(preset: DatePreset, from: string, to: string) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTomorrow = new Date(startOfToday); startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+  switch (preset) {
+    case "today":
+      return { from: startOfToday.toISOString(), to: startOfTomorrow.toISOString() };
+    case "yesterday": {
+      const y = new Date(startOfToday); y.setDate(y.getDate() - 1);
+      return { from: y.toISOString(), to: startOfToday.toISOString() };
+    }
+    case "7d": {
+      const s = new Date(startOfToday); s.setDate(s.getDate() - 6);
+      return { from: s.toISOString(), to: startOfTomorrow.toISOString() };
+    }
+    case "30d": {
+      const s = new Date(startOfToday); s.setDate(s.getDate() - 29);
+      return { from: s.toISOString(), to: startOfTomorrow.toISOString() };
+    }
+    case "custom": {
+      const f = from ? new Date(from + "T00:00:00").toISOString() : null;
+      const t = to ? (() => { const d = new Date(to + "T00:00:00"); d.setDate(d.getDate() + 1); return d.toISOString(); })() : null;
+      return { from: f, to: t };
+    }
+    default:
+      return { from: null, to: null };
+  }
+}
+
 
 export const Route = createFileRoute("/app/reports")({ component: Page });
 
@@ -83,10 +120,19 @@ function Inner() {
       return c;
     },
   });
+  const today = toIsoDay(new Date());
+  const [preset, setPreset] = useState<DatePreset>("all");
+  const [fromDate, setFromDate] = useState<string>(today);
+  const [toDate, setToDate] = useState<string>(today);
+  const range = useMemo(() => computeRange(preset, fromDate, toDate), [preset, fromDate, toDate]);
+
   const byAccount = useQuery({
-    queryKey: ["report-leads-by-account"],
+    queryKey: ["report-leads-by-account", range.from, range.to],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("report_leads_by_account");
+      const { data, error } = await supabase.rpc("report_leads_by_account", {
+        _from: range.from ?? undefined,
+        _to: range.to ?? undefined,
+      });
       if (error) throw error;
       return (data ?? []) as Array<{
         account: string;
@@ -97,6 +143,7 @@ function Inner() {
       }>;
     },
   });
+
   const accountsCount = useQuery({
     queryKey: ["report-accounts"],
     queryFn: async () => {
@@ -181,18 +228,60 @@ function Inner() {
       </Section>
       <Section title="Leads by account">
         <div className="bg-card border rounded-lg overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b">
-            <div className="text-xs text-muted-foreground">
-              {accountRows.length} accounts · {totals.total} total leads ·{" "}
-              <span className="text-emerald-600 font-medium">{totals.yes} yes</span> /{" "}
-              <span className="text-red-600 font-medium">{totals.no} no</span> ·{" "}
-              {totals.pending} pending
+          <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b">
+            <div className="flex flex-wrap items-center gap-1">
+              {(
+                [
+                  ["all", "All time"],
+                  ["today", "Today"],
+                  ["yesterday", "Yesterday"],
+                  ["7d", "Last 7d"],
+                  ["30d", "Last 30d"],
+                  ["custom", "Custom"],
+                ] as Array<[DatePreset, string]>
+              ).map(([key, label]) => (
+                <Button
+                  key={key}
+                  size="sm"
+                  variant={preset === key ? "default" : "outline"}
+                  className="h-7 px-2.5 text-xs"
+                  onClick={() => setPreset(key)}
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
-            <Button size="sm" variant="outline" onClick={exportByAccount}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Export CSV
-            </Button>
+            {preset === "custom" && (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="h-7 w-[140px] text-xs"
+                />
+                <span className="text-xs text-muted-foreground">→</span>
+                <Input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="h-7 w-[140px] text-xs"
+                />
+              </div>
+            )}
+            <div className="text-xs text-muted-foreground ml-auto flex items-center gap-3">
+              <span>
+                {accountRows.length} accounts · {totals.total} total ·{" "}
+                <span className="text-emerald-600 font-medium">{totals.yes} yes</span> /{" "}
+                <span className="text-red-600 font-medium">{totals.no} no</span> ·{" "}
+                {totals.pending} pending
+              </span>
+              <Button size="sm" variant="outline" onClick={exportByAccount}>
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Export CSV
+              </Button>
+            </div>
           </div>
+
           <div className="max-h-[560px] overflow-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 sticky top-0">
