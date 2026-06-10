@@ -66,7 +66,10 @@ function Page() {
         description="Add your Incogniton profile IDs here and launch them with one click."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "scraping", "processor", "acc_handler"]} current={auth.primaryRole}>
+        <RoleGate
+          allow={["admin", "scraping", "processor", "acc_handler"]}
+          current={auth.primaryRole}
+        >
           <Inner />
         </RoleGate>
       </PageBody>
@@ -660,6 +663,20 @@ function downloadProfiles(filenameBase: string, format: FileFormat, rows: Profil
   XLSX.writeFile(workbook, `${filenameBase}.xlsx`, { bookType: "xlsx" });
 }
 
+async function withTimeout<T>(promise: PromiseLike<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // ── Add Profile Dialog (manual entry — works 100% without CORS/extensions) ───
 
 function AddProfileDialog({
@@ -823,6 +840,9 @@ function ImportDialog({
   const [format, setFormat] = useState<FileFormat>("xlsx");
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const safeClose = () => {
+    if (!importing) onClose();
+  };
 
   async function readRows() {
     if (!file) throw new Error("Choose a file to import.");
@@ -868,10 +888,14 @@ function ImportDialog({
       const BATCH_SIZE = 50;
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
-        const { error } = await supabase.from("incogniton_profiles").upsert(batch, {
-          onConflict: "incogniton_profile_id",
-          ignoreDuplicates: false,
-        });
+        const { error } = await withTimeout(
+          supabase.from("incogniton_profiles").upsert(batch, {
+            onConflict: "incogniton_profile_id",
+            ignoreDuplicates: false,
+          }),
+          20000,
+          "Import timed out. Please try a smaller file or check your connection.",
+        );
         if (error) {
           console.error("[Import profiles] Supabase error:", error);
           throw new Error(
@@ -913,7 +937,7 @@ function ImportDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={safeClose}>
       <div
         className="bg-card w-full max-w-md rounded-lg border p-6"
         onClick={(e) => e.stopPropagation()}
@@ -945,7 +969,7 @@ function ImportDialog({
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-5">
-          <Button variant="outline" onClick={onClose} disabled={importing}>
+          <Button variant="outline" onClick={safeClose} disabled={importing}>
             Cancel
           </Button>
           <Button onClick={importProfiles} disabled={importing || !file}>
@@ -969,14 +993,26 @@ function ExportDialog({
 }) {
   const [group, setGroup] = useState(groups[0] ?? "__all__");
   const [format, setFormat] = useState<FileFormat>("xlsx");
+  const [exporting, setExporting] = useState(false);
 
   function download() {
-    const rows =
-      group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
-    if (rows.length === 0) return toast.error("No profiles in this group");
-    downloadProfiles(`incogniton-${group}`, format, rows.map(toSheetRow));
-    toast.success(`Exported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
-    onClose();
+    setExporting(true);
+    try {
+      const rows =
+        group === "__all__" ? profiles : profiles.filter((p) => (p.group_name ?? "") === group);
+      if (rows.length === 0) {
+        toast.error("No profiles in this group");
+        return;
+      }
+      downloadProfiles(`incogniton-${group}`, format, rows.map(toSheetRow));
+      toast.success(`Exported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
+      onClose();
+    } catch (error) {
+      console.error("[Export profiles] Failed:", error);
+      toast.error(error instanceof Error ? error.message : "Could not export profiles");
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -1017,10 +1053,13 @@ function ExportDialog({
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-5">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={exporting}>
             Cancel
           </Button>
-          <Button onClick={download}>Export</Button>
+          <Button onClick={download} disabled={exporting}>
+            {exporting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Export
+          </Button>
         </div>
       </div>
     </div>
