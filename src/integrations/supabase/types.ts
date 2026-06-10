@@ -241,6 +241,7 @@ export type Database = {
           customer_number: string
           followup_at: string | null
           id: string
+          is_important: boolean
           main_area: string | null
           marketing_notes: string | null
           original_lead_link: string | null
@@ -264,6 +265,7 @@ export type Database = {
           customer_number: string
           followup_at?: string | null
           id?: string
+          is_important?: boolean
           main_area?: string | null
           marketing_notes?: string | null
           original_lead_link?: string | null
@@ -287,6 +289,7 @@ export type Database = {
           customer_number?: string
           followup_at?: string | null
           id?: string
+          is_important?: boolean
           main_area?: string | null
           marketing_notes?: string | null
           original_lead_link?: string | null

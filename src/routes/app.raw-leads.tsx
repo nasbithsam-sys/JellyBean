@@ -277,7 +277,14 @@ function Inner() {
   }, [actions, areaFilter, buckets, leadFilter, query, tab]);
 
   const shownRows = visible.slice(0, visibleLimit);
-  const aiTargets = visible.filter((entry) => entry.data["Post Text"]?.trim()).slice(0, 25);
+  // Only feed AI rows that haven't been classified yet (no sheet Lead value
+  // AND no user/AI override), so each click marches through the next 25.
+  const aiTargets = visible
+    .filter(
+      (entry) =>
+        entry.data["Post Text"]?.trim() && effectiveLead(entry.data, actions[entry.row_key]) === "",
+    )
+    .slice(0, 25);
 
   function exportRows() {
     downloadCsv(
@@ -972,6 +979,7 @@ function QualifyDialog({
   const [context, setContext] = useState("");
   const [passItTo, setPassItTo] = useState("");
   const [subArea, setSubArea] = useState(row["Sub Area / Neighborhood"] ?? "");
+  const [isImportant, setIsImportant] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function send() {
@@ -991,9 +999,8 @@ function QualifyDialog({
         main_area: row["Account Area"]?.trim() || null,
         original_lead_link: row["Lead Link"] || null,
         assigned_by: actorId,
-        // Track who forwarded the lead so scraping/processor can see status
-        // updates of their own forwarded leads in the Forwarded Leads tab.
         created_by: actorId,
+        is_important: isImportant,
       } as never);
       if (error) throw error;
       onSent();
@@ -1045,6 +1052,24 @@ function QualifyDialog({
                 placeholder="Add any extra context for CS — e.g. urgency, special instructions…"
               />
             </Field>
+          </div>
+          <div className="col-span-2">
+            <label className="flex items-start gap-2.5 rounded-md border border-border bg-surface/60 px-3 py-2.5 cursor-pointer hover:border-warning/60 transition-colors">
+              <input
+                type="checkbox"
+                checked={isImportant}
+                onChange={(e) => setIsImportant(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-warning cursor-pointer"
+              />
+              <div className="text-[12.5px]">
+                <div className="font-medium text-foreground">
+                  Mark as important / urgent job
+                </div>
+                <div className="text-[11.5px] text-muted-foreground">
+                  Pins this lead to the top of the CS pipeline so it gets called first.
+                </div>
+              </div>
+            </label>
           </div>
         </div>
         <DialogFooter>

@@ -120,6 +120,7 @@ type Lead = {
   assigned_at: string;
   assigned_to: string | null;
   cs_outcome: "already_done" | "wrong_number" | "processed" | null;
+  is_important: boolean;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -233,8 +234,10 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome",
+          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important",
         )
+        // Pin important / urgent jobs to the top, then most recent first.
+        .order("is_important", { ascending: false })
         .order("assigned_at", { ascending: false })
         .limit(500);
       if (error) throw error;
@@ -789,9 +792,16 @@ function LeadCard({
       className={cn(
         "glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up",
         selected && "ring-2 ring-primary border-primary",
+        lead.is_important && "border-warning/60 bg-warning/5",
       )}
       onClick={onOpen}
     >
+      {lead.is_important && (
+        <div className="-mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/40 text-[10.5px] font-semibold uppercase tracking-wide">
+          <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+          Important job
+        </div>
+      )}
       <div className="flex items-start gap-3">
         {showSelect && (
           <input
