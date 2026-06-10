@@ -827,10 +827,12 @@ function AddProfileDialog({
 // ── Export Dialog ─────────────────────────────────────────────────────────────
 
 function ImportDialog({
+  open,
   userId,
   onClose,
   onImported,
 }: {
+  open: boolean;
   userId: string | null;
   onClose: () => void;
   onImported: () => void;
