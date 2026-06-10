@@ -1021,7 +1021,7 @@ function ExportDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(o) => !o && !exporting && onClose()}>
+    <Dialog open={open} onOpenChange={(o) => !o && !exporting && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Export Profiles</DialogTitle>
