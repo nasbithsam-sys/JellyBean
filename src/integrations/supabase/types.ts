@@ -119,68 +119,6 @@ export type Database = {
         }
         Relationships: []
       }
-      extension_devices: {
-        Row: {
-          device_id: string
-          first_seen: string
-          id: string
-          last_seen: string
-          license_key: string
-        }
-        Insert: {
-          device_id: string
-          first_seen?: string
-          id?: string
-          last_seen?: string
-          license_key: string
-        }
-        Update: {
-          device_id?: string
-          first_seen?: string
-          id?: string
-          last_seen?: string
-          license_key?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "extension_devices_license_key_fkey"
-            columns: ["license_key"]
-            isOneToOne: false
-            referencedRelation: "extension_licenses"
-            referencedColumns: ["license_key"]
-          },
-        ]
-      }
-      extension_licenses: {
-        Row: {
-          assigned_to: string | null
-          created_at: string
-          expires_on: string | null
-          id: string
-          is_active: boolean
-          license_key: string
-          updated_at: string
-        }
-        Insert: {
-          assigned_to?: string | null
-          created_at?: string
-          expires_on?: string | null
-          id?: string
-          is_active?: boolean
-          license_key: string
-          updated_at?: string
-        }
-        Update: {
-          assigned_to?: string | null
-          created_at?: string
-          expires_on?: string | null
-          id?: string
-          is_active?: boolean
-          license_key?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       incogniton_profiles: {
         Row: {
           account_area: string | null
