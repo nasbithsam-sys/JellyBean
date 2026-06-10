@@ -120,10 +120,19 @@ function Inner() {
       return c;
     },
   });
+  const today = toIsoDay(new Date());
+  const [preset, setPreset] = useState<DatePreset>("all");
+  const [fromDate, setFromDate] = useState<string>(today);
+  const [toDate, setToDate] = useState<string>(today);
+  const range = useMemo(() => computeRange(preset, fromDate, toDate), [preset, fromDate, toDate]);
+
   const byAccount = useQuery({
-    queryKey: ["report-leads-by-account"],
+    queryKey: ["report-leads-by-account", range.from, range.to],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("report_leads_by_account");
+      const { data, error } = await supabase.rpc("report_leads_by_account", {
+        _from: range.from,
+        _to: range.to,
+      });
       if (error) throw error;
       return (data ?? []) as Array<{
         account: string;
@@ -134,6 +143,7 @@ function Inner() {
       }>;
     },
   });
+
   const accountsCount = useQuery({
     queryKey: ["report-accounts"],
     queryFn: async () => {
