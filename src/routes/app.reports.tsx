@@ -228,18 +228,60 @@ function Inner() {
       </Section>
       <Section title="Leads by account">
         <div className="bg-card border rounded-lg overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b">
-            <div className="text-xs text-muted-foreground">
-              {accountRows.length} accounts · {totals.total} total leads ·{" "}
-              <span className="text-emerald-600 font-medium">{totals.yes} yes</span> /{" "}
-              <span className="text-red-600 font-medium">{totals.no} no</span> ·{" "}
-              {totals.pending} pending
+          <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b">
+            <div className="flex flex-wrap items-center gap-1">
+              {(
+                [
+                  ["all", "All time"],
+                  ["today", "Today"],
+                  ["yesterday", "Yesterday"],
+                  ["7d", "Last 7d"],
+                  ["30d", "Last 30d"],
+                  ["custom", "Custom"],
+                ] as Array<[DatePreset, string]>
+              ).map(([key, label]) => (
+                <Button
+                  key={key}
+                  size="sm"
+                  variant={preset === key ? "default" : "outline"}
+                  className="h-7 px-2.5 text-xs"
+                  onClick={() => setPreset(key)}
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
-            <Button size="sm" variant="outline" onClick={exportByAccount}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Export CSV
-            </Button>
+            {preset === "custom" && (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="h-7 w-[140px] text-xs"
+                />
+                <span className="text-xs text-muted-foreground">→</span>
+                <Input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="h-7 w-[140px] text-xs"
+                />
+              </div>
+            )}
+            <div className="text-xs text-muted-foreground ml-auto flex items-center gap-3">
+              <span>
+                {accountRows.length} accounts · {totals.total} total ·{" "}
+                <span className="text-emerald-600 font-medium">{totals.yes} yes</span> /{" "}
+                <span className="text-red-600 font-medium">{totals.no} no</span> ·{" "}
+                {totals.pending} pending
+              </span>
+              <Button size="sm" variant="outline" onClick={exportByAccount}>
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Export CSV
+              </Button>
+            </div>
           </div>
+
           <div className="max-h-[560px] overflow-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 sticky top-0">
