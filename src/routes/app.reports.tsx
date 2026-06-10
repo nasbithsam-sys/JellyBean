@@ -124,6 +124,34 @@ function Inner() {
     );
   }
 
+  function exportByAccount() {
+    downloadCsv(
+      "leads-by-account.csv",
+      ["Account", "Yes", "No", "Pending", "Total", "Yes %"],
+      (byAccount.data ?? []).map((r) => [
+        r.account,
+        r.yes_count,
+        r.no_count,
+        r.pending_count,
+        r.total_count,
+        r.yes_count + r.no_count > 0
+          ? ((r.yes_count / (r.yes_count + r.no_count)) * 100).toFixed(1) + "%"
+          : "—",
+      ]),
+    );
+  }
+
+  const accountRows = byAccount.data ?? [];
+  const totals = accountRows.reduce(
+    (acc, r) => ({
+      yes: acc.yes + r.yes_count,
+      no: acc.no + r.no_count,
+      pending: acc.pending + r.pending_count,
+      total: acc.total + r.total_count,
+    }),
+    { yes: 0, no: 0, pending: 0, total: 0 },
+  );
+
   return (
     <div className="space-y-8">
       <div className="flex justify-end">
@@ -150,6 +178,80 @@ function Inner() {
         <Grid>
           <Stat label="Total accounts" value={accountsCount.data ?? 0} />
         </Grid>
+      </Section>
+      <Section title="Leads by account">
+        <div className="bg-card border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <div className="text-xs text-muted-foreground">
+              {accountRows.length} accounts · {totals.total} total leads ·{" "}
+              <span className="text-emerald-600 font-medium">{totals.yes} yes</span> /{" "}
+              <span className="text-red-600 font-medium">{totals.no} no</span> ·{" "}
+              {totals.pending} pending
+            </div>
+            <Button size="sm" variant="outline" onClick={exportByAccount}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export CSV
+            </Button>
+          </div>
+          <div className="max-h-[560px] overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 sticky top-0">
+                <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-4 py-2 font-medium">Account</th>
+                  <th className="px-4 py-2 font-medium text-right">Yes</th>
+                  <th className="px-4 py-2 font-medium text-right">No</th>
+                  <th className="px-4 py-2 font-medium text-right">Pending</th>
+                  <th className="px-4 py-2 font-medium text-right">Total</th>
+                  <th className="px-4 py-2 font-medium text-right">Yes %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byAccount.isLoading && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      Loading…
+                    </td>
+                  </tr>
+                )}
+                {!byAccount.isLoading && accountRows.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                      No data yet.
+                    </td>
+                  </tr>
+                )}
+                {accountRows.map((r) => {
+                  const decided = r.yes_count + r.no_count;
+                  const yesPct = decided > 0 ? (r.yes_count / decided) * 100 : null;
+                  return (
+                    <tr key={r.account} className="border-t hover:bg-muted/30">
+                      <td className="px-4 py-2 font-medium">{r.account}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-emerald-600">
+                        {r.yes_count}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-red-600">
+                        {r.no_count}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                        {r.pending_count}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                        {r.total_count}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        {yesPct === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          `${yesPct.toFixed(1)}%`
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </Section>
     </div>
   );
