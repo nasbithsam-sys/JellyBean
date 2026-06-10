@@ -277,7 +277,14 @@ function Inner() {
   }, [actions, areaFilter, buckets, leadFilter, query, tab]);
 
   const shownRows = visible.slice(0, visibleLimit);
-  const aiTargets = visible.filter((entry) => entry.data["Post Text"]?.trim()).slice(0, 25);
+  // Only feed AI rows that haven't been classified yet (no sheet Lead value
+  // AND no user/AI override), so each click marches through the next 25.
+  const aiTargets = visible
+    .filter(
+      (entry) =>
+        entry.data["Post Text"]?.trim() && effectiveLead(entry.data, actions[entry.row_key]) === "",
+    )
+    .slice(0, 25);
 
   function exportRows() {
     downloadCsv(
