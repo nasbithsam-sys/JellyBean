@@ -1052,6 +1052,23 @@ function QualifyDialog({
                 placeholder="Add any extra context for CS — e.g. urgency, special instructions…"
               />
             </Field>
+          <div className="col-span-2">
+            <label className="flex items-start gap-2.5 rounded-md border border-border bg-surface/60 px-3 py-2.5 cursor-pointer hover:border-warning/60 transition-colors">
+              <input
+                type="checkbox"
+                checked={isImportant}
+                onChange={(e) => setIsImportant(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-warning cursor-pointer"
+              />
+              <div className="text-[12.5px]">
+                <div className="font-medium text-foreground">
+                  Mark as important / urgent job
+                </div>
+                <div className="text-[11.5px] text-muted-foreground">
+                  Pins this lead to the top of the CS pipeline so it gets called first.
+                </div>
+              </div>
+            </label>
           </div>
         </div>
         <DialogFooter>
