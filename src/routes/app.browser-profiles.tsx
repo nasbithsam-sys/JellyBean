@@ -986,10 +986,12 @@ function ImportDialog({
 
 
 function ExportDialog({
+  open,
   profiles,
   groups,
   onClose,
 }: {
+  open: boolean;
   profiles: Profile[];
   groups: string[];
   onClose: () => void;
