@@ -46,9 +46,13 @@ export default function LeafletMap({ placed, visuals, radiusMode, tempPin, onMap
   const items: React.ReactNode[] = [];
 
   for (const account of placed) {
-    // In "daily" mode, only render a coverage circle for accounts launched
-    // today. Unlaunched accounts get no radius at all (resets at midnight
-    // local time because launched_today is computed against today's date).
+    // In "daily" mode, hide both the circle AND the marker for accounts that
+    // have NOT been launched today. Resets at midnight (launched_today is
+    // computed from today's date).
+    if (radiusMode === "daily" && !account.launched_today) {
+      continue;
+    }
+
     const showCircle =
       visuals && (radiusMode === "all" || (radiusMode === "daily" && account.launched_today));
 
@@ -71,6 +75,7 @@ export default function LeafletMap({ placed, visuals, radiusMode, tempPin, onMap
         </Circle>,
       );
     }
+
 
     items.push(
       <Marker key={`m-${account.id}`} position={[account.latitude, account.longitude]}>
