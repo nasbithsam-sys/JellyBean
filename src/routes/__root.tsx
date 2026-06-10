@@ -20,7 +20,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Leadgrid CRM" },
       { name: "description", content: "Internal lead operations dashboard" },
       { name: "robots", content: "noindex, nofollow" },
-      { name: "theme-color", content: "#1a1c24" },
+      { name: "theme-color", content: "#0f1b3d" },
       { property: "og:title", content: "Leadgrid CRM" },
       { name: "twitter:title", content: "Leadgrid CRM" },
       { property: "og:description", content: "Internal lead operations dashboard" },
