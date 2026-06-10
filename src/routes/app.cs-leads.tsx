@@ -120,6 +120,7 @@ type Lead = {
   assigned_at: string;
   assigned_to: string | null;
   cs_outcome: "already_done" | "wrong_number" | "processed" | null;
+  is_important: boolean;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
