@@ -59,11 +59,13 @@ function Inner() {
 
       const countRaw = (start: string, end: string, status?: RawLeadStatus) => {
         let q = supabase
-          .from("raw_leads")
+          .from("raw_lead_cache")
           .select("id", { count: "exact", head: true })
           .gte("captured_at", start)
           .lt("captured_at", end);
-        if (status) q = q.eq("status", status);
+        if (status === "qualified") q = q.eq("lead", "yes");
+        else if (status === "cancelled") q = q.eq("lead", "no");
+        else if (status === "new") q = q.is("lead", null);
         return q;
       };
       const countQualified = (start: string, end: string) =>
