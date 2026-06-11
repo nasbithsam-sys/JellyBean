@@ -1272,13 +1272,55 @@ function LeadDrawer({
               Free-text comment. Appended to the history when you save.
             </p>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose} disabled={busy}>
-              Close
-            </Button>
-            <Button onClick={save} disabled={busy}>
-              {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
-            </Button>
+          <div className="flex items-center justify-between gap-2">
+            {isAdmin ? (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                disabled={busy}
+                onClick={async () => {
+                  if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`))
+                    return;
+                  setBusy(true);
+                  try {
+                    const { error } = await supabase
+                      .from("qualified_leads")
+                      .delete()
+                      .eq("id", lead.id);
+                    if (error) throw error;
+                    await supabase.from("activity_logs").insert({
+                      actor_id: auth.user?.id,
+                      actor_name: auth.profile?.full_name,
+                      actor_role: auth.primaryRole,
+                      action: "cs.deleted",
+                      entity_type: "qualified_lead",
+                      entity_id: lead.id,
+                      metadata: { customer_name: lead.customer_name },
+                    });
+                    toast.success("Lead deleted");
+                    qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                    onSaved();
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete lead
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose} disabled={busy}>
+                Close
+              </Button>
+              <Button onClick={save} disabled={busy}>
+                {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
+              </Button>
+            </div>
           </div>
         </div>
 
