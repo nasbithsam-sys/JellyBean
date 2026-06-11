@@ -852,33 +852,47 @@ function LeadCard({
         </div>
       </div>
 
-      {(lead.main_area || lead.sub_area) && (
-        <div className="mt-3 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          <MapPin className="h-3 w-3" />
-          <span className="truncate">
-            {[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")}
-          </span>
+      {lead.main_area && (
+        <div className="mt-3 flex items-start gap-1.5 text-[12px]">
+          <MapPin className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
+          <div className="min-w-0">
+            <span className="text-muted-foreground">Main Area: </span>
+            <span className="text-foreground/90 font-medium">{lead.main_area}</span>
+            {lead.sub_area && (
+              <span className="text-muted-foreground"> · {lead.sub_area}</span>
+            )}
+          </div>
         </div>
       )}
 
-      {lead.post_text && (
-        <div className="mt-3">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
-            Customer exact requirement
+      {lead.pass_it_to && (
+        <div className="mt-2 flex items-start gap-1.5 text-[12px]">
+          <ArrowRightCircle className="h-3 w-3 mt-0.5 text-primary shrink-0" />
+          <div className="min-w-0">
+            <span className="text-muted-foreground">Pass it to: </span>
+            <span className="text-foreground/90 font-medium">{lead.pass_it_to}</span>
           </div>
-          <p className="text-[12.5px] text-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
-            {lead.post_text}
-          </p>
         </div>
       )}
 
       {lead.context && (
-        <div className="mt-2">
+        <div className="mt-3">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
             Context
           </div>
-          <p className="text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-2">
+          <p className="text-[12.5px] text-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
             {lead.context}
+          </p>
+        </div>
+      )}
+
+      {lead.post_text && (
+        <div className="mt-2">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+            Exact customer requirement
+          </div>
+          <p className="text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
+            {lead.post_text}
           </p>
         </div>
       )}
