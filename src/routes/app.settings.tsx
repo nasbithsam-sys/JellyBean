@@ -255,11 +255,9 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
   const [otp, setOtp] = useState<string | null>(null);
   const [otpLoading, setOtpLoading] = useState(false);
 
-  const needsOtp =
-    user.role === "admin" ||
-    user.role === "scraping" ||
-    user.role === "processor" ||
-    user.role === "cs";
+  // Only admin and CS still use the one-time login code.
+  // Scraping, processor and acc_handler sign in with username + password only.
+  const needsOtp = user.role === "admin" || user.role === "cs";
 
   useEffect(() => {
     if (!needsOtp) return;
