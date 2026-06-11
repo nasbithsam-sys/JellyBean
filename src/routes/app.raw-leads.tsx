@@ -73,8 +73,13 @@ type CacheEntry = {
   captured_at: string | null;
   lead_link: string | null;
   sheet_row: number | null;
+  assigned_to: string | null;
 };
 const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
+
+const AI_LOCK_KEY = "raw_leads.ai_lock";
+const AI_LOCK_MAX_AGE_MS = 5 * 60 * 1000;
+type AiLockValue = { user_id: string; started_at: string; user_name?: string | null } | null;
 
 const RAW_LEAD_COLUMNS = [
   "Account Name",
