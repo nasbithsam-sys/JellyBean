@@ -68,11 +68,11 @@ function parseAiResults(text: string, rowKeys: string[]): RawLeadAiResult[] {
   const allowedIds = new Set(rowKeys.map((_, index) => String(index + 1)));
 
   return (parsed.results ?? [])
-    .filter((item): item is { id: string; lead: "yes" | "no" } => {
+    .filter((item): item is { id: string; lead: LeadDecision } => {
       return (
         typeof item.id === "string" &&
         allowedIds.has(item.id) &&
-        (item.lead === "yes" || item.lead === "no")
+        (item.lead === "yes" || item.lead === "no" || item.lead === "review")
       );
     })
     .map((item) => ({
@@ -82,10 +82,8 @@ function parseAiResults(text: string, rowKeys: string[]): RawLeadAiResult[] {
 }
 
 async function classifyWithOpenAi({
-  prompt,
   leads,
 }: {
-  prompt: string;
   leads: Array<{ id: string; account: string; area: string; postText: string }>;
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -100,18 +98,8 @@ async function classifyWithOpenAi({
     body: JSON.stringify({
       model: "gpt-5-nano",
       input: [
-        {
-          role: "system",
-          content:
-            "You classify local service lead posts. Return yes when the post is a real potential customer asking for help, quotes, recommendations, repair, installation, or service. Return no for ads, providers offering services, spam, jokes, general discussion, already solved posts, or posts without service intent. Follow the user's prompt when it gives stricter rules.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            prompt,
-            leads,
-          }),
-        },
+        { role: "system", content: FROZEN_LEAD_PROMPT },
+        { role: "user", content: JSON.stringify({ leads }) },
       ],
       text: {
         format: {
@@ -129,7 +117,7 @@ async function classifyWithOpenAi({
                   additionalProperties: false,
                   properties: {
                     id: { type: "string" },
-                    lead: { type: "string", enum: ["yes", "no"] },
+                    lead: { type: "string", enum: ["yes", "no", "review"] },
                   },
                   required: ["id", "lead"],
                 },
@@ -181,7 +169,6 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
     if (leads.length === 0) throw new Error("No selected raw leads have post text to analyze");
 
     const outputText = await classifyWithOpenAi({
-      prompt: data.prompt,
       leads: leads.map(({ id, account, area, postText }) => ({ id, account, area, postText })),
     });
     const results = parseAiResults(
@@ -205,6 +192,7 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
       analyzed: results.length,
       yes: results.filter((result) => result.lead === "yes").length,
       no: results.filter((result) => result.lead === "no").length,
+      review: results.filter((result) => result.lead === "review").length,
       results,
     };
   });
