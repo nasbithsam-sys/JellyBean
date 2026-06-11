@@ -158,7 +158,7 @@ async function loadAiLock(): Promise<AiLockValue> {
     .eq("key", AI_LOCK_KEY)
     .maybeSingle();
   if (error) return null;
-  return ((data?.value ?? null) as AiLockValue) ?? null;
+  return (data?.value as AiLockValue) ?? null;
 }
 
 async function writeAiLock(value: AiLockValue, userId: string | null) {
