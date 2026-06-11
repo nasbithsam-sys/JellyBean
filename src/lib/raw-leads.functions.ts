@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Json } from "@/integrations/supabase/types";
 
 const ALLOWED_RAW_LEAD_ROLES = ["admin", "processor", "acc_handler"] as const;
 
@@ -8,7 +9,7 @@ type RawLeadRole = (typeof ALLOWED_RAW_LEAD_ROLES)[number];
 
 type RawLeadCacheRow = {
   row_key: string;
-  data: unknown;
+  data: Json;
   lead: "yes" | "no" | null;
   phone: string | null;
   category: "forwarded" | "not_found" | "wrong" | null;
@@ -82,7 +83,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     for (const entry of [...(latest ?? []), ...(newest ?? [])]) {
       merged.set(entry.row_key, {
         row_key: entry.row_key,
-        data: entry.data,
+        data: entry.data as Json,
         lead: normalizeLead(entry.lead),
         phone: entry.phone,
         category: normalizeCategory(entry.category),
