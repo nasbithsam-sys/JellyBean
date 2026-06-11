@@ -54,8 +54,8 @@ function LoginPage() {
     ]);
     const roles = (rolesData ?? []).map((r) => r.role as string);
     const isAdmin = roles.includes("admin");
-    const roleNeedsOtp =
-      roles.includes("scraping") || roles.includes("processor") || roles.includes("cs");
+    // Only CS still requires the one-time login code.
+    const roleNeedsOtp = roles.includes("cs");
     const adminNeedsOtp =
       isAdmin && Boolean((settings as LoginSettings | null)?.admin_otp_required);
     return {
