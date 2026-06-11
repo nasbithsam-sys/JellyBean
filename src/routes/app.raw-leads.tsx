@@ -214,6 +214,10 @@ function Inner() {
   );
   const [aiRunning, setAiRunning] = useState(false);
 
+  const currentUserId = auth.user?.id ?? null;
+  const currentUserName = auth.profile?.full_name || auth.user?.email || null;
+  const canRunAi = auth.primaryRole === "admin" || auth.primaryRole === "processor";
+
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
     queryKey: ["raw-lead-cache", databaseLimit],
@@ -223,6 +227,18 @@ function Inner() {
     gcTime: Infinity,
     refetchOnWindowFocus: false,
   });
+
+  // ── Shared AI lock so two users can't fire the AI batch at once ───────────
+  const aiLockQuery = useQuery({
+    queryKey: ["raw-leads-ai-lock"],
+    queryFn: loadAiLock,
+    refetchOnWindowFocus: false,
+  });
+  const aiLock = aiLockQuery.data ?? null;
+  const aiLockActive =
+    !!aiLock?.started_at &&
+    Date.now() - new Date(aiLock.started_at).getTime() < AI_LOCK_MAX_AGE_MS;
+  const aiLockedByOther = aiLockActive && aiLock?.user_id !== currentUserId;
 
   // Build action map keyed by row_key for fast lookup
   const entries: CacheEntry[] = cacheQuery.data ?? EMPTY_CACHE_ENTRIES;
