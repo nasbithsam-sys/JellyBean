@@ -691,10 +691,20 @@ function Inner() {
                 const k = e.row_key;
                 const a = actions[k] || {};
                 const lv = effectiveLead(r, a);
+                const mine = !!currentUserId && e.assigned_to === currentUserId;
+                const claimedByOther =
+                  !!e.assigned_to && e.assigned_to !== currentUserId;
                 return (
                   <tr
                     key={k}
-                    className="transition-colors align-top hover:bg-accent/40 cursor-pointer"
+                    className={cn(
+                      "transition-colors align-top cursor-pointer",
+                      mine
+                        ? "bg-primary/10 hover:bg-primary/15"
+                        : claimedByOther
+                          ? "bg-muted/40 hover:bg-muted/60 opacity-80"
+                          : "hover:bg-accent/40",
+                    )}
                     onClick={() => setDetailFor(e)}
                   >
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] font-mono text-muted-foreground tabular-nums">
