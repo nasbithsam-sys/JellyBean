@@ -48,7 +48,7 @@ function LoginPage() {
 
   async function getLoginAccess(uid: string): Promise<{ isActive: boolean; needsOtp: boolean }> {
     const [{ data: profile }, { data: rolesData }, { data: settings }] = await Promise.all([
-      supabase.from("profiles").select("is_active").eq("user_id", uid).maybeSingle(),
+      supabase.from("profiles").select("is_active, otp_required").eq("user_id", uid).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", uid),
       supabase.from("app_settings").select("admin_otp_required").maybeSingle(),
     ]);
