@@ -73,8 +73,13 @@ type CacheEntry = {
   captured_at: string | null;
   lead_link: string | null;
   sheet_row: number | null;
+  assigned_to: string | null;
 };
 const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
+
+const AI_LOCK_KEY = "raw_leads.ai_lock";
+const AI_LOCK_MAX_AGE_MS = 5 * 60 * 1000;
+type AiLockValue = { user_id: string; started_at: string; user_name?: string | null } | null;
 
 const RAW_LEAD_COLUMNS = [
   "Account Name",
@@ -129,7 +134,9 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
 async function loadCache(limit: number): Promise<CacheEntry[]> {
   const { data, error } = await supabase
     .from(TABLE)
-    .select("row_key, data, lead, phone, category, captured_at, lead_link, sheet_row")
+    .select(
+      "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to",
+    )
     .order("captured_at", { ascending: false, nullsFirst: false })
     .limit(limit);
   if (error) throw error;
@@ -144,6 +151,29 @@ async function patchEntry(row_key: string, patch: Partial<CacheEntry>) {
   if (error) throw error;
 }
 
+async function loadAiLock(): Promise<AiLockValue> {
+  const { data, error } = await supabase
+    .from("shared_state")
+    .select("value")
+    .eq("key", AI_LOCK_KEY)
+    .maybeSingle();
+  if (error) return null;
+  return (data?.value as AiLockValue) ?? null;
+}
+
+async function writeAiLock(value: AiLockValue, userId: string | null) {
+  const payload = {
+    key: AI_LOCK_KEY,
+    value: (value ?? {}) as unknown as Record<string, unknown>,
+    updated_by: userId,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase
+    .from("shared_state")
+    .upsert(payload as never, { onConflict: "key" });
+  if (error) throw error;
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 function Page() {
   const auth = useAuth();
@@ -154,7 +184,7 @@ function Page() {
         description="Live feed from your scraper extension. Stored in Supabase — shared across all your devices."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "scraping", "processor"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "processor", "acc_handler"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
@@ -184,6 +214,10 @@ function Inner() {
   );
   const [aiRunning, setAiRunning] = useState(false);
 
+  const currentUserId = auth.user?.id ?? null;
+  const currentUserName = auth.profile?.full_name || auth.user?.email || null;
+  const canRunAi = auth.primaryRole === "admin" || auth.primaryRole === "processor";
+
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
     queryKey: ["raw-lead-cache", databaseLimit],
@@ -193,6 +227,18 @@ function Inner() {
     gcTime: Infinity,
     refetchOnWindowFocus: false,
   });
+
+  // ── Shared AI lock so two users can't fire the AI batch at once ───────────
+  const aiLockQuery = useQuery({
+    queryKey: ["raw-leads-ai-lock"],
+    queryFn: loadAiLock,
+    refetchOnWindowFocus: false,
+  });
+  const aiLock = aiLockQuery.data ?? null;
+  const aiLockActive =
+    !!aiLock?.started_at &&
+    Date.now() - new Date(aiLock.started_at).getTime() < AI_LOCK_MAX_AGE_MS;
+  const aiLockedByOther = aiLockActive && aiLock?.user_id !== currentUserId;
 
   // Build action map keyed by row_key for fast lookup
   const entries: CacheEntry[] = cacheQuery.data ?? EMPTY_CACHE_ENTRIES;
@@ -308,9 +354,46 @@ function Inner() {
 
   function handleRefresh() {
     cacheQuery.refetch();
+    aiLockQuery.refetch();
   }
 
+  const assignToSelf = useCallback(
+    async (entry: CacheEntry) => {
+      if (!currentUserId) {
+        toast.error("Sign in first.");
+        return;
+      }
+      if (entry.assigned_to && entry.assigned_to !== currentUserId) {
+        toast.error("Already claimed by another user.");
+        return;
+      }
+      // Optimistic
+      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
+        (prev ?? []).map((e) =>
+          e.row_key === entry.row_key ? { ...e, assigned_to: currentUserId } : e,
+        ),
+      );
+      const { error } = await supabase
+        .from(TABLE)
+        // Only claim if still unassigned — race-safe.
+        .update({ assigned_to: currentUserId } as RawLeadCacheUpdate)
+        .eq("row_key", entry.row_key)
+        .is("assigned_to", null);
+      if (error) {
+        toast.error(error.message);
+        cacheQuery.refetch();
+        return;
+      }
+      toast.success("Lead assigned to you");
+    },
+    [cacheQuery, currentUserId, databaseLimit, qc],
+  );
+
   async function runAiLeadCheck() {
+    if (!canRunAi) {
+      toast.error("You don't have permission to run AI lead checks.");
+      return;
+    }
     const prompt = aiPrompt.trim();
     if (!prompt) {
       toast.error("Write a prompt first.");
@@ -320,9 +403,19 @@ function Inner() {
       toast.info("No visible raw leads with post text to analyze.");
       return;
     }
+    if (aiLockedByOther) {
+      toast.error("Another user is already running an AI batch. Wait for it to finish.");
+      return;
+    }
 
     setAiRunning(true);
     try {
+      await writeAiLock(
+        { user_id: currentUserId!, user_name: currentUserName, started_at: new Date().toISOString() },
+        currentUserId,
+      );
+      qc.invalidateQueries({ queryKey: ["raw-leads-ai-lock"] });
+
       const result = await analyzeWithAi({
         data: {
           prompt,
@@ -340,6 +433,12 @@ function Inner() {
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
+      try {
+        await writeAiLock(null, currentUserId);
+      } catch {
+        /* ignore */
+      }
+      qc.invalidateQueries({ queryKey: ["raw-leads-ai-lock"] });
       setAiRunning(false);
     }
   }
@@ -485,29 +584,44 @@ function Inner() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
-        <Textarea
-          value={aiPrompt}
-          onChange={(e) => setAiPrompt(e.target.value)}
-          rows={2}
-          maxLength={2000}
-          placeholder="Prompt for AI lead checking..."
-          className="min-h-[56px] text-[12.5px]"
-        />
-        <Button
-          className="h-14 lg:w-[190px]"
-          onClick={runAiLeadCheck}
-          disabled={aiRunning || aiTargets.length === 0}
-          title={`Analyze the next ${aiTargets.length} visible raw lead${aiTargets.length === 1 ? "" : "s"} with post text`}
-        >
-          {aiRunning ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Sparkles className="h-4 w-4 mr-2" />
+      {canRunAi && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
+            <Textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              rows={2}
+              maxLength={2000}
+              placeholder="Prompt for AI lead checking..."
+              className="min-h-[56px] text-[12.5px]"
+            />
+            <Button
+              className="h-14 lg:w-[210px]"
+              onClick={runAiLeadCheck}
+              disabled={aiRunning || aiLockedByOther || aiTargets.length === 0}
+              title={
+                aiLockedByOther
+                  ? `AI is busy — ${aiLock?.user_name ?? "another user"} is processing leads`
+                  : `Analyze the next ${aiTargets.length} visible raw lead${aiTargets.length === 1 ? "" : "s"} with post text`
+              }
+            >
+              {aiRunning || aiLockedByOther ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-2" />
+              )}
+              {aiLockedByOther
+                ? "AI busy…"
+                : `Check ${aiTargets.length || 50} Lead${aiTargets.length === 1 ? "" : "s"}`}
+            </Button>
+          </div>
+          {aiLockedByOther && (
+            <div className="text-[11.5px] text-muted-foreground">
+              {aiLock?.user_name ?? "Another user"} is running an AI batch right now — please wait.
+            </div>
           )}
-          Check {aiTargets.length || 50} Lead{aiTargets.length === 1 ? "" : "s"}
-        </Button>
-      </div>
+        </div>
+      )}
 
       {error && (
         <div className="text-[12.5px] text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">
@@ -540,6 +654,7 @@ function Inner() {
               <col style={{ width: 96 }} />
               <col style={{ width: 120 }} />
               <col style={{ width: 120 }} />
+              <col style={{ width: 130 }} />
               <col style={{ width: 60 }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface">
@@ -555,13 +670,16 @@ function Inner() {
                     {h}
                   </th>
                 ))}
+                <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
+                  Assignment
+                </th>
                 <th className="border-b border-border px-2 py-2" />
               </tr>
             </thead>
             <tbody>
               {!cacheQuery.isLoading && visible.length === 0 && !error && (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-muted-foreground">
+                  <td colSpan={13} className="text-center py-12 text-muted-foreground">
                     {tab === "new"
                       ? "No leads yet. Run your scraper extension to push leads here."
                       : "Nothing here yet."}
@@ -573,10 +691,20 @@ function Inner() {
                 const k = e.row_key;
                 const a = actions[k] || {};
                 const lv = effectiveLead(r, a);
+                const mine = !!currentUserId && e.assigned_to === currentUserId;
+                const claimedByOther =
+                  !!e.assigned_to && e.assigned_to !== currentUserId;
                 return (
                   <tr
                     key={k}
-                    className="transition-colors align-top hover:bg-accent/40 cursor-pointer"
+                    className={cn(
+                      "transition-colors align-top cursor-pointer",
+                      mine
+                        ? "bg-primary/10 hover:bg-primary/15"
+                        : claimedByOther
+                          ? "bg-muted/40 hover:bg-muted/60 opacity-80"
+                          : "hover:bg-accent/40",
+                    )}
                     onClick={() => setDetailFor(e)}
                   >
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] font-mono text-muted-foreground tabular-nums">
@@ -664,6 +792,30 @@ function Inner() {
                       title={r["Incog Account"]}
                     >
                       {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td
+                      className="border-b border-border px-2.5 py-2"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      {mine ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/15 text-primary text-[10.5px] font-medium border border-primary/30">
+                          Assigned to you
+                        </span>
+                      ) : claimedByOther ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-muted-foreground text-[10.5px] font-medium border border-border">
+                          Claimed
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px]"
+                          onClick={() => assignToSelf(e)}
+                          disabled={!currentUserId}
+                        >
+                          Assign to myself
+                        </Button>
+                      )}
                     </td>
                     <td
                       className="border-b border-border px-2 py-2 text-center"

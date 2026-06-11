@@ -139,10 +139,9 @@ export const requireOtpVerified = createServerFn({ method: "POST" })
       .select("admin_otp_required")
       .maybeSingle();
     const isAdmin = roleList.includes("admin");
-    const roleNeedsOtp =
-      roleList.includes("scraping") ||
-      roleList.includes("processor") ||
-      roleList.includes("cs");
+    // Only CS still requires the one-time login code on every sign-in.
+    // Scraping, processor and acc_handler sign in with just username + password.
+    const roleNeedsOtp = roleList.includes("cs");
     const adminNeedsOtp = isAdmin && Boolean(settings?.admin_otp_required);
     const needsOtp = prof.otp_required || roleNeedsOtp || adminNeedsOtp;
     if (!needsOtp) return { ok: true as const };

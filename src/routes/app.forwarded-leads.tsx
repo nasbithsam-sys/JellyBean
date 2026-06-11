@@ -55,7 +55,7 @@ function Page() {
         description="Leads you forwarded to CS, and how CS resolved them."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "scraping", "processor"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "processor"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
