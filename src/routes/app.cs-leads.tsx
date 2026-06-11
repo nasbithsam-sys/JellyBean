@@ -1004,6 +1004,17 @@ function LeadCard({
             Follow-up {formatDistanceToNow(new Date(lead.followup_at), { addSuffix: true })}
           </span>
         )}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={deleteLead}
+            className="inline-flex items-center gap-1 text-destructive hover:text-destructive/80 transition-colors"
+            title="Delete this lead"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </button>
+        )}
         <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-primary" />
       </div>
     </div>
