@@ -11,6 +11,7 @@ import { consumeLoginOtp } from "@/lib/login-otp.functions";
 
 type LoginProfile = {
   is_active: boolean;
+  otp_required?: boolean;
 };
 
 type LoginSettings = {
