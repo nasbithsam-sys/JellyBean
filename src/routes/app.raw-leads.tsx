@@ -354,9 +354,46 @@ function Inner() {
 
   function handleRefresh() {
     cacheQuery.refetch();
+    aiLockQuery.refetch();
   }
 
+  const assignToSelf = useCallback(
+    async (entry: CacheEntry) => {
+      if (!currentUserId) {
+        toast.error("Sign in first.");
+        return;
+      }
+      if (entry.assigned_to && entry.assigned_to !== currentUserId) {
+        toast.error("Already claimed by another user.");
+        return;
+      }
+      // Optimistic
+      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
+        (prev ?? []).map((e) =>
+          e.row_key === entry.row_key ? { ...e, assigned_to: currentUserId } : e,
+        ),
+      );
+      const { error } = await supabase
+        .from(TABLE)
+        // Only claim if still unassigned — race-safe.
+        .update({ assigned_to: currentUserId } as RawLeadCacheUpdate)
+        .eq("row_key", entry.row_key)
+        .is("assigned_to", null);
+      if (error) {
+        toast.error(error.message);
+        cacheQuery.refetch();
+        return;
+      }
+      toast.success("Lead assigned to you");
+    },
+    [cacheQuery, currentUserId, databaseLimit, qc],
+  );
+
   async function runAiLeadCheck() {
+    if (!canRunAi) {
+      toast.error("You don't have permission to run AI lead checks.");
+      return;
+    }
     const prompt = aiPrompt.trim();
     if (!prompt) {
       toast.error("Write a prompt first.");
@@ -366,9 +403,19 @@ function Inner() {
       toast.info("No visible raw leads with post text to analyze.");
       return;
     }
+    if (aiLockedByOther) {
+      toast.error("Another user is already running an AI batch. Wait for it to finish.");
+      return;
+    }
 
     setAiRunning(true);
     try {
+      await writeAiLock(
+        { user_id: currentUserId!, user_name: currentUserName, started_at: new Date().toISOString() },
+        currentUserId,
+      );
+      qc.invalidateQueries({ queryKey: ["raw-leads-ai-lock"] });
+
       const result = await analyzeWithAi({
         data: {
           prompt,
@@ -386,6 +433,12 @@ function Inner() {
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
+      try {
+        await writeAiLock(null, currentUserId);
+      } catch {
+        /* ignore */
+      }
+      qc.invalidateQueries({ queryKey: ["raw-leads-ai-lock"] });
       setAiRunning(false);
     }
   }
