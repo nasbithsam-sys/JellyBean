@@ -115,6 +115,7 @@ type Lead = {
   main_area: string | null;
   sub_area: string | null;
   marketing_notes: string | null;
+  number_name: string | null;
   original_lead_link: string | null;
   cs_status: CsStatus;
   cs_notes: LeadNote[];
