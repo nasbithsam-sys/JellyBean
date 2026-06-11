@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { Json } from "@/integrations/supabase/types";
 
 const ALLOWED_RAW_LEAD_ROLES = ["admin", "processor", "acc_handler"] as const;
 
@@ -9,7 +8,7 @@ type RawLeadRole = (typeof ALLOWED_RAW_LEAD_ROLES)[number];
 
 type RawLeadCacheRow = {
   row_key: string;
-  data: Json;
+  data: Record<string, string>;
   lead: "yes" | "no" | null;
   phone: string | null;
   category: "forwarded" | "not_found" | "wrong" | null;
@@ -25,6 +24,13 @@ function normalizeLead(value: string | null): "yes" | "no" | null {
 
 function normalizeCategory(value: string | null): RawLeadCacheRow["category"] {
   return value === "forwarded" || value === "not_found" || value === "wrong" ? value : null;
+}
+
+function normalizeData(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [key, entry == null ? "" : String(entry)]),
+  );
 }
 
 export const fetchRawLeadCache = createServerFn({ method: "GET" })
@@ -83,7 +89,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     for (const entry of [...(latest ?? []), ...(newest ?? [])]) {
       merged.set(entry.row_key, {
         row_key: entry.row_key,
-        data: entry.data as Json,
+        data: normalizeData(entry.data),
         lead: normalizeLead(entry.lead),
         phone: entry.phone,
         category: normalizeCategory(entry.category),
