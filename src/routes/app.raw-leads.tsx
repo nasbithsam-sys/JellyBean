@@ -134,7 +134,9 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
 async function loadCache(limit: number): Promise<CacheEntry[]> {
   const { data, error } = await supabase
     .from(TABLE)
-    .select("row_key, data, lead, phone, category, captured_at, lead_link, sheet_row")
+    .select(
+      "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to",
+    )
     .order("captured_at", { ascending: false, nullsFirst: false })
     .limit(limit);
   if (error) throw error;
@@ -146,6 +148,29 @@ async function patchEntry(row_key: string, patch: Partial<CacheEntry>) {
     .from(TABLE)
     .update(patch as RawLeadCacheUpdate)
     .eq("row_key", row_key);
+  if (error) throw error;
+}
+
+async function loadAiLock(): Promise<AiLockValue> {
+  const { data, error } = await supabase
+    .from("shared_state")
+    .select("value")
+    .eq("key", AI_LOCK_KEY)
+    .maybeSingle();
+  if (error) return null;
+  return ((data?.value ?? null) as AiLockValue) ?? null;
+}
+
+async function writeAiLock(value: AiLockValue, userId: string | null) {
+  const payload = {
+    key: AI_LOCK_KEY,
+    value: (value ?? {}) as unknown as Record<string, unknown>,
+    updated_by: userId,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase
+    .from("shared_state")
+    .upsert(payload as never, { onConflict: "key" });
   if (error) throw error;
 }
 
