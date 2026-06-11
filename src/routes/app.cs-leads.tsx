@@ -993,6 +993,75 @@ function LeadCard({
         </Select>
       </div>
 
+      {/* Outcome (visible to forwarder) */}
+      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+        <Select value={outcome ?? "__none__"} onValueChange={changeOutcome}>
+          <SelectTrigger className="h-8 text-[12px]">
+            <SelectValue placeholder="Outcome…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">— Outcome not set —</SelectItem>
+            <SelectItem value="already_done">Already done</SelectItem>
+            <SelectItem value="wrong_number">Wrong number</SelectItem>
+            <SelectItem value="processed">Processed</SelectItem>
+            <SelectItem value="wrong_lead">Wrong lead</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Manual fields filled by CS */}
+      <div className="mt-3 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
+        <div>
+          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={async () => {
+              if (name !== lead.customer_name && name.trim()) {
+                if (await saveField({ customer_name: name.trim() } as Partial<Lead>)) {
+                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                }
+              }
+            }}
+            className="h-8 text-[12px] mt-0.5"
+            placeholder="Customer name"
+          />
+        </div>
+        <div>
+          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Number</Label>
+          <Input
+            value={number}
+            onChange={(e) => setNumber(e.target.value)}
+            onBlur={async () => {
+              if (number !== lead.customer_number && number.trim()) {
+                if (await saveField({ customer_number: number.trim() } as Partial<Lead>)) {
+                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                }
+              }
+            }}
+            className="h-8 text-[12px] mt-0.5"
+            placeholder="Phone"
+          />
+        </div>
+      </div>
+      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Compose</Label>
+        <Textarea
+          value={compose}
+          rows={2}
+          onChange={(e) => setCompose(e.target.value)}
+          onBlur={async () => {
+            if ((compose || "") !== (lead.marketing_notes ?? "")) {
+              if (await saveField({ marketing_notes: compose } as Partial<Lead>)) {
+                qc.invalidateQueries({ queryKey: ["cs_leads"] });
+              }
+            }
+          }}
+          className="text-[12px] mt-0.5 resize-none"
+          placeholder="Compose a message or note for this lead…"
+        />
+      </div>
+
       {/* Assignment row */}
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
         {isAdmin ? (
