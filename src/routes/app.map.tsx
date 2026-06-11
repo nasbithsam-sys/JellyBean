@@ -9,6 +9,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { PlacedAccount } from "@/components/leaflet-map";
+import { pktDayKey, pktTodayKey } from "@/lib/timezone";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/map")({ component: Page });
 
@@ -91,7 +93,7 @@ function Inner() {
     },
   });
 
-  const todayKey = useMemo(() => dayKey(new Date()), []);
+  const todayKey = useMemo(() => pktTodayKey(), []);
 
   const placed = useMemo<PlacedAccount[]>(() => {
     return (profiles.data ?? [])
@@ -135,8 +137,8 @@ function Inner() {
   const fullRadiusCount = radiusMode === "all" ? placed.length : coveredToday;
 
   return (
-    <div className="grid lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-2 glass-card p-5">
+    <div className="grid lg:grid-cols-5 gap-4">
+      <div className="lg:col-span-3 glass-card p-5">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <div>
             <h3 className="text-sm font-semibold tracking-tight">
@@ -145,7 +147,7 @@ function Inner() {
             <div className="text-[11.5px] text-muted-foreground mt-0.5">
               {radiusMode === "all"
                 ? "Every added browser profile with coordinates shows a 50-mile radius."
-                : "50-mile radius appears only for profiles launched today."}
+                : "50-mile radius appears only for profiles launched today (PKT, resets at midnight PKT)."}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -222,36 +224,39 @@ function Inner() {
         </p>
       </div>
 
-      <div className="glass-card p-5">
+      <div className="lg:col-span-2 glass-card p-5">
         <h3 className="text-sm font-semibold tracking-tight mb-4">Coverage by area</h3>
         <div className="grid grid-cols-2 gap-2 mb-4">
           <Stat label="Covered" value={coveredToday} />
           <Stat label="Missing" value={missingToday} />
         </div>
-        <div className="space-y-2">
-          {coverage.length === 0 && (
-            <div className="text-sm text-muted-foreground">No pinned profiles.</div>
-          )}
-          {coverage.map(([area, counts]) => {
-            const pct = counts.total ? (counts.covered / counts.total) * 100 : 0;
-            return (
-              <div key={area} className="group">
-                <div className="flex items-center justify-between text-[12.5px] mb-1 gap-2">
-                  <span className="truncate">{area}</span>
-                  <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                    {counts.covered}/{counts.total} · {counts.launches} launches
-                  </span>
+        {coverage.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No pinned profiles.</div>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3">
+            {coverage.map(([area, counts]) => {
+              const covered = counts.covered > 0;
+              return (
+                <div key={area}>
+                  <div className="flex items-center justify-between text-[12.5px] mb-1 gap-2">
+                    <span className="truncate">{area}</span>
+                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {counts.launches} {counts.launches === 1 ? "launch" : "launches"}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-surface overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full transition-all duration-500",
+                        covered ? "w-full bg-primary" : "w-0",
+                      )}
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 rounded-full bg-surface overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-500"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -266,19 +271,15 @@ function parseHistory(value: Json): LaunchHistoryEntry[] {
   });
 }
 
-function dayKey(date: Date) {
-  return [date.getFullYear(), date.getMonth(), date.getDate()].join("-");
-}
-
 function countLaunchesOnDay(
   history: LaunchHistoryEntry[],
   targetDay: string,
   lastLaunchedAt: string | null,
 ) {
-  const historyCount = history.filter((entry) => dayKey(new Date(entry.at)) === targetDay).length;
+  const historyCount = history.filter((entry) => pktDayKey(entry.at) === targetDay).length;
   if (historyCount > 0) return historyCount;
   if (!lastLaunchedAt) return 0;
-  return dayKey(new Date(lastLaunchedAt)) === targetDay ? 1 : 0;
+  return pktDayKey(lastLaunchedAt) === targetDay ? 1 : 0;
 }
 
 function Stat({ label, value }: { label: string; value: number }) {

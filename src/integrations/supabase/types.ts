@@ -181,6 +181,33 @@ export type Database = {
           },
         ]
       }
+      map_snapshots: {
+        Row: {
+          captured_at: string
+          created_at: string
+          id: string
+          image_url: string | null
+          snapshot_date: string
+          summary: Json
+        }
+        Insert: {
+          captured_at?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          snapshot_date: string
+          summary?: Json
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          snapshot_date?: string
+          summary?: Json
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -499,6 +526,15 @@ export type Database = {
               yes_count: number
             }[]
           }
+      report_leads_forwarded_by_processor: {
+        Args: { _from?: string; _to?: string }
+        Returns: {
+          forwarded_count: number
+          processor_email: string
+          processor_id: string
+          processor_name: string
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "scraping" | "cs" | "processor" | "acc_handler"

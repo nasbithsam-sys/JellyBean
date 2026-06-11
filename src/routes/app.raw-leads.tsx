@@ -64,11 +64,12 @@ type Row = Record<string, string> & {
 };
 
 type Category = "forwarded" | "not_found" | "wrong";
-type Action = { category?: Category | null; lead?: "yes" | "no" | null; phone?: string | null };
+type LeadDecision = "yes" | "no" | "review";
+type Action = { category?: Category | null; lead?: LeadDecision | null; phone?: string | null };
 type CacheEntry = {
   row_key: string;
   data: Row;
-  lead: "yes" | "no" | null;
+  lead: LeadDecision | null;
   phone: string | null;
   category: Category | null;
   captured_at: string | null;

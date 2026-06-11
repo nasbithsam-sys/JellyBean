@@ -121,7 +121,7 @@ type Lead = {
   followup_at: string | null;
   assigned_at: string;
   assigned_to: string | null;
-  cs_outcome: "already_done" | "wrong_number" | "processed" | null;
+  cs_outcome: "already_done" | "wrong_number" | "processed" | "wrong_lead" | null;
   is_important: boolean;
 };
 
@@ -368,7 +368,7 @@ function Inner() {
   };
 
   const isAdmin = auth.primaryRole === "admin";
-  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__">("new");
+  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__" | "__wrong__">("new");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -398,18 +398,28 @@ function Inner() {
     });
   }, [areaFilter, auth.user?.id, list.data, ownerFilter, query]);
 
+  const wrongLeads = useMemo(
+    () => filtered.filter((l) => l.cs_outcome === "wrong_lead"),
+    [filtered],
+  );
+  // Wrong leads live in their own bucket; hide them from every regular tab.
+  const activePool = useMemo(
+    () => filtered.filter((l) => l.cs_outcome !== "wrong_lead"),
+    [filtered],
+  );
+
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const s of PIPELINE_STATUSES) c[s] = 0;
-    for (const l of filtered) c[l.cs_status] = (c[l.cs_status] ?? 0) + 1;
+    for (const l of activePool) c[l.cs_status] = (c[l.cs_status] ?? 0) + 1;
     return c;
-  }, [filtered]);
+  }, [activePool]);
 
-  const visibleLeads = useMemo(
-    () =>
-      activeStatus === "__all__" ? filtered : filtered.filter((l) => l.cs_status === activeStatus),
-    [filtered, activeStatus],
-  );
+  const visibleLeads = useMemo(() => {
+    if (activeStatus === "__wrong__") return wrongLeads;
+    if (activeStatus === "__all__") return activePool;
+    return activePool.filter((l) => l.cs_status === activeStatus);
+  }, [activePool, wrongLeads, activeStatus]);
   const shownLeads = visibleLeads.slice(0, visibleLimit);
 
   function exportLeads() {
@@ -558,6 +568,22 @@ function Inner() {
             </span>
           </button>
         ))}
+        <button
+          onClick={() => setActiveStatus("__wrong__")}
+          className={cn(
+            "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+            activeStatus === "__wrong__"
+              ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          title="Leads marked as Wrong lead by CS"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+          Wrong leads
+          <span className="text-[10.5px] text-muted-foreground tabular-nums">
+            {wrongLeads.length}
+          </span>
+        </button>
       </div>
 
       {list.error && (
@@ -728,10 +754,14 @@ function LeadCard({
   const qc = useQueryClient();
   const auth = useAuth();
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
+  const [outcome, setOutcome] = useState<Lead["cs_outcome"]>(lead.cs_outcome);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [saving, setSaving] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const initials = (lead.customer_name || "?")
+  const [name, setName] = useState(lead.customer_name);
+  const [number, setNumber] = useState(lead.customer_number);
+  const [compose, setCompose] = useState(lead.marketing_notes ?? "");
+  const initials = (name || "?")
     .split(/\s+/)
     .map((p) => p[0])
     .join("")
@@ -741,6 +771,30 @@ function LeadCard({
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
+
+  async function saveField(patch: Partial<Lead>) {
+    const { error } = await supabase
+      .from("qualified_leads")
+      .update(patch as never)
+      .eq("id", lead.id);
+    if (error) {
+      toast.error(error.message);
+      return false;
+    }
+    return true;
+  }
+
+  async function changeOutcome(nextValue: string) {
+    const next = (nextValue === "__none__" ? null : nextValue) as Lead["cs_outcome"];
+    const prev = outcome;
+    setOutcome(next);
+    if (await saveField({ cs_outcome: next })) {
+      toast.success(next ? `Outcome → ${next.replace(/_/g, " ")}` : "Outcome cleared");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } else {
+      setOutcome(prev);
+    }
+  }
 
   async function changeStatus(next: CsStatus) {
     const prev = status;
@@ -937,6 +991,75 @@ function LeadCard({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Outcome (visible to forwarder) */}
+      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+        <Select value={outcome ?? "__none__"} onValueChange={changeOutcome}>
+          <SelectTrigger className="h-8 text-[12px]">
+            <SelectValue placeholder="Outcome…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">— Outcome not set —</SelectItem>
+            <SelectItem value="already_done">Already done</SelectItem>
+            <SelectItem value="wrong_number">Wrong number</SelectItem>
+            <SelectItem value="processed">Processed</SelectItem>
+            <SelectItem value="wrong_lead">Wrong lead</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Manual fields filled by CS */}
+      <div className="mt-3 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
+        <div>
+          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={async () => {
+              if (name !== lead.customer_name && name.trim()) {
+                if (await saveField({ customer_name: name.trim() } as Partial<Lead>)) {
+                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                }
+              }
+            }}
+            className="h-8 text-[12px] mt-0.5"
+            placeholder="Customer name"
+          />
+        </div>
+        <div>
+          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Number</Label>
+          <Input
+            value={number}
+            onChange={(e) => setNumber(e.target.value)}
+            onBlur={async () => {
+              if (number !== lead.customer_number && number.trim()) {
+                if (await saveField({ customer_number: number.trim() } as Partial<Lead>)) {
+                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                }
+              }
+            }}
+            className="h-8 text-[12px] mt-0.5"
+            placeholder="Phone"
+          />
+        </div>
+      </div>
+      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Compose</Label>
+        <Textarea
+          value={compose}
+          rows={2}
+          onChange={(e) => setCompose(e.target.value)}
+          onBlur={async () => {
+            if ((compose || "") !== (lead.marketing_notes ?? "")) {
+              if (await saveField({ marketing_notes: compose } as Partial<Lead>)) {
+                qc.invalidateQueries({ queryKey: ["cs_leads"] });
+              }
+            }
+          }}
+          className="text-[12px] mt-0.5 resize-none"
+          placeholder="Compose a message or note for this lead…"
+        />
       </div>
 
       {/* Assignment row */}
@@ -1198,6 +1321,7 @@ function LeadDrawer({
                 <SelectItem value="already_done">Already done</SelectItem>
                 <SelectItem value="wrong_number">Wrong number</SelectItem>
                 <SelectItem value="processed">Processed</SelectItem>
+                <SelectItem value="wrong_lead">Wrong lead</SelectItem>
               </SelectContent>
             </Select>
           </div>
