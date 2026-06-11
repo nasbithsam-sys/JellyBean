@@ -41,6 +41,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 import { analyzeRawLeadsWithAi } from "@/lib/raw-leads-ai.functions";
+import { fetchRawLeadCache } from "@/lib/raw-leads.functions";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
@@ -211,6 +212,7 @@ function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
   const analyzeWithAi = useServerFn(analyzeRawLeadsWithAi);
+  const fetchRawLeads = useServerFn(fetchRawLeadCache);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const nextdoorWebhookUrl =
@@ -242,7 +244,8 @@ NO = selling, garage sale, job search, ad, review, event, lost/found, general ta
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
     queryKey: ["raw-lead-cache", databaseLimit],
-    queryFn: () => loadCache(databaseLimit),
+    queryFn: async () =>
+      (await fetchRawLeads({ data: { limit: databaseLimit } })) as CacheEntry[],
     // staleTime: 0 (default) — allows invalidateQueries() from useRealtimeSync
     // to trigger a background refetch whenever new leads arrive from the extension.
     gcTime: Infinity,
