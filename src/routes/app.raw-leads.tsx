@@ -210,7 +210,13 @@ function Inner() {
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
   const [aiPrompt, setAiPrompt] = useState(
-    "Mark Yes only if the post is from someone likely needing a service, quote, repair, install, or recommendation. Mark No for ads, providers, spam, general discussion, or posts without buying/service intent.",
+    `Home repair lead filter.
+
+Mark only YES or NO.
+
+YES = person is asking for any home repair, install, maintenance, handyman, cleaning, moving, junk, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, or hot tub service.
+
+NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, or not asking for home service.`,
   );
   const [aiRunning, setAiRunning] = useState(false);
 
