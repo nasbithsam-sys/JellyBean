@@ -132,15 +132,30 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
 
 // ── Supabase cache helpers ────────────────────────────────────────────────────
 async function loadCache(limit: number): Promise<CacheEntry[]> {
+  const columns = "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to";
+
   const { data, error } = await supabase
     .from(TABLE)
-    .select(
-      "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to",
-    )
+    .select(columns)
     .order("captured_at", { ascending: false, nullsFirst: false })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []) as CacheEntry[];
+
+  const { data: newData, error: newError } = await supabase
+    .from(TABLE)
+    .select(columns)
+    .is("category", null)
+    .order("captured_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (newError) throw newError;
+
+  const merged = new Map<string, CacheEntry>();
+  for (const entry of [...(data ?? []), ...(newData ?? [])] as CacheEntry[]) {
+    merged.set(entry.row_key, entry);
+  }
+  return Array.from(merged.values()).sort(
+    (a, b) => new Date(b.captured_at ?? 0).getTime() - new Date(a.captured_at ?? 0).getTime(),
+  );
 }
 
 async function patchEntry(row_key: string, patch: Partial<CacheEntry>) {
