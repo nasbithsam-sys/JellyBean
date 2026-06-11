@@ -311,6 +311,7 @@ export type Database = {
       }
       raw_lead_cache: {
         Row: {
+          assigned_to: string | null
           captured_at: string | null
           category: string | null
           created_at: string
@@ -324,6 +325,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_to?: string | null
           captured_at?: string | null
           category?: string | null
           created_at?: string
@@ -337,6 +339,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_to?: string | null
           captured_at?: string | null
           category?: string | null
           created_at?: string
