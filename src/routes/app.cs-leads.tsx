@@ -237,7 +237,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important",
+          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important",
         )
         // Pin important / urgent jobs to the top, then most recent first.
         .order("is_important", { ascending: false })
