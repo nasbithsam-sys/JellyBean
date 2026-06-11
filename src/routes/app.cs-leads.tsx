@@ -754,10 +754,14 @@ function LeadCard({
   const qc = useQueryClient();
   const auth = useAuth();
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
+  const [outcome, setOutcome] = useState<Lead["cs_outcome"]>(lead.cs_outcome);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [saving, setSaving] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const initials = (lead.customer_name || "?")
+  const [name, setName] = useState(lead.customer_name);
+  const [number, setNumber] = useState(lead.customer_number);
+  const [compose, setCompose] = useState(lead.marketing_notes ?? "");
+  const initials = (name || "?")
     .split(/\s+/)
     .map((p) => p[0])
     .join("")
@@ -767,6 +771,30 @@ function LeadCard({
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
+
+  async function saveField(patch: Partial<Lead>) {
+    const { error } = await supabase
+      .from("qualified_leads")
+      .update(patch as never)
+      .eq("id", lead.id);
+    if (error) {
+      toast.error(error.message);
+      return false;
+    }
+    return true;
+  }
+
+  async function changeOutcome(nextValue: string) {
+    const next = (nextValue === "__none__" ? null : nextValue) as Lead["cs_outcome"];
+    const prev = outcome;
+    setOutcome(next);
+    if (await saveField({ cs_outcome: next })) {
+      toast.success(next ? `Outcome → ${next.replace(/_/g, " ")}` : "Outcome cleared");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } else {
+      setOutcome(prev);
+    }
+  }
 
   async function changeStatus(next: CsStatus) {
     const prev = status;
