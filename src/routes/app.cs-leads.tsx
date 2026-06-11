@@ -368,7 +368,7 @@ function Inner() {
   };
 
   const isAdmin = auth.primaryRole === "admin";
-  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__">("new");
+  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__" | "__wrong__">("new");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -398,18 +398,28 @@ function Inner() {
     });
   }, [areaFilter, auth.user?.id, list.data, ownerFilter, query]);
 
+  const wrongLeads = useMemo(
+    () => filtered.filter((l) => l.cs_outcome === "wrong_lead"),
+    [filtered],
+  );
+  // Wrong leads live in their own bucket; hide them from every regular tab.
+  const activePool = useMemo(
+    () => filtered.filter((l) => l.cs_outcome !== "wrong_lead"),
+    [filtered],
+  );
+
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const s of PIPELINE_STATUSES) c[s] = 0;
-    for (const l of filtered) c[l.cs_status] = (c[l.cs_status] ?? 0) + 1;
+    for (const l of activePool) c[l.cs_status] = (c[l.cs_status] ?? 0) + 1;
     return c;
-  }, [filtered]);
+  }, [activePool]);
 
-  const visibleLeads = useMemo(
-    () =>
-      activeStatus === "__all__" ? filtered : filtered.filter((l) => l.cs_status === activeStatus),
-    [filtered, activeStatus],
-  );
+  const visibleLeads = useMemo(() => {
+    if (activeStatus === "__wrong__") return wrongLeads;
+    if (activeStatus === "__all__") return activePool;
+    return activePool.filter((l) => l.cs_status === activeStatus);
+  }, [activePool, wrongLeads, activeStatus]);
   const shownLeads = visibleLeads.slice(0, visibleLimit);
 
   function exportLeads() {
@@ -558,6 +568,22 @@ function Inner() {
             </span>
           </button>
         ))}
+        <button
+          onClick={() => setActiveStatus("__wrong__")}
+          className={cn(
+            "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+            activeStatus === "__wrong__"
+              ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          title="Leads marked as Wrong lead by CS"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+          Wrong leads
+          <span className="text-[10.5px] text-muted-foreground tabular-nums">
+            {wrongLeads.length}
+          </span>
+        </button>
       </div>
 
       {list.error && (
