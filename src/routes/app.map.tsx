@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { PlacedAccount } from "@/components/leaflet-map";
 import { pktDayKey, pktTodayKey } from "@/lib/timezone";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/map")({ component: Page });
 
