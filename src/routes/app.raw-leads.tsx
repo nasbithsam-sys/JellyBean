@@ -584,29 +584,44 @@ function Inner() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
-        <Textarea
-          value={aiPrompt}
-          onChange={(e) => setAiPrompt(e.target.value)}
-          rows={2}
-          maxLength={2000}
-          placeholder="Prompt for AI lead checking..."
-          className="min-h-[56px] text-[12.5px]"
-        />
-        <Button
-          className="h-14 lg:w-[190px]"
-          onClick={runAiLeadCheck}
-          disabled={aiRunning || aiTargets.length === 0}
-          title={`Analyze the next ${aiTargets.length} visible raw lead${aiTargets.length === 1 ? "" : "s"} with post text`}
-        >
-          {aiRunning ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Sparkles className="h-4 w-4 mr-2" />
+      {canRunAi && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
+            <Textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              rows={2}
+              maxLength={2000}
+              placeholder="Prompt for AI lead checking..."
+              className="min-h-[56px] text-[12.5px]"
+            />
+            <Button
+              className="h-14 lg:w-[210px]"
+              onClick={runAiLeadCheck}
+              disabled={aiRunning || aiLockedByOther || aiTargets.length === 0}
+              title={
+                aiLockedByOther
+                  ? `AI is busy — ${aiLock?.user_name ?? "another user"} is processing leads`
+                  : `Analyze the next ${aiTargets.length} visible raw lead${aiTargets.length === 1 ? "" : "s"} with post text`
+              }
+            >
+              {aiRunning || aiLockedByOther ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-2" />
+              )}
+              {aiLockedByOther
+                ? "AI busy…"
+                : `Check ${aiTargets.length || 50} Lead${aiTargets.length === 1 ? "" : "s"}`}
+            </Button>
+          </div>
+          {aiLockedByOther && (
+            <div className="text-[11.5px] text-muted-foreground">
+              {aiLock?.user_name ?? "Another user"} is running an AI batch right now — please wait.
+            </div>
           )}
-          Check {aiTargets.length || 50} Lead{aiTargets.length === 1 ? "" : "s"}
-        </Button>
-      </div>
+        </div>
+      )}
 
       {error && (
         <div className="text-[12.5px] text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-3 py-2">
