@@ -759,8 +759,7 @@ function LeadCard({
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [saving, setSaving] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const [name, setName] = useState(lead.customer_name);
-  const [number, setNumber] = useState(lead.customer_number);
+  const [numberName, setNumberName] = useState(lead.number_name ?? "");
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
   const initials = (name || "?")
     .split(/\s+/)
