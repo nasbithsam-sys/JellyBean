@@ -143,7 +143,12 @@ export const requireOtpVerified = createServerFn({ method: "POST" })
     // Scraping, processor and acc_handler sign in with just username + password.
     const roleNeedsOtp = roleList.includes("cs");
     const adminNeedsOtp = isAdmin && Boolean(settings?.admin_otp_required);
-    const needsOtp = prof.otp_required || roleNeedsOtp || adminNeedsOtp;
+    // Respect explicit profile opt-out (otp_required = false) even for CS,
+    // matching the client-side login gate.
+    const needsOtp =
+      prof.otp_required === true ||
+      adminNeedsOtp ||
+      (roleNeedsOtp && prof.otp_required !== false);
     if (!needsOtp) return { ok: true as const };
 
     const iatSec = Number((context.claims as { iat?: number } | null)?.iat ?? 0);
