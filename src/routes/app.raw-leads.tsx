@@ -498,15 +498,14 @@ function Inner() {
           className="h-14 lg:w-[190px]"
           onClick={runAiLeadCheck}
           disabled={aiRunning || aiTargets.length === 0}
-          title="Analyze the first 50 visible raw leads with post text"
+          title={`Analyze the next ${aiTargets.length} visible raw lead${aiTargets.length === 1 ? "" : "s"} with post text`}
         >
           {aiRunning ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
             <Sparkles className="h-4 w-4 mr-2" />
           )}
-          Check 50 Leads
-
+          Check {aiTargets.length || 50} Lead{aiTargets.length === 1 ? "" : "s"}
         </Button>
       </div>
 
