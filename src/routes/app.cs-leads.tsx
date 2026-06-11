@@ -30,6 +30,8 @@ import {
   Download,
   Bell,
   BellOff,
+  Trash2,
+  ArrowRightCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -365,7 +367,8 @@ function Inner() {
     }
   };
 
-  const [activeStatus, setActiveStatus] = useState<CsStatus>("new");
+  const isAdmin = auth.primaryRole === "admin";
+  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__">("new");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -403,7 +406,8 @@ function Inner() {
   }, [filtered]);
 
   const visibleLeads = useMemo(
-    () => filtered.filter((l) => l.cs_status === activeStatus),
+    () =>
+      activeStatus === "__all__" ? filtered : filtered.filter((l) => l.cs_status === activeStatus),
     [filtered, activeStatus],
   );
   const shownLeads = visibleLeads.slice(0, visibleLimit);
@@ -517,6 +521,23 @@ function Inner() {
 
       {/* Status tabs */}
       <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+        {isAdmin && (
+          <button
+            onClick={() => setActiveStatus("__all__")}
+            className={cn(
+              "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+              activeStatus === "__all__"
+                ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
+            All Leads
+            <span className="text-[10.5px] text-muted-foreground tabular-nums">
+              {filtered.length}
+            </span>
+          </button>
+        )}
         {PIPELINE_STATUSES.map((s) => (
           <button
             key={s}
@@ -787,6 +808,29 @@ function LeadCard({
     await changeAssignee(auth.user.id);
   }
 
+  async function deleteLead(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!isAdmin) return;
+    if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`)) return;
+    try {
+      const { error } = await supabase.from("qualified_leads").delete().eq("id", lead.id);
+      if (error) throw error;
+      await supabase.from("activity_logs").insert({
+        actor_id: auth.user?.id,
+        actor_name: auth.profile?.full_name,
+        actor_role: auth.primaryRole,
+        action: "cs.deleted",
+        entity_type: "qualified_lead",
+        entity_id: lead.id,
+        metadata: { customer_name: lead.customer_name },
+      });
+      toast.success("Lead deleted");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -831,33 +875,47 @@ function LeadCard({
         </div>
       </div>
 
-      {(lead.main_area || lead.sub_area) && (
-        <div className="mt-3 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          <MapPin className="h-3 w-3" />
-          <span className="truncate">
-            {[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")}
-          </span>
+      {lead.main_area && (
+        <div className="mt-3 flex items-start gap-1.5 text-[12px]">
+          <MapPin className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
+          <div className="min-w-0">
+            <span className="text-muted-foreground">Main Area: </span>
+            <span className="text-foreground/90 font-medium">{lead.main_area}</span>
+            {lead.sub_area && (
+              <span className="text-muted-foreground"> · {lead.sub_area}</span>
+            )}
+          </div>
         </div>
       )}
 
-      {lead.post_text && (
-        <div className="mt-3">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
-            Customer exact requirement
+      {lead.pass_it_to && (
+        <div className="mt-2 flex items-start gap-1.5 text-[12px]">
+          <ArrowRightCircle className="h-3 w-3 mt-0.5 text-primary shrink-0" />
+          <div className="min-w-0">
+            <span className="text-muted-foreground">Pass it to: </span>
+            <span className="text-foreground/90 font-medium">{lead.pass_it_to}</span>
           </div>
-          <p className="text-[12.5px] text-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
-            {lead.post_text}
-          </p>
         </div>
       )}
 
       {lead.context && (
-        <div className="mt-2">
+        <div className="mt-3">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
             Context
           </div>
-          <p className="text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-2">
+          <p className="text-[12.5px] text-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
             {lead.context}
+          </p>
+        </div>
+      )}
+
+      {lead.post_text && (
+        <div className="mt-2">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+            Exact customer requirement
+          </div>
+          <p className="text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
+            {lead.post_text}
           </p>
         </div>
       )}
@@ -945,6 +1003,17 @@ function LeadCard({
             <span className="h-1.5 w-1.5 rounded-full bg-warning" />
             Follow-up {formatDistanceToNow(new Date(lead.followup_at), { addSuffix: true })}
           </span>
+        )}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={deleteLead}
+            className="inline-flex items-center gap-1 text-destructive hover:text-destructive/80 transition-colors"
+            title="Delete this lead"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </button>
         )}
         <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-primary" />
       </div>
@@ -1203,13 +1272,55 @@ function LeadDrawer({
               Free-text comment. Appended to the history when you save.
             </p>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose} disabled={busy}>
-              Close
-            </Button>
-            <Button onClick={save} disabled={busy}>
-              {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
-            </Button>
+          <div className="flex items-center justify-between gap-2">
+            {isAdmin ? (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                disabled={busy}
+                onClick={async () => {
+                  if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`))
+                    return;
+                  setBusy(true);
+                  try {
+                    const { error } = await supabase
+                      .from("qualified_leads")
+                      .delete()
+                      .eq("id", lead.id);
+                    if (error) throw error;
+                    await supabase.from("activity_logs").insert({
+                      actor_id: auth.user?.id,
+                      actor_name: auth.profile?.full_name,
+                      actor_role: auth.primaryRole,
+                      action: "cs.deleted",
+                      entity_type: "qualified_lead",
+                      entity_id: lead.id,
+                      metadata: { customer_name: lead.customer_name },
+                    });
+                    toast.success("Lead deleted");
+                    qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                    onSaved();
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete lead
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose} disabled={busy}>
+                Close
+              </Button>
+              <Button onClick={save} disabled={busy}>
+                {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
+              </Button>
+            </div>
           </div>
         </div>
 

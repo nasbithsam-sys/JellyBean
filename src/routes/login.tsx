@@ -55,10 +55,12 @@ function LoginPage() {
     ]);
     const roles = (rolesData ?? []).map((r) => r.role as string);
     const isAdmin = roles.includes("admin");
+    const isCsOnly = roles.includes("cs") && !isAdmin;
     const adminNeedsOtp =
       isAdmin && Boolean((settings as LoginSettings | null)?.admin_otp_required);
     const profileOtp = (profile as (LoginProfile & { otp_required?: boolean }) | null)?.otp_required;
-    const needsOtp = profileOtp === true || adminNeedsOtp;
+    // CS role never uses the one-time login code — username + password only.
+    const needsOtp = isCsOnly ? false : profileOtp === true || adminNeedsOtp;
     return {
       isActive: (profile as LoginProfile | null)?.is_active ?? false,
       needsOtp,
