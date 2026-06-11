@@ -808,6 +808,29 @@ function LeadCard({
     await changeAssignee(auth.user.id);
   }
 
+  async function deleteLead(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!isAdmin) return;
+    if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`)) return;
+    try {
+      const { error } = await supabase.from("qualified_leads").delete().eq("id", lead.id);
+      if (error) throw error;
+      await supabase.from("activity_logs").insert({
+        actor_id: auth.user?.id,
+        actor_name: auth.profile?.full_name,
+        actor_role: auth.primaryRole,
+        action: "cs.deleted",
+        entity_type: "qualified_lead",
+        entity_id: lead.id,
+        metadata: { customer_name: lead.customer_name },
+      });
+      toast.success("Lead deleted");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  }
+
   return (
     <div
       className={cn(
