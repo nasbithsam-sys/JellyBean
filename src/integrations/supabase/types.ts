@@ -271,6 +271,7 @@ export type Database = {
           is_important: boolean
           main_area: string | null
           marketing_notes: string | null
+          number_name: string | null
           original_lead_link: string | null
           pass_it_to: string | null
           post_text: string | null
@@ -295,6 +296,7 @@ export type Database = {
           is_important?: boolean
           main_area?: string | null
           marketing_notes?: string | null
+          number_name?: string | null
           original_lead_link?: string | null
           pass_it_to?: string | null
           post_text?: string | null
@@ -319,6 +321,7 @@ export type Database = {
           is_important?: boolean
           main_area?: string | null
           marketing_notes?: string | null
+          number_name?: string | null
           original_lead_link?: string | null
           pass_it_to?: string | null
           post_text?: string | null

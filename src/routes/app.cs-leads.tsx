@@ -115,6 +115,7 @@ type Lead = {
   main_area: string | null;
   sub_area: string | null;
   marketing_notes: string | null;
+  number_name: string | null;
   original_lead_link: string | null;
   cs_status: CsStatus;
   cs_notes: LeadNote[];
@@ -236,7 +237,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important",
+          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important",
         )
         // Pin important / urgent jobs to the top, then most recent first.
         .order("is_important", { ascending: false })
@@ -758,10 +759,9 @@ function LeadCard({
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [saving, setSaving] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const [name, setName] = useState(lead.customer_name);
-  const [number, setNumber] = useState(lead.customer_number);
+  const [numberName, setNumberName] = useState(lead.number_name ?? "");
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
-  const initials = (name || "?")
+  const initials = (lead.customer_name || "?")
     .split(/\s+/)
     .map((p) => p[0])
     .join("")
@@ -1009,40 +1009,22 @@ function LeadCard({
         </Select>
       </div>
 
-      {/* Manual fields filled by CS */}
-      <div className="mt-3 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
-        <div>
-          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Name</Label>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={async () => {
-              if (name !== lead.customer_name && name.trim()) {
-                if (await saveField({ customer_name: name.trim() } as Partial<Lead>)) {
-                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
-                }
+      {/* Manual field filled by CS */}
+      <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Number Name</Label>
+        <Input
+          value={numberName}
+          onChange={(e) => setNumberName(e.target.value)}
+          onBlur={async () => {
+            if (numberName !== (lead.number_name ?? "")) {
+              if (await saveField({ number_name: numberName } as Partial<Lead>)) {
+                qc.invalidateQueries({ queryKey: ["cs_leads"] });
               }
-            }}
-            className="h-8 text-[12px] mt-0.5"
-            placeholder="Customer name"
-          />
-        </div>
-        <div>
-          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Number</Label>
-          <Input
-            value={number}
-            onChange={(e) => setNumber(e.target.value)}
-            onBlur={async () => {
-              if (number !== lead.customer_number && number.trim()) {
-                if (await saveField({ customer_number: number.trim() } as Partial<Lead>)) {
-                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
-                }
-              }
-            }}
-            className="h-8 text-[12px] mt-0.5"
-            placeholder="Phone"
-          />
-        </div>
+            }
+          }}
+          className="h-8 text-[12px] mt-0.5"
+          placeholder="Number name"
+        />
       </div>
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
         <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Compose</Label>
