@@ -139,16 +139,10 @@ export const requireOtpVerified = createServerFn({ method: "POST" })
       .select("admin_otp_required")
       .maybeSingle();
     const isAdmin = roleList.includes("admin");
-    // Only CS still requires the one-time login code on every sign-in.
-    // Scraping, processor and acc_handler sign in with just username + password.
-    const roleNeedsOtp = roleList.includes("cs");
+    // Only admins (when admin_otp_required is on) still use the one-time login code.
+    // All other roles (scraping, processor, cs, acc_handler) sign in with just username + password.
     const adminNeedsOtp = isAdmin && Boolean(settings?.admin_otp_required);
-    // Respect explicit profile opt-out (otp_required = false) even for CS,
-    // matching the client-side login gate.
-    const needsOtp =
-      prof.otp_required === true ||
-      adminNeedsOtp ||
-      (roleNeedsOtp && prof.otp_required !== false);
+    const needsOtp = prof.otp_required === true || adminNeedsOtp;
     if (!needsOtp) return { ok: true as const };
 
     const iatSec = Number((context.claims as { iat?: number } | null)?.iat ?? 0);

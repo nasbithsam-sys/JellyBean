@@ -55,19 +55,10 @@ function LoginPage() {
     ]);
     const roles = (rolesData ?? []).map((r) => r.role as string);
     const isAdmin = roles.includes("admin");
-    // Only CS still requires the one-time login code.
-    // Scraping, processor and acc_handler sign in with just username + password.
-    const roleNeedsOtp = roles.includes("cs");
     const adminNeedsOtp =
       isAdmin && Boolean((settings as LoginSettings | null)?.admin_otp_required);
-    // If the user's profile explicitly opts out (otp_required = false), respect that
-    // even for CS. Only force OTP when their profile flag is true OR they're admin
-    // with admin_otp_required, OR they're CS without an explicit opt-out.
     const profileOtp = (profile as (LoginProfile & { otp_required?: boolean }) | null)?.otp_required;
-    const needsOtp =
-      profileOtp === true ||
-      adminNeedsOtp ||
-      (roleNeedsOtp && profileOtp !== false);
+    const needsOtp = profileOtp === true || adminNeedsOtp;
     return {
       isActive: (profile as LoginProfile | null)?.is_active ?? false,
       needsOtp,
