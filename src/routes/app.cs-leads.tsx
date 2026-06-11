@@ -121,7 +121,7 @@ type Lead = {
   followup_at: string | null;
   assigned_at: string;
   assigned_to: string | null;
-  cs_outcome: "already_done" | "wrong_number" | "processed" | null;
+  cs_outcome: "already_done" | "wrong_number" | "processed" | "wrong_lead" | null;
   is_important: boolean;
 };
 
@@ -1198,6 +1198,7 @@ function LeadDrawer({
                 <SelectItem value="already_done">Already done</SelectItem>
                 <SelectItem value="wrong_number">Wrong number</SelectItem>
                 <SelectItem value="processed">Processed</SelectItem>
+                <SelectItem value="wrong_lead">Wrong lead</SelectItem>
               </SelectContent>
             </Select>
           </div>
