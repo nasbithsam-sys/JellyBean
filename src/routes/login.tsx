@@ -11,6 +11,7 @@ import { consumeLoginOtp } from "@/lib/login-otp.functions";
 
 type LoginProfile = {
   is_active: boolean;
+  otp_required?: boolean;
 };
 
 type LoginSettings = {
@@ -48,19 +49,28 @@ function LoginPage() {
 
   async function getLoginAccess(uid: string): Promise<{ isActive: boolean; needsOtp: boolean }> {
     const [{ data: profile }, { data: rolesData }, { data: settings }] = await Promise.all([
-      supabase.from("profiles").select("is_active").eq("user_id", uid).maybeSingle(),
+      supabase.from("profiles").select("is_active, otp_required").eq("user_id", uid).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", uid),
       supabase.from("app_settings").select("admin_otp_required").maybeSingle(),
     ]);
     const roles = (rolesData ?? []).map((r) => r.role as string);
     const isAdmin = roles.includes("admin");
     // Only CS still requires the one-time login code.
+    // Scraping, processor and acc_handler sign in with just username + password.
     const roleNeedsOtp = roles.includes("cs");
     const adminNeedsOtp =
       isAdmin && Boolean((settings as LoginSettings | null)?.admin_otp_required);
+    // If the user's profile explicitly opts out (otp_required = false), respect that
+    // even for CS. Only force OTP when their profile flag is true OR they're admin
+    // with admin_otp_required, OR they're CS without an explicit opt-out.
+    const profileOtp = (profile as (LoginProfile & { otp_required?: boolean }) | null)?.otp_required;
+    const needsOtp =
+      profileOtp === true ||
+      adminNeedsOtp ||
+      (roleNeedsOtp && profileOtp !== false);
     return {
       isActive: (profile as LoginProfile | null)?.is_active ?? false,
-      needsOtp: roleNeedsOtp || adminNeedsOtp,
+      needsOtp,
     };
   }
 
