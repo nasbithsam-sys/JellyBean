@@ -794,6 +794,30 @@ function Inner() {
                       {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
                     </td>
                     <td
+                      className="border-b border-border px-2.5 py-2"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      {mine ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/15 text-primary text-[10.5px] font-medium border border-primary/30">
+                          Assigned to you
+                        </span>
+                      ) : claimedByOther ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-muted-foreground text-[10.5px] font-medium border border-border">
+                          Claimed
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px]"
+                          onClick={() => assignToSelf(e)}
+                          disabled={!currentUserId}
+                        >
+                          Assign to myself
+                        </Button>
+                      )}
+                    </td>
+                    <td
                       className="border-b border-border px-2 py-2 text-center"
                       onClick={(ev) => ev.stopPropagation()}
                     >
