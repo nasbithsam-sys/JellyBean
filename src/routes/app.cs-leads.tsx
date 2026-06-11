@@ -761,7 +761,7 @@ function LeadCard({
   const [assigning, setAssigning] = useState(false);
   const [numberName, setNumberName] = useState(lead.number_name ?? "");
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
-  const initials = (name || "?")
+  const initials = (lead.customer_name || "?")
     .split(/\s+/)
     .map((p) => p[0])
     .join("")
