@@ -1009,40 +1009,22 @@ function LeadCard({
         </Select>
       </div>
 
-      {/* Manual fields filled by CS */}
-      <div className="mt-3 grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
-        <div>
-          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Name</Label>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={async () => {
-              if (name !== lead.customer_name && name.trim()) {
-                if (await saveField({ customer_name: name.trim() } as Partial<Lead>)) {
-                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
-                }
+      {/* Manual field filled by CS */}
+      <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Number Name</Label>
+        <Input
+          value={numberName}
+          onChange={(e) => setNumberName(e.target.value)}
+          onBlur={async () => {
+            if (numberName !== (lead.number_name ?? "")) {
+              if (await saveField({ number_name: numberName } as Partial<Lead>)) {
+                qc.invalidateQueries({ queryKey: ["cs_leads"] });
               }
-            }}
-            className="h-8 text-[12px] mt-0.5"
-            placeholder="Customer name"
-          />
-        </div>
-        <div>
-          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Number</Label>
-          <Input
-            value={number}
-            onChange={(e) => setNumber(e.target.value)}
-            onBlur={async () => {
-              if (number !== lead.customer_number && number.trim()) {
-                if (await saveField({ customer_number: number.trim() } as Partial<Lead>)) {
-                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
-                }
-              }
-            }}
-            className="h-8 text-[12px] mt-0.5"
-            placeholder="Phone"
-          />
-        </div>
+            }
+          }}
+          className="h-8 text-[12px] mt-0.5"
+          placeholder="Number name"
+        />
       </div>
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
         <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Compose</Label>
