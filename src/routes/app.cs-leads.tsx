@@ -30,6 +30,8 @@ import {
   Download,
   Bell,
   BellOff,
+  Trash2,
+  ArrowRightCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -365,7 +367,8 @@ function Inner() {
     }
   };
 
-  const [activeStatus, setActiveStatus] = useState<CsStatus>("new");
+  const isAdmin = auth.primaryRole === "admin";
+  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__">("new");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -403,7 +406,8 @@ function Inner() {
   }, [filtered]);
 
   const visibleLeads = useMemo(
-    () => filtered.filter((l) => l.cs_status === activeStatus),
+    () =>
+      activeStatus === "__all__" ? filtered : filtered.filter((l) => l.cs_status === activeStatus),
     [filtered, activeStatus],
   );
   const shownLeads = visibleLeads.slice(0, visibleLimit);
