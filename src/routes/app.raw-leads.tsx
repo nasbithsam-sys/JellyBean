@@ -654,6 +654,7 @@ function Inner() {
               <col style={{ width: 96 }} />
               <col style={{ width: 120 }} />
               <col style={{ width: 120 }} />
+              <col style={{ width: 130 }} />
               <col style={{ width: 60 }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface">
@@ -669,13 +670,16 @@ function Inner() {
                     {h}
                   </th>
                 ))}
+                <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
+                  Assignment
+                </th>
                 <th className="border-b border-border px-2 py-2" />
               </tr>
             </thead>
             <tbody>
               {!cacheQuery.isLoading && visible.length === 0 && !error && (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-muted-foreground">
+                  <td colSpan={13} className="text-center py-12 text-muted-foreground">
                     {tab === "new"
                       ? "No leads yet. Run your scraper extension to push leads here."
                       : "Nothing here yet."}
