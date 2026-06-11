@@ -40,16 +40,20 @@ const ADMIN: Item[] = [
   { to: "/app/settings", label: "Settings", icon: Settings, shortcut: "S" },
 ];
 
-const SCRAPING_PROCESSOR: Item[] = [
+const SCRAPING: Item[] = [
+  { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe },
+];
+
+const PROCESSOR: Item[] = [
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2 },
   { to: "/app/forwarded-leads", label: "Forwarded Leads", icon: Headphones },
-  { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe },
 ];
 
 const CS: Item[] = [{ to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard }];
 const ACC_HANDLER: Item[] = [
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe, shortcut: "B" },
+  { to: "/app/raw-leads", label: "Raw Leads", icon: Table2, shortcut: "L" },
 ];
 
 const ADMIN_FULL: Item[] = [
@@ -60,7 +64,8 @@ const ADMIN_FULL: Item[] = [
 
 function itemsForRole(role: AppRole | null): Item[] {
   if (role === "admin") return ADMIN_FULL;
-  if (role === "scraping" || role === "processor") return SCRAPING_PROCESSOR;
+  if (role === "scraping") return SCRAPING;
+  if (role === "processor") return PROCESSOR;
   if (role === "cs") return CS;
   if (role === "acc_handler") return ACC_HANDLER;
   return [];
