@@ -1,81 +1,83 @@
-# Plan
 
-## 1. Manual refresh on Raw Leads & CS Leads
+## Scope
 
-- Remove any auto-polling / realtime subscriptions on `app.raw-leads.tsx` and `app.cs-leads.tsx`.
-- Add a visible **Refresh** button (icon + label) that calls `queryClient.invalidateQueries`.
-- No interval timers; the page only updates when the user clicks Refresh or performs a mutation.
+A coordinated set of changes across CS pipeline, lead card, map, AI prompt, timezone, and reports. Will be delivered in this single plan but staged across migrations and code changes.
 
-## 2. Map page — real interactive map
+---
 
-Replace the inline-SVG USA "drawing" in `app.map.tsx` with a real slippy map:
+## 1. Wrong Lead bucket (CS pipeline)
 
-- Use **react-leaflet + leaflet** (lightweight, no API key, OpenStreetMap tiles).
-- Default center: continental USA, zoom 4.
-- Keep the existing **Map visuals** toggle (off by default, persisted in localStorage):
-  - OFF → base tile map only with simple markers
-  - ON → markers + coverage circles + popups
-- Sidebar list of area coverage stays.
-- Install `leaflet` and `react-leaflet`; import `leaflet/dist/leaflet.css` in `styles.css`.
+- Add `"wrong"` value to the outcome enum on `qualified_leads` (DB migration).
+- CS pipeline page: add **"Wrong lead"** option in the outcome dropdown (both inline picker and lead card).
+- Hide `wrong` leads from active CS pipeline view; add a new **"Wrong leads"** tab/filter on the CS leads page that lists them with the option to restore.
 
-## 3. Incogniton integration
+## 2. Lead card enhancements (`app.cs-leads.tsx`)
 
-### 3a. Schema (migration)
+On the lead detail/card view:
+- New editable fields filled manually by the CS user:
+  - **Customer name**
+  - **Customer phone**
+  - **Compose note** (multiline freeform message/script)
+- Outcome dropdown rendered inside the card (in addition to row-level), so users can change outcome without leaving the card.
+- Always show **Passed to** (the processor/handler name + free-text note) on the card.
+- Persist these via new nullable columns on `qualified_leads`:
+  - `cs_customer_name text`
+  - `cs_customer_phone text`
+  - `cs_compose_note text`
 
-New table `public.incogniton_profiles`:
+## 3. Map page (`app.map.tsx`, `leaflet-map.tsx`)
 
-- `id uuid pk default gen_random_uuid()`
-- `profile_name text not null`
-- `incogniton_profile_id text not null unique`
-- `group_name text`
-- `platform text`
-- `linked_lead_id uuid` — FK to `qualified_leads(id) on delete set null` ← I'm using `qualified_leads` as "leads" since this project's CS leads live there; raw_leads are pre-qualification feed
-- `last_launched_at timestamptz`
-- `created_at timestamptz default now()`
-- `created_by uuid`
+- Reorganize layout so **Coverage by area** sits side-by-side with the map (responsive: stacks on mobile), and the list is no longer in a tall scroll panel — it expands naturally beside the map.
+- Remove fractional launch display (`1/2`, `1/4`). Show plain "1 launch" / "2 launches" instead.
+- Progress bar becomes binary: 0% (no launch today) or 100% (at least one launch today). No partial fill.
+- **PKT reset**: launch-today logic uses PKT (Asia/Karachi) day boundary, so it resets at 11:59 PM PKT.
 
-RLS: admin + marketing full access; cs read + update `last_launched_at` only (so CS can launch profiles from their pipeline).
+## 4. Daily map snapshot
 
-### 3b. Launch button in CS Leads (`app.cs-leads.tsx`)
+- New table `map_snapshots(snapshot_date date, captured_at timestamptz, image_url text, summary jsonb)`.
+- New private storage bucket `map-snapshots`.
+- New server route `/api/public/hooks/capture-map-snapshot` that:
+  - Computes today's PKT coverage summary (placed accounts, covered, missing, per-area).
+  - Renders a simple SVG/PNG report of the day's coverage (text + per-area breakdown — no live map tiles, since the worker runtime can't run Leaflet/canvas).
+  - Uploads to the `map-snapshots` bucket and inserts a row.
+- `pg_cron` job runs daily at **11:59 PM PKT** (`59 18 * * *` UTC) calling that route.
+- Map page gains a **"Snapshots"** panel with a date-range picker that lists/downloads past snapshots.
 
-- Add 🌐 Globe icon button in each lead's row / drawer actions.
-- On click:
-  1. Look up `incogniton_profiles` where `linked_lead_id = lead.id`.
-  2. If found → `POST http://localhost:35000/api/v1/profile/start/{id}` → toast success, update `last_launched_at`.
-  3. If not found → open **Link Profile** modal:
-     - Input: Incogniton Profile ID
-     - Dropdown: Group Name (distinct values from existing rows)
-     - Input: Platform
-     - Save → insert row linked to this lead → immediately launch.
-- Error: if `fetch` rejects ("Failed to fetch") → toast: _"Incogniton is not running. Please open the Incogniton app on this PC."_
+> Note: a true rendered Leaflet screenshot requires a browser/canvas runtime that's not available in the Cloudflare Worker. The snapshot will be a high-quality coverage report image (per-area covered/missing + total). If you want a literal map raster, that has to be triggered from a logged-in admin browser session via a "Save snapshot" button — happy to add that as a follow-up.
 
-### 3c. New page `src/routes/app.browser-profiles.tsx`
+## 5. PKT timezone across CRM
 
-- Sidebar entry **Browser Profiles** (Globe icon), admin + marketing only.
-- Top bar:
-  - Search (profile name / platform)
-  - Group filter dropdown (All + distinct groups)
-  - **Sync from Incogniton** button → `GET /api/v1/profile/list` → upsert by `incogniton_profile_id`. Loading spinner while running.
-  - **Export Group** button → modal (group dropdown + CSV/JSON radio + Export → triggers blob download).
-- Table: Profile Name · Incogniton ID · Group · Platform · Linked Lead (joined name from `qualified_leads.customer_name`) · Status (`Active` if `last_launched_at` within last 30 min, else `Idle`) · Actions: 🚀 Launch · 🔗 Link to Lead (modal with searchable lead picker) · 🗑 Delete.
+- Add `src/lib/timezone.ts` with `PKT_TZ = "Asia/Karachi"` and helpers `formatPKT(date)`, `pktDayKey(date)`, `pktDayBounds(date)`.
+- Replace `new Date().toLocaleString()` / `dayKey()` calls in user-facing pages (map, raw leads, forwarded leads, reports, logs, analytics, cs-leads, lead card, popups) with PKT-formatted output.
+- Date inputs/filters interpret user-selected dates as PKT midnight → midnight ranges.
 
-### 3d. Sidebar (`app-shell.tsx`)
+## 6. Frozen AI prompt with REVIEW
 
-- Add Browser Profiles nav for admin + marketing.
+- DB migration: extend `raw_lead_cache.lead` allowed values to include `'review'` (currently `'yes' | 'no' | null`); update any check constraint / type.
+- Update `src/lib/raw-leads-ai.functions.ts`:
+  - Replace system prompt with the exact frozen text you provided (home repair lead filter with YES/NO/REVIEW).
+  - JSON schema enum becomes `["yes","no","review"]`.
+  - Prompt constant marked `// FROZEN — do not edit` and the user-editable prompt textarea on Raw Leads is removed (or locked to read-only) so the prompt can't drift.
+- Raw Leads UI: show a third "Review" badge/section alongside Yes/No, and a filter chip for it.
 
-## 4. Files
+## 7. Processor forwarding report
 
-- migration: new table + RLS + index on `group_name`
-- `src/routes/app.raw-leads.tsx` — remove auto-refresh, add Refresh button
-- `src/routes/app.cs-leads.tsx` — remove auto-refresh, add Refresh button + Launch action + LinkProfile modal
-- `src/routes/app.map.tsx` — rewrite with react-leaflet
-- `src/routes/app.browser-profiles.tsx` — new
-- `src/components/app-shell.tsx` — sidebar entry
-- `src/styles.css` — `@import "leaflet/dist/leaflet.css";`
-- `package.json` — add `leaflet`, `react-leaflet`, `@types/leaflet`
+- New section on `app.reports.tsx`: **"Leads forwarded per processor"**.
+- New DB function `report_leads_forwarded_by_processor(_from, _to)` returning `processor_id, processor_name, forwarded_count` from `qualified_leads` grouped by `forwarded_by` (or equivalent — will confirm exact column when reading the table).
+- Wired into a TanStack server fn (`requireSupabaseAuth` + admin role check) and rendered as a sortable table with the existing date-range filter on the Reports page.
 
-## Notes / assumptions
+---
 
-1. "Leads" in the spec = `qualified_leads` (the CS-facing pipeline). Linking to `raw_leads` instead would be trivial to swap — say the word.
-2. Incogniton path: spec lists both `/profile/get` (used by earlier import) and `/api/v1/profile/*`. The new endpoints use `/api/v1/` exactly as documented in this message.
-3. All Incogniton calls run in the browser (localhost-only) — no server proxy.
+## Technical notes
+
+- DB migrations (in order):
+  1. Add `'wrong'` to qualified_leads outcome enum + `cs_customer_name/phone/compose_note` columns.
+  2. Add `'review'` to the raw_lead_cache lead constraint.
+  3. Create `map_snapshots` table (+ GRANTs + RLS: admin read, service_role write).
+  4. Create `report_leads_forwarded_by_processor` SQL function.
+- Storage: create private `map-snapshots` bucket via storage tool; admins get signed URLs via a server fn.
+- Cron: scheduled via `supabase--insert` (not migration) since it contains the project URL + anon key.
+
+## Out of scope / follow-ups
+
+- Literal Leaflet map raster screenshot (needs a browser runtime). I'll ship a coverage-report PNG and we can add a browser-side "Save snapshot" button later if you want the actual map tiles.
