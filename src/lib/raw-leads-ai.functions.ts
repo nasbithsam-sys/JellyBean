@@ -3,14 +3,28 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
+// FROZEN PROMPT — do not edit. Approved home-repair lead filter.
+export const FROZEN_LEAD_PROMPT = `Home repair lead filter.
+
+Mark only YES, NO, or REVIEW.
+
+YES = person is asking for any home/property repair, install, maintenance, handyman, cleaning, moving, junk removal, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, hot tub service, or any recommendation for home service.
+
+NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, not asking for home service, or someone promoting their own services.
+
+REVIEW = unclear post, maybe home-service related, asking only advice/cost/experience, or not enough information to confidently mark YES or NO.`;
+
 const analyzeInputSchema = z.object({
-  prompt: z.string().trim().min(1).max(2000),
+  // Accepted for backward-compat but ignored — system prompt is frozen.
+  prompt: z.string().optional(),
   rowKeys: z.array(z.string().min(1)).min(1).max(50),
 });
 
+type LeadDecision = "yes" | "no" | "review";
+
 type RawLeadAiResult = {
   row_key: string;
-  lead: "yes" | "no";
+  lead: LeadDecision;
 };
 
 type OpenAiResponse = {
