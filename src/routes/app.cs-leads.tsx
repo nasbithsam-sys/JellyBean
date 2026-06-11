@@ -521,6 +521,23 @@ function Inner() {
 
       {/* Status tabs */}
       <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+        {isAdmin && (
+          <button
+            onClick={() => setActiveStatus("__all__")}
+            className={cn(
+              "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+              activeStatus === "__all__"
+                ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
+            All Leads
+            <span className="text-[10.5px] text-muted-foreground tabular-nums">
+              {filtered.length}
+            </span>
+          </button>
+        )}
         {PIPELINE_STATUSES.map((s) => (
           <button
             key={s}
