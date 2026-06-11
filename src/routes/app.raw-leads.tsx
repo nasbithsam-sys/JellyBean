@@ -154,7 +154,7 @@ function Page() {
         description="Live feed from your scraper extension. Stored in Supabase — shared across all your devices."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "scraping", "processor"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "processor", "acc_handler"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
