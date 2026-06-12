@@ -850,7 +850,7 @@ function Inner() {
                     >
                       <Select
                         value={lv || ""}
-                        onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
+                        onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" | "review" })}
                       >
                         <SelectTrigger
                           className={cn(
@@ -858,6 +858,8 @@ function Inner() {
                             lv === "yes" && "bg-success/15 text-success border-success/30",
                             lv === "no" &&
                               "bg-destructive/15 text-destructive border-destructive/30",
+                            lv === "review" &&
+                              "bg-warning/15 text-warning border-warning/30",
                           )}
                         >
                           <SelectValue placeholder="—" />
@@ -865,6 +867,7 @@ function Inner() {
                         <SelectContent>
                           <SelectItem value="yes">Yes</SelectItem>
                           <SelectItem value="no">No</SelectItem>
+                          <SelectItem value="review">Review</SelectItem>
                         </SelectContent>
                       </Select>
                     </td>
