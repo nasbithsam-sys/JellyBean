@@ -19,6 +19,8 @@ const ROLE_TABLES: Record<AppRole, string[]> = {
   processor: ["qualified_leads", "incogniton_profiles", "shared_state"],
   cs: ["qualified_leads"],
   acc_handler: ["incogniton_profiles", "shared_state"],
+  facebook: ["qualified_leads"],
+  seo: ["qualified_leads"],
 };
 
 /**
