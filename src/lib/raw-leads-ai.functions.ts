@@ -100,7 +100,7 @@ async function classifyWithOpenAi({
     body: JSON.stringify({
       model: "gpt-5-nano",
       input: [
-        { role: "system", content: FROZEN_LEAD_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify({ leads }) },
       ],
       text: {
