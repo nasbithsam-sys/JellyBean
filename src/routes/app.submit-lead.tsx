@@ -13,6 +13,7 @@ import {
   TrendingUp,
   CalendarDays,
   Send,
+  Star,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
@@ -20,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -36,7 +38,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 function Page() {
   const auth = useAuth();
   return (
-    <RoleGate allow={["facebook", "seo", "admin"]} current={auth.primaryRole}>
+    <RoleGate allow={["facebook", "seo", "admin", "processor", "acc_handler"]} current={auth.primaryRole}>
       <Dashboard />
     </RoleGate>
   );
@@ -319,6 +321,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   const [area, setArea] = useState("");
   const [number, setNumber] = useState("");
   const [context, setContext] = useState("");
+  const [important, setImportant] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -386,6 +389,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         context: context.trim() || null,
         images: imageUrls,
         submitted_by_role: role,
+        is_important: important,
         created_by: auth.user.id,
         assigned_by: auth.user.id,
         cs_status: "new",
@@ -401,8 +405,28 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
     }
   }
 
+  function handlePaste(e: React.ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) imageFiles.push(f);
+      }
+    }
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      const dt = new DataTransfer();
+      imageFiles.forEach((f) => dt.items.add(f));
+      addFiles(dt.files);
+      toast.success(`Pasted ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}`);
+    }
+  }
+
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} onPaste={handlePaste} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label className="mb-1.5 block">Name</Label>
@@ -441,11 +465,22 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
           maxLength={2000}
         />
       </div>
+      <div className="flex items-center gap-2 p-3 rounded-md border border-warning/40 bg-warning/5">
+        <Checkbox
+          id="important"
+          checked={important}
+          onCheckedChange={(v) => setImportant(v === true)}
+        />
+        <Label htmlFor="important" className="flex items-center gap-1.5 cursor-pointer text-sm">
+          <Star className={cn("h-3.5 w-3.5", important ? "fill-warning text-warning" : "text-muted-foreground")} />
+          Mark as important — pin to top of CS pipeline
+        </Label>
+      </div>
       <div>
         <Label className="mb-1.5 block">
           Attachments{" "}
           <span className="text-xs text-muted-foreground font-normal">
-            (up to {MAX_IMAGES} images, 10 MB each)
+            (up to {MAX_IMAGES} images, 10 MB each — paste with Ctrl/Cmd+V)
           </span>
         </Label>
         <input
