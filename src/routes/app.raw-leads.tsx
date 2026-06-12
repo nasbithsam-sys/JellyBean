@@ -227,16 +227,61 @@ function Inner() {
   const [databaseLimit, setDatabaseLimit] = useState(RAW_LEADS_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
-  const [aiPrompt, setAiPrompt] = useState(
-    `Home repair lead filter.
+  const [aiPrompt, setAiPrompt] = useState(DEFAULT_LEAD_PROMPT);
+  const [promptDirty, setPromptDirty] = useState(false);
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const isAdmin = auth.primaryRole === "admin";
 
-Mark only YES or NO.
+  const promptQuery = useQuery({
+    queryKey: ["lead-ai-prompt"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_state")
+        .select("value")
+        .eq("key", "lead_ai_prompt")
+        .maybeSingle();
+      if (error) return DEFAULT_LEAD_PROMPT;
+      const v = data?.value as { text?: string } | null;
+      return v?.text || DEFAULT_LEAD_PROMPT;
+    },
+    refetchOnWindowFocus: false,
+  });
 
-YES = person is asking for any home repair, install, maintenance, handyman, cleaning, moving, junk, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, or hot tub service.
+  // Sync remote prompt into local state unless user has unsaved edits
+  const remotePrompt = promptQuery.data;
+  if (remotePrompt && !promptDirty && remotePrompt !== aiPrompt) {
+    // schedule via microtask-safe setState
+    queueMicrotask(() => setAiPrompt(remotePrompt));
+  }
 
-NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, or not asking for home service.`,
-  );
+  const savePrompt = async () => {
+    if (!isAdmin) return;
+    setSavingPrompt(true);
+    try {
+      const { error } = await supabase
+        .from("shared_state")
+        .upsert(
+          {
+            key: "lead_ai_prompt",
+            value: { text: aiPrompt } as never,
+            updated_by: currentUserId,
+            updated_at: new Date().toISOString(),
+          } as never,
+          { onConflict: "key" },
+        );
+      if (error) throw error;
+      setPromptDirty(false);
+      toast.success("Prompt saved for all users");
+      qc.invalidateQueries({ queryKey: ["lead-ai-prompt"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingPrompt(false);
+    }
+  };
+
   const [aiRunning, setAiRunning] = useState(false);
+
 
   const currentUserId = auth.user?.id ?? null;
   const currentUserName = auth.profile?.full_name || auth.user?.email || null;
