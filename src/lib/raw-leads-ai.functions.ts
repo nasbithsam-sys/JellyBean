@@ -10,7 +10,7 @@ Mark only YES, NO, or REVIEW.
 
 YES = person is asking for any home/property repair, install, maintenance, handyman, cleaning, moving, junk removal, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, hot tub service, or any recommendation for home service.
 
-NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, not asking for home service, or someone promoting their own services.
+NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, not asking for home service, someone promoting their own services, cooking, food, meal prep, catering, nails, salon, grooming, nanny, babysitting, baby-sitting, daycare, child care, pet care, pet sitting, dog walking, animal parenting, or animal-related service.
 
 REVIEW = unclear post, maybe home-service related, asking only advice/cost/experience, or not enough information to confidently mark YES or NO.`;
 
