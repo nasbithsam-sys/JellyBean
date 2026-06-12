@@ -14,6 +14,7 @@ import {
   Sun,
   Moon,
   ShieldCheck,
+  Send,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useRealtimeSync } from "@/hooks/use-realtime-sync";
@@ -56,6 +57,8 @@ const ACC_HANDLER: Item[] = [
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2, shortcut: "L" },
 ];
 
+const SUBMITTER: Item[] = [{ to: "/app/submit-lead", label: "Submit Lead", icon: Send }];
+
 const ADMIN_FULL: Item[] = [
   ...ADMIN.slice(0, 3),
   { to: "/app/forwarded-leads", label: "Forwarded Leads", icon: Headphones },
@@ -68,6 +71,7 @@ function itemsForRole(role: AppRole | null): Item[] {
   if (role === "processor") return PROCESSOR;
   if (role === "cs") return CS;
   if (role === "acc_handler") return ACC_HANDLER;
+  if (role === "facebook" || role === "seo") return SUBMITTER;
   return [];
 }
 
