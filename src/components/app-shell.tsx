@@ -48,6 +48,7 @@ const SCRAPING: Item[] = [
 const PROCESSOR: Item[] = [
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2 },
   { to: "/app/forwarded-leads", label: "Forwarded Leads", icon: Headphones },
+  { to: "/app/submit-lead", label: "Manual Lead", icon: Send },
 ];
 
 const CS: Item[] = [{ to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard }];
@@ -55,6 +56,7 @@ const ACC_HANDLER: Item[] = [
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe, shortcut: "B" },
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2, shortcut: "L" },
+  { to: "/app/submit-lead", label: "Manual Lead", icon: Send },
 ];
 
 const SUBMITTER: Item[] = [{ to: "/app/submit-lead", label: "Submit Lead", icon: Send }];
@@ -62,6 +64,7 @@ const SUBMITTER: Item[] = [{ to: "/app/submit-lead", label: "Submit Lead", icon:
 const ADMIN_FULL: Item[] = [
   ...ADMIN.slice(0, 3),
   { to: "/app/forwarded-leads", label: "Forwarded Leads", icon: Headphones },
+  { to: "/app/submit-lead", label: "Manual Lead", icon: Send },
   ...ADMIN.slice(3),
 ];
 
