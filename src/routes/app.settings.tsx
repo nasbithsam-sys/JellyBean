@@ -413,7 +413,14 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     fullName: "",
     email: "",
     password: "",
-    role: "scraping" as "admin" | "scraping" | "processor" | "cs" | "acc_handler",
+    role: "scraping" as
+      | "admin"
+      | "scraping"
+      | "processor"
+      | "cs"
+      | "acc_handler"
+      | "facebook"
+      | "seo",
     isActive: true,
   });
   async function submit(e: React.FormEvent) {
@@ -475,6 +482,8 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
                 <SelectItem value="processor">Processor</SelectItem>
                 <SelectItem value="cs">CS</SelectItem>
                 <SelectItem value="acc_handler">Acc Handler</SelectItem>
+                <SelectItem value="facebook">Facebook</SelectItem>
+                <SelectItem value="seo">SEO</SelectItem>
               </SelectContent>
             </Select>
           </Field>

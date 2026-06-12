@@ -124,6 +124,9 @@ type Lead = {
   assigned_to: string | null;
   cs_outcome: "already_done" | "wrong_number" | "processed" | "wrong_lead" | null;
   is_important: boolean;
+  service: string | null;
+  images: string[];
+  submitted_by_role: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -237,7 +240,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important",
+          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important, service, images, submitted_by_role",
         )
         // Pin important / urgent jobs to the top, then most recent first.
         .order("is_important", { ascending: false })
@@ -974,6 +977,43 @@ function LeadCard({
         </div>
       )}
 
+      {Array.isArray(lead.images) && lead.images.length > 0 && (
+        <div className="mt-2 flex gap-1.5 flex-wrap">
+          {lead.images.slice(0, 4).map((url) => (
+            <a
+              key={url}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="block h-12 w-12 rounded overflow-hidden border border-border bg-muted hover:opacity-80"
+            >
+              <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+            </a>
+          ))}
+          {lead.images.length > 4 && (
+            <span className="text-[10px] text-muted-foreground self-center">
+              +{lead.images.length - 4}
+            </span>
+          )}
+        </div>
+      )}
+
+      {(lead.service || lead.submitted_by_role) && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {lead.service && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+              {lead.service}
+            </span>
+          )}
+          {lead.submitted_by_role && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/40 text-accent-foreground border border-border uppercase font-semibold tracking-wide">
+              via {lead.submitted_by_role}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="mt-3" onClick={(e) => e.stopPropagation()}>
         <Select
           value={status}
@@ -1259,12 +1299,41 @@ function LeadDrawer({
           )}
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
         </div>
+        {lead.service && <Info label="Service" value={lead.service} />}
+        {lead.submitted_by_role && (
+          <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
+        )}
         {lead.post_text && (
           <Info label="Customer exact requirement" value={lead.post_text} multiline />
         )}
         {lead.context && <Info label="Context" value={lead.context} multiline />}
         {lead.marketing_notes && (
           <Info label="Marketing notes" value={lead.marketing_notes} multiline />
+        )}
+        {Array.isArray(lead.images) && lead.images.length > 0 && (
+          <div>
+            <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Attachments ({lead.images.length})
+            </Label>
+            <div className="grid grid-cols-3 gap-2">
+              {lead.images.map((url) => (
+                <a
+                  key={url}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block aspect-square rounded-md overflow-hidden border border-border bg-muted hover:opacity-80 transition-opacity"
+                >
+                  <img
+                    src={url}
+                    alt="Lead attachment"
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                </a>
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="border-t border-border pt-5 space-y-4">

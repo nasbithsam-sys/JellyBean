@@ -33,6 +33,8 @@ function DashboardHome() {
     else if (role === "scraping" || role === "processor")
       navigate({ to: "/app/raw-leads", replace: true });
     else if (role === "acc_handler") navigate({ to: "/app/map", replace: true });
+    else if (role === "facebook" || role === "seo")
+      navigate({ to: "/app/submit-lead", replace: true });
   }, [auth.loading, role, navigate]);
 
   if (role !== "admin") {

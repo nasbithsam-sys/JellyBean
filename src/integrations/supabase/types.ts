@@ -268,6 +268,7 @@ export type Database = {
           customer_number: string
           followup_at: string | null
           id: string
+          images: Json
           is_important: boolean
           main_area: string | null
           marketing_notes: string | null
@@ -276,7 +277,9 @@ export type Database = {
           pass_it_to: string | null
           post_text: string | null
           raw_lead_id: string | null
+          service: string | null
           sub_area: string | null
+          submitted_by_role: string | null
           updated_at: string
         }
         Insert: {
@@ -293,6 +296,7 @@ export type Database = {
           customer_number: string
           followup_at?: string | null
           id?: string
+          images?: Json
           is_important?: boolean
           main_area?: string | null
           marketing_notes?: string | null
@@ -301,7 +305,9 @@ export type Database = {
           pass_it_to?: string | null
           post_text?: string | null
           raw_lead_id?: string | null
+          service?: string | null
           sub_area?: string | null
+          submitted_by_role?: string | null
           updated_at?: string
         }
         Update: {
@@ -318,6 +324,7 @@ export type Database = {
           customer_number?: string
           followup_at?: string | null
           id?: string
+          images?: Json
           is_important?: boolean
           main_area?: string | null
           marketing_notes?: string | null
@@ -326,7 +333,9 @@ export type Database = {
           pass_it_to?: string | null
           post_text?: string | null
           raw_lead_id?: string | null
+          service?: string | null
           sub_area?: string | null
+          submitted_by_role?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -540,7 +549,14 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "scraping" | "cs" | "processor" | "acc_handler"
+      app_role:
+        | "admin"
+        | "scraping"
+        | "cs"
+        | "processor"
+        | "acc_handler"
+        | "facebook"
+        | "seo"
       cs_status:
         | "new"
         | "called"
@@ -693,7 +709,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "scraping", "cs", "processor", "acc_handler"],
+      app_role: [
+        "admin",
+        "scraping",
+        "cs",
+        "processor",
+        "acc_handler",
+        "facebook",
+        "seo",
+      ],
       cs_status: [
         "new",
         "called",
