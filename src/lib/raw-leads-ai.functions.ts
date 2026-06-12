@@ -82,8 +82,10 @@ function parseAiResults(text: string, rowKeys: string[]): RawLeadAiResult[] {
 }
 
 async function classifyWithOpenAi({
+  systemPrompt,
   leads,
 }: {
+  systemPrompt: string;
   leads: Array<{ id: string; account: string; area: string; postText: string }>;
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
