@@ -47,6 +47,15 @@ export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
 const TABLE = "raw_lead_cache";
 const RAW_LEADS_PAGE_SIZE = 200;
+const DEFAULT_LEAD_PROMPT = `Home repair lead filter.
+
+Mark only YES, NO, or REVIEW.
+
+YES = person is asking for any home/property repair, install, maintenance, handyman, cleaning, moving, junk removal, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, hot tub service, or any recommendation for home service.
+
+NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, not asking for home service, someone promoting their own services, cooking, food, meal prep, catering, nails, salon, grooming, nanny, babysitting, baby-sitting, daycare, child care, pet care, pet sitting, dog walking, animal parenting, or animal-related service.
+
+REVIEW = unclear post, maybe home-service related, asking only advice/cost/experience, or not enough information to confidently mark YES or NO.`;
 type RawLeadCacheUpdate = Database["public"]["Tables"]["raw_lead_cache"]["Update"];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
