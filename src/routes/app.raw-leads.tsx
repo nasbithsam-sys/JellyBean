@@ -125,17 +125,18 @@ function capturedIsoFromRow(r: Row): string | null {
   return t ? new Date(t).toISOString() : null;
 }
 
-function leadValueFromRow(r: Row): "yes" | "no" | null {
+function leadValueFromRow(r: Row): "yes" | "no" | "review" | null {
   const raw = (r.Lead ?? "").trim().toLowerCase();
   if (raw === "yes" || raw === "y" || raw === "true") return "yes";
   if (raw === "no" || raw === "n" || raw === "false") return "no";
+  if (raw === "review" || raw === "maybe") return "review";
   return null;
 }
 
-function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
+function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "review" | "" {
   // User override (from Supabase action cache) always wins over the sheet value,
-  // otherwise once the sheet says "yes"/"no" the dropdown can never be changed.
-  if (a?.lead === "yes" || a?.lead === "no") return a.lead;
+  // otherwise once the sheet says a value the dropdown can never be changed.
+  if (a?.lead === "yes" || a?.lead === "no" || a?.lead === "review") return a.lead;
   const base = leadValueFromRow(r);
   if (base) return base;
   return "";
@@ -569,6 +570,7 @@ function Inner() {
             <SelectItem value="all">All leads</SelectItem>
             <SelectItem value="yes">Lead yes</SelectItem>
             <SelectItem value="no">Lead no</SelectItem>
+            <SelectItem value="review">Lead review</SelectItem>
           </SelectContent>
         </Select>
 
@@ -848,7 +850,7 @@ function Inner() {
                     >
                       <Select
                         value={lv || ""}
-                        onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
+                        onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" | "review" })}
                       >
                         <SelectTrigger
                           className={cn(
@@ -856,6 +858,8 @@ function Inner() {
                             lv === "yes" && "bg-success/15 text-success border-success/30",
                             lv === "no" &&
                               "bg-destructive/15 text-destructive border-destructive/30",
+                            lv === "review" &&
+                              "bg-warning/15 text-warning border-warning/30",
                           )}
                         >
                           <SelectValue placeholder="—" />
@@ -863,6 +867,7 @@ function Inner() {
                         <SelectContent>
                           <SelectItem value="yes">Yes</SelectItem>
                           <SelectItem value="no">No</SelectItem>
+                          <SelectItem value="review">Review</SelectItem>
                         </SelectContent>
                       </Select>
                     </td>
