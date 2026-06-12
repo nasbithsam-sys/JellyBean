@@ -666,14 +666,43 @@ function Inner() {
       {canRunAi && (
         <div className="space-y-1">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
-            <Textarea
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              rows={2}
-              maxLength={2000}
-              placeholder="Prompt for AI lead checking..."
-              className="min-h-[56px] text-[12.5px]"
-            />
+            <div className="space-y-1">
+              <Textarea
+                value={aiPrompt}
+                onChange={(e) => {
+                  if (!isAdmin) return;
+                  setAiPrompt(e.target.value);
+                  setPromptDirty(true);
+                }}
+                readOnly={!isAdmin}
+                rows={6}
+                maxLength={4000}
+                placeholder="Prompt for AI lead checking..."
+                className="min-h-[140px] text-[12.5px]"
+              />
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>
+                  {isAdmin
+                    ? "Editable by admin — saved prompt syncs to every user in real time."
+                    : "Prompt is managed by admin. Synced live."}
+                </span>
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant={promptDirty ? "default" : "outline"}
+                    className="h-7"
+                    onClick={savePrompt}
+                    disabled={!promptDirty || savingPrompt}
+                  >
+                    {savingPrompt ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : null}
+                    {promptDirty ? "Save prompt" : "Saved"}
+                  </Button>
+                )}
+              </div>
+            </div>
+
             <Button
               className="h-14 lg:w-[210px]"
               onClick={runAiLeadCheck}
