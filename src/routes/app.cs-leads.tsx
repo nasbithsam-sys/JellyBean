@@ -41,6 +41,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
@@ -194,6 +198,7 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [visibleLimit, setVisibleLimit] = useState(60);
   const [opened, setOpened] = useState<Lead | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -376,6 +381,12 @@ function Inner() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const rFrom = dateRange?.from ? startOfDay(dateRange.from).getTime() : null;
+    const rTo = dateRange?.to
+      ? endOfDay(dateRange.to).getTime()
+      : dateRange?.from
+        ? endOfDay(dateRange.from).getTime()
+        : null;
     return (list.data ?? []).filter((l) => {
       if (
         q &&
@@ -398,9 +409,13 @@ function Inner() {
       if (areaFilter !== "all" && l.main_area !== areaFilter && l.sub_area !== areaFilter) {
         return false;
       }
+      if (rFrom !== null && rTo !== null) {
+        const t = new Date(l.assigned_at).getTime();
+        if (t < rFrom || t > rTo) return false;
+      }
       return true;
     });
-  }, [areaFilter, auth.user?.id, list.data, ownerFilter, query]);
+  }, [areaFilter, auth.user?.id, list.data, ownerFilter, query, dateRange]);
 
   const wrongLeads = useMemo(
     () => filtered.filter((l) => l.cs_outcome === "wrong_lead"),
