@@ -168,7 +168,9 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
 
     if (leads.length === 0) throw new Error("No selected raw leads have post text to analyze");
 
+    const systemPrompt = data.prompt?.trim() || FROZEN_LEAD_PROMPT;
     const outputText = await classifyWithOpenAi({
+      systemPrompt,
       leads: leads.map(({ id, account, area, postText }) => ({ id, account, area, postText })),
     });
     const results = parseAiResults(
