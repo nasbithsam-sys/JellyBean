@@ -502,6 +502,75 @@ function Inner() {
             ))}
           </SelectContent>
         </Select>
+        {isAdmin && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 text-[12px]">
+                <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
+                {dateRange?.from
+                  ? dateRange.to
+                    ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d")}`
+                    : format(dateRange.from, "MMM d, yyyy")
+                  : "Date range"}
+                {dateRange?.from && (
+                  <span
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDateRange(undefined);
+                    }}
+                    className="ml-1.5 -mr-1 h-4 w-4 grid place-items-center rounded-full hover:bg-destructive/20"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <div className="flex items-center gap-1.5 p-2 border-b border-border">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  onClick={() => setDateRange({ from: new Date(), to: new Date() })}
+                >
+                  Today
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  onClick={() => setDateRange({ from: subDays(new Date(), 6), to: new Date() })}
+                >
+                  7d
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  onClick={() => setDateRange({ from: subDays(new Date(), 29), to: new Date() })}
+                >
+                  30d
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  onClick={() => setDateRange(undefined)}
+                >
+                  Clear
+                </Button>
+              </div>
+              <Calendar
+                mode="range"
+                selected={dateRange}
+                onSelect={setDateRange}
+                numberOfMonths={2}
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px]">
             <span className="text-muted-foreground">Sent today</span>
