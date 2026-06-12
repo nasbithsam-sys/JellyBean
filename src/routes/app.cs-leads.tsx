@@ -32,6 +32,7 @@ import {
   BellOff,
   Trash2,
   ArrowRightCircle,
+  CalendarDays,
 } from "lucide-react";
 import {
   Dialog,
@@ -41,6 +42,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
@@ -194,6 +199,7 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [visibleLimit, setVisibleLimit] = useState(60);
   const [opened, setOpened] = useState<Lead | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -376,6 +382,12 @@ function Inner() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const rFrom = dateRange?.from ? startOfDay(dateRange.from).getTime() : null;
+    const rTo = dateRange?.to
+      ? endOfDay(dateRange.to).getTime()
+      : dateRange?.from
+        ? endOfDay(dateRange.from).getTime()
+        : null;
     return (list.data ?? []).filter((l) => {
       if (
         q &&
@@ -398,9 +410,13 @@ function Inner() {
       if (areaFilter !== "all" && l.main_area !== areaFilter && l.sub_area !== areaFilter) {
         return false;
       }
+      if (rFrom !== null && rTo !== null) {
+        const t = new Date(l.assigned_at).getTime();
+        if (t < rFrom || t > rTo) return false;
+      }
       return true;
     });
-  }, [areaFilter, auth.user?.id, list.data, ownerFilter, query]);
+  }, [areaFilter, auth.user?.id, list.data, ownerFilter, query, dateRange]);
 
   const wrongLeads = useMemo(
     () => filtered.filter((l) => l.cs_outcome === "wrong_lead"),
@@ -487,6 +503,75 @@ function Inner() {
             ))}
           </SelectContent>
         </Select>
+        {isAdmin && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 text-[12px]">
+                <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
+                {dateRange?.from
+                  ? dateRange.to
+                    ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d")}`
+                    : format(dateRange.from, "MMM d, yyyy")
+                  : "Date range"}
+                {dateRange?.from && (
+                  <span
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDateRange(undefined);
+                    }}
+                    className="ml-1.5 -mr-1 h-4 w-4 grid place-items-center rounded-full hover:bg-destructive/20"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <div className="flex items-center gap-1.5 p-2 border-b border-border">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  onClick={() => setDateRange({ from: new Date(), to: new Date() })}
+                >
+                  Today
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  onClick={() => setDateRange({ from: subDays(new Date(), 6), to: new Date() })}
+                >
+                  7d
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  onClick={() => setDateRange({ from: subDays(new Date(), 29), to: new Date() })}
+                >
+                  30d
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[11px]"
+                  onClick={() => setDateRange(undefined)}
+                >
+                  Clear
+                </Button>
+              </div>
+              <Calendar
+                mode="range"
+                selected={dateRange}
+                onSelect={setDateRange}
+                numberOfMonths={2}
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px]">
             <span className="text-muted-foreground">Sent today</span>

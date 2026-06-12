@@ -72,6 +72,27 @@ function Inner() {
     "all",
   );
 
+  const todayStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }, []);
+
+  const sentToday = useQuery({
+    queryKey: ["forwarded-sent-today", auth.user?.id],
+    enabled: !!auth.user?.id,
+    queryFn: async () => {
+      let q = supabase
+        .from("qualified_leads")
+        .select("id", { count: "exact", head: true })
+        .gte("assigned_at", todayStart);
+      if (!isAdmin) q = q.eq("created_by", auth.user!.id);
+      const { count, error } = await q;
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
   const list = useQuery({
     queryKey: ["forwarded-leads", auth.user?.id, isAdmin],
     enabled: !!auth.user?.id,
@@ -109,6 +130,31 @@ function Inner() {
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="glass-card p-4">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">
+            Sent to CS today
+          </div>
+          <div className="text-2xl font-bold mt-1 tabular-nums">{sentToday.data ?? "—"}</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">
+            {isAdmin ? "All processors" : "By you"}
+          </div>
+        </div>
+        <div className="glass-card p-4">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">
+            Total forwarded
+          </div>
+          <div className="text-2xl font-bold mt-1 tabular-nums">{list.data?.length ?? "—"}</div>
+        </div>
+        <div className="glass-card p-4">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">
+            Pending outcome
+          </div>
+          <div className="text-2xl font-bold mt-1 tabular-nums">
+            {(list.data ?? []).filter((r) => !r.cs_outcome).length}
+          </div>
+        </div>
+      </div>
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[240px] max-w-md">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
