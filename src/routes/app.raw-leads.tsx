@@ -125,17 +125,18 @@ function capturedIsoFromRow(r: Row): string | null {
   return t ? new Date(t).toISOString() : null;
 }
 
-function leadValueFromRow(r: Row): "yes" | "no" | null {
+function leadValueFromRow(r: Row): "yes" | "no" | "review" | null {
   const raw = (r.Lead ?? "").trim().toLowerCase();
   if (raw === "yes" || raw === "y" || raw === "true") return "yes";
   if (raw === "no" || raw === "n" || raw === "false") return "no";
+  if (raw === "review" || raw === "maybe") return "review";
   return null;
 }
 
-function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
+function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "review" | "" {
   // User override (from Supabase action cache) always wins over the sheet value,
-  // otherwise once the sheet says "yes"/"no" the dropdown can never be changed.
-  if (a?.lead === "yes" || a?.lead === "no") return a.lead;
+  // otherwise once the sheet says a value the dropdown can never be changed.
+  if (a?.lead === "yes" || a?.lead === "no" || a?.lead === "review") return a.lead;
   const base = leadValueFromRow(r);
   if (base) return base;
   return "";
