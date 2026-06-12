@@ -570,6 +570,7 @@ function Inner() {
             <SelectItem value="all">All leads</SelectItem>
             <SelectItem value="yes">Lead yes</SelectItem>
             <SelectItem value="no">Lead no</SelectItem>
+            <SelectItem value="review">Lead review</SelectItem>
           </SelectContent>
         </Select>
 
