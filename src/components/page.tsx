@@ -45,7 +45,7 @@ export function PageBody({
   return <div className={cn("px-8 py-7 animate-fade-in-up", className)}>{children}</div>;
 }
 
-type Role = "admin" | "scraping" | "processor" | "cs" | "acc_handler";
+type Role = "admin" | "scraping" | "processor" | "cs" | "acc_handler" | "facebook" | "seo";
 
 export function RoleGate({
   allow,
