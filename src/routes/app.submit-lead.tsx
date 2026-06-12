@@ -2,7 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { formatDistanceToNow, format, startOfDay, endOfDay, subDays, startOfWeek, startOfMonth } from "date-fns";
+import {
+  formatDistanceToNow,
+  format,
+  startOfDay,
+  endOfDay,
+  subDays,
+  startOfWeek,
+  startOfMonth,
+} from "date-fns";
 import {
   Loader2,
   Upload,
@@ -22,7 +30,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -38,7 +52,10 @@ const MAX_BYTES = 10 * 1024 * 1024;
 function Page() {
   const auth = useAuth();
   return (
-    <RoleGate allow={["facebook", "seo", "admin", "processor", "acc_handler"]} current={auth.primaryRole}>
+    <RoleGate
+      allow={["facebook", "seo", "admin", "processor", "acc_handler"]}
+      current={auth.primaryRole}
+    >
       <Dashboard />
     </RoleGate>
   );
@@ -161,9 +178,21 @@ function Dashboard() {
       <PageBody className="space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Today" value={stats.today} icon={<Send className="h-4 w-4" />} />
-          <StatCard label="This week" value={stats.week} icon={<CalendarDays className="h-4 w-4" />} />
-          <StatCard label="This month" value={stats.month} icon={<TrendingUp className="h-4 w-4" />} />
-          <StatCard label="All time" value={leads.length} icon={<CheckCircle2 className="h-4 w-4" />} />
+          <StatCard
+            label="This week"
+            value={stats.week}
+            icon={<CalendarDays className="h-4 w-4" />}
+          />
+          <StatCard
+            label="This month"
+            value={stats.month}
+            icon={<TrendingUp className="h-4 w-4" />}
+          />
+          <StatCard
+            label="All time"
+            value={leads.length}
+            icon={<CheckCircle2 className="h-4 w-4" />}
+          />
         </div>
 
         <div className="glass-card p-5 space-y-4">
@@ -173,9 +202,18 @@ function Dashboard() {
               <div className="text-xs text-muted-foreground">{rangeLabel}</div>
             </div>
             <div className="flex items-center gap-2">
-              <QuickRange label="7d" onClick={() => setRange({ from: subDays(new Date(), 6), to: new Date() })} />
-              <QuickRange label="30d" onClick={() => setRange({ from: subDays(new Date(), 29), to: new Date() })} />
-              <QuickRange label="90d" onClick={() => setRange({ from: subDays(new Date(), 89), to: new Date() })} />
+              <QuickRange
+                label="7d"
+                onClick={() => setRange({ from: subDays(new Date(), 6), to: new Date() })}
+              />
+              <QuickRange
+                label="30d"
+                onClick={() => setRange({ from: subDays(new Date(), 29), to: new Date() })}
+              />
+              <QuickRange
+                label="90d"
+                onClick={() => setRange({ from: subDays(new Date(), 89), to: new Date() })}
+              />
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm">
@@ -210,7 +248,10 @@ function Dashboard() {
               stats.series.map((s) => {
                 const h = stats.max > 0 ? (s.count / stats.max) * 100 : 0;
                 return (
-                  <div key={s.date} className="flex-1 group relative flex flex-col items-center justify-end h-full">
+                  <div
+                    key={s.date}
+                    className="flex-1 group relative flex flex-col items-center justify-end h-full"
+                  >
                     <div
                       className="w-full bg-primary/80 hover:bg-primary rounded-t transition-colors min-h-[2px]"
                       style={{ height: `${h}%` }}
@@ -316,10 +357,12 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   const auth = useAuth();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const isSubmitterRole = role === "facebook" || role === "seo";
   const [name, setName] = useState("");
   const [service, setService] = useState("");
   const [area, setArea] = useState("");
   const [number, setNumber] = useState("");
+  const [passItTo, setPassItTo] = useState("");
   const [context, setContext] = useState("");
   const [important, setImportant] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -384,8 +427,9 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
       const { error } = await supabase.from("qualified_leads").insert({
         customer_name: name.trim(),
         customer_number: number.trim(),
-        service: service.trim() || null,
+        service: isSubmitterRole ? service.trim() || null : null,
         main_area: area.trim() || null,
+        pass_it_to: isSubmitterRole ? null : passItTo.trim() || null,
         context: context.trim() || null,
         images: imageUrls,
         submitted_by_role: role,
@@ -427,35 +471,77 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
 
   return (
     <form onSubmit={submit} onPaste={handlePaste} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label className="mb-1.5 block">Name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
+      {isSubmitterRole ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label className="mb-1.5 block">Name</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              maxLength={120}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">Service</Label>
+            <Input
+              value={service}
+              onChange={(e) => setService(e.target.value)}
+              placeholder="e.g. Plumbing"
+              maxLength={120}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">Area</Label>
+            <Input value={area} onChange={(e) => setArea(e.target.value)} maxLength={160} />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">Number</Label>
+            <Input
+              value={number}
+              onChange={(e) => setNumber(e.target.value)}
+              required
+              maxLength={40}
+              inputMode="tel"
+            />
+          </div>
         </div>
-        <div>
-          <Label className="mb-1.5 block">Service</Label>
-          <Input
-            value={service}
-            onChange={(e) => setService(e.target.value)}
-            placeholder="e.g. Plumbing"
-            maxLength={120}
-          />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label className="mb-1.5 block">Customer name</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              maxLength={120}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">Customer number</Label>
+            <Input
+              value={number}
+              onChange={(e) => setNumber(e.target.value)}
+              required
+              maxLength={40}
+              inputMode="tel"
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">Pass it to</Label>
+            <Input
+              value={passItTo}
+              onChange={(e) => setPassItTo(e.target.value)}
+              placeholder="CS rep / team"
+              maxLength={120}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">Area</Label>
+            <Input value={area} onChange={(e) => setArea(e.target.value)} maxLength={160} />
+          </div>
         </div>
-        <div>
-          <Label className="mb-1.5 block">Area</Label>
-          <Input value={area} onChange={(e) => setArea(e.target.value)} maxLength={160} />
-        </div>
-        <div>
-          <Label className="mb-1.5 block">Number</Label>
-          <Input
-            value={number}
-            onChange={(e) => setNumber(e.target.value)}
-            required
-            maxLength={40}
-            inputMode="tel"
-          />
-        </div>
-      </div>
+      )}
       <div>
         <Label className="mb-1.5 block">Context</Label>
         <Textarea
@@ -472,7 +558,12 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
           onCheckedChange={(v) => setImportant(v === true)}
         />
         <Label htmlFor="important" className="flex items-center gap-1.5 cursor-pointer text-sm">
-          <Star className={cn("h-3.5 w-3.5", important ? "fill-warning text-warning" : "text-muted-foreground")} />
+          <Star
+            className={cn(
+              "h-3.5 w-3.5",
+              important ? "fill-warning text-warning" : "text-muted-foreground",
+            )}
+          />
           Mark as important — pin to top of CS pipeline
         </Label>
       </div>
