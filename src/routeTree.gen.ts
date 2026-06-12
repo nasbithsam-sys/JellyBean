@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppSubmitLeadRouteImport } from './routes/app.submit-lead'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppRawLeadsRouteImport } from './routes/app.raw-leads'
@@ -43,6 +44,11 @@ const IndexRoute = IndexRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSubmitLeadRoute = AppSubmitLeadRouteImport.update({
+  id: '/submit-lead',
+  path: '/submit-lead',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/app/raw-leads': typeof AppRawLeadsRoute
   '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
+  '/app/submit-lead': typeof AppSubmitLeadRoute
   '/app/': typeof AppIndexRoute
   '/api/public/nextdoor-leads': typeof ApiPublicNextdoorLeadsRoute
 }
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/app/raw-leads': typeof AppRawLeadsRoute
   '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
+  '/app/submit-lead': typeof AppSubmitLeadRoute
   '/app': typeof AppIndexRoute
   '/api/public/nextdoor-leads': typeof ApiPublicNextdoorLeadsRoute
 }
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/app/raw-leads': typeof AppRawLeadsRoute
   '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
+  '/app/submit-lead': typeof AppSubmitLeadRoute
   '/app/': typeof AppIndexRoute
   '/api/public/nextdoor-leads': typeof ApiPublicNextdoorLeadsRoute
 }
@@ -168,6 +177,7 @@ export interface FileRouteTypes {
     | '/app/raw-leads'
     | '/app/reports'
     | '/app/settings'
+    | '/app/submit-lead'
     | '/app/'
     | '/api/public/nextdoor-leads'
   fileRoutesByTo: FileRoutesByTo
@@ -184,6 +194,7 @@ export interface FileRouteTypes {
     | '/app/raw-leads'
     | '/app/reports'
     | '/app/settings'
+    | '/app/submit-lead'
     | '/app'
     | '/api/public/nextdoor-leads'
   id:
@@ -201,6 +212,7 @@ export interface FileRouteTypes {
     | '/app/raw-leads'
     | '/app/reports'
     | '/app/settings'
+    | '/app/submit-lead'
     | '/app/'
     | '/api/public/nextdoor-leads'
   fileRoutesById: FileRoutesById
@@ -240,6 +252,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/app/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/submit-lead': {
+      id: '/app/submit-lead'
+      path: '/submit-lead'
+      fullPath: '/app/submit-lead'
+      preLoaderRoute: typeof AppSubmitLeadRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/settings': {
@@ -333,6 +352,7 @@ interface AppRouteChildren {
   AppRawLeadsRoute: typeof AppRawLeadsRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppSubmitLeadRoute: typeof AppSubmitLeadRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
@@ -347,6 +367,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppRawLeadsRoute: AppRawLeadsRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppSubmitLeadRoute: AppSubmitLeadRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
