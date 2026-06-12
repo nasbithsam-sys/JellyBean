@@ -977,6 +977,43 @@ function LeadCard({
         </div>
       )}
 
+      {Array.isArray(lead.images) && lead.images.length > 0 && (
+        <div className="mt-2 flex gap-1.5 flex-wrap">
+          {lead.images.slice(0, 4).map((url) => (
+            <a
+              key={url}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="block h-12 w-12 rounded overflow-hidden border border-border bg-muted hover:opacity-80"
+            >
+              <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+            </a>
+          ))}
+          {lead.images.length > 4 && (
+            <span className="text-[10px] text-muted-foreground self-center">
+              +{lead.images.length - 4}
+            </span>
+          )}
+        </div>
+      )}
+
+      {(lead.service || lead.submitted_by_role) && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {lead.service && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+              {lead.service}
+            </span>
+          )}
+          {lead.submitted_by_role && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/40 text-accent-foreground border border-border uppercase font-semibold tracking-wide">
+              via {lead.submitted_by_role}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="mt-3" onClick={(e) => e.stopPropagation()}>
         <Select
           value={status}
