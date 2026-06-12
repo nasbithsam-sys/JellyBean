@@ -8,7 +8,7 @@ import type { AppRole } from "@/hooks/use-auth";
 const TABLE_QUERY_KEYS: Record<string, string[][]> = {
   qualified_leads: [["cs_leads"], ["cs_sent_today"], ["cs_new_lead_ping"]],
   incogniton_profiles: [["incog_profiles"]],
-  shared_state: [["raw-leads-shared-start-row"], ["raw-leads-ai-lock"]],
+  shared_state: [["raw-leads-shared-start-row"], ["raw-leads-ai-lock"], ["lead-ai-prompt"]],
   // raw_lead_cache is intentionally NOT auto-synced — Raw Leads only
   // refreshes when the user clicks the Refresh button.
 };

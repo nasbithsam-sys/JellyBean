@@ -47,6 +47,15 @@ export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
 const TABLE = "raw_lead_cache";
 const RAW_LEADS_PAGE_SIZE = 200;
+const DEFAULT_LEAD_PROMPT = `Home repair lead filter.
+
+Mark only YES, NO, or REVIEW.
+
+YES = person is asking for any home/property repair, install, maintenance, handyman, cleaning, moving, junk removal, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, hot tub service, or any recommendation for home service.
+
+NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, not asking for home service, someone promoting their own services, cooking, food, meal prep, catering, nails, salon, grooming, nanny, babysitting, baby-sitting, daycare, child care, pet care, pet sitting, dog walking, animal parenting, or animal-related service.
+
+REVIEW = unclear post, maybe home-service related, asking only advice/cost/experience, or not enough information to confidently mark YES or NO.`;
 type RawLeadCacheUpdate = Database["public"]["Tables"]["raw_lead_cache"]["Update"];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -227,16 +236,61 @@ function Inner() {
   const [databaseLimit, setDatabaseLimit] = useState(RAW_LEADS_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
-  const [aiPrompt, setAiPrompt] = useState(
-    `Home repair lead filter.
+  const [aiPrompt, setAiPrompt] = useState(DEFAULT_LEAD_PROMPT);
+  const [promptDirty, setPromptDirty] = useState(false);
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const isAdmin = auth.primaryRole === "admin";
 
-Mark only YES or NO.
+  const promptQuery = useQuery({
+    queryKey: ["lead-ai-prompt"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_state")
+        .select("value")
+        .eq("key", "lead_ai_prompt")
+        .maybeSingle();
+      if (error) return DEFAULT_LEAD_PROMPT;
+      const v = data?.value as { text?: string } | null;
+      return v?.text || DEFAULT_LEAD_PROMPT;
+    },
+    refetchOnWindowFocus: false,
+  });
 
-YES = person is asking for any home repair, install, maintenance, handyman, cleaning, moving, junk, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, or hot tub service.
+  // Sync remote prompt into local state unless user has unsaved edits
+  const remotePrompt = promptQuery.data;
+  if (remotePrompt && !promptDirty && remotePrompt !== aiPrompt) {
+    // schedule via microtask-safe setState
+    queueMicrotask(() => setAiPrompt(remotePrompt));
+  }
 
-NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, or not asking for home service.`,
-  );
+  const savePrompt = async () => {
+    if (!isAdmin) return;
+    setSavingPrompt(true);
+    try {
+      const { error } = await supabase
+        .from("shared_state")
+        .upsert(
+          {
+            key: "lead_ai_prompt",
+            value: { text: aiPrompt } as never,
+            updated_by: currentUserId,
+            updated_at: new Date().toISOString(),
+          } as never,
+          { onConflict: "key" },
+        );
+      if (error) throw error;
+      setPromptDirty(false);
+      toast.success("Prompt saved for all users");
+      qc.invalidateQueries({ queryKey: ["lead-ai-prompt"] });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingPrompt(false);
+    }
+  };
+
   const [aiRunning, setAiRunning] = useState(false);
+
 
   const currentUserId = auth.user?.id ?? null;
   const currentUserName = auth.profile?.full_name || auth.user?.email || null;
@@ -612,14 +666,43 @@ NO = selling, garage sale, job search, ad, review, event, lost/found, general ta
       {canRunAi && (
         <div className="space-y-1">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
-            <Textarea
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              rows={2}
-              maxLength={2000}
-              placeholder="Prompt for AI lead checking..."
-              className="min-h-[56px] text-[12.5px]"
-            />
+            <div className="space-y-1">
+              <Textarea
+                value={aiPrompt}
+                onChange={(e) => {
+                  if (!isAdmin) return;
+                  setAiPrompt(e.target.value);
+                  setPromptDirty(true);
+                }}
+                readOnly={!isAdmin}
+                rows={6}
+                maxLength={4000}
+                placeholder="Prompt for AI lead checking..."
+                className="min-h-[140px] text-[12.5px]"
+              />
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>
+                  {isAdmin
+                    ? "Editable by admin — saved prompt syncs to every user in real time."
+                    : "Prompt is managed by admin. Synced live."}
+                </span>
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant={promptDirty ? "default" : "outline"}
+                    className="h-7"
+                    onClick={savePrompt}
+                    disabled={!promptDirty || savingPrompt}
+                  >
+                    {savingPrompt ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : null}
+                    {promptDirty ? "Save prompt" : "Saved"}
+                  </Button>
+                )}
+              </div>
+            </div>
+
             <Button
               className="h-14 lg:w-[210px]"
               onClick={runAiLeadCheck}

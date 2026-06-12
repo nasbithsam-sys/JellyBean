@@ -82,8 +82,10 @@ function parseAiResults(text: string, rowKeys: string[]): RawLeadAiResult[] {
 }
 
 async function classifyWithOpenAi({
+  systemPrompt,
   leads,
 }: {
+  systemPrompt: string;
   leads: Array<{ id: string; account: string; area: string; postText: string }>;
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -98,7 +100,7 @@ async function classifyWithOpenAi({
     body: JSON.stringify({
       model: "gpt-5-nano",
       input: [
-        { role: "system", content: FROZEN_LEAD_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify({ leads }) },
       ],
       text: {
@@ -168,7 +170,9 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
 
     if (leads.length === 0) throw new Error("No selected raw leads have post text to analyze");
 
+    const systemPrompt = data.prompt?.trim() || FROZEN_LEAD_PROMPT;
     const outputText = await classifyWithOpenAi({
+      systemPrompt,
       leads: leads.map(({ id, account, area, postText }) => ({ id, account, area, postText })),
     });
     const results = parseAiResults(
