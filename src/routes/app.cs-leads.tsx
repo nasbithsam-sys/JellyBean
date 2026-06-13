@@ -127,7 +127,6 @@ type Lead = {
   followup_at: string | null;
   assigned_at: string;
   assigned_to: string | null;
-  cs_outcome: "already_done" | "wrong_number" | "processed" | "wrong_lead" | null;
   is_important: boolean;
   service: string | null;
   images: string[];
@@ -136,9 +135,9 @@ type Lead = {
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
 const PIPELINE_STATUSES = [
-  "new",
   "undeliver",
   "wrong_number",
+  "wrong_lead",
   "already_got_someone",
   "service_provider_himself",
   "converted",
@@ -167,9 +166,10 @@ const STATUS_LABEL: Record<string, string> = {
   new: "New (to contact)",
   undeliver: "Undeliver",
   wrong_number: "Wrong Number",
+  wrong_lead: "Wrong Lead",
   already_got_someone: "Already Got Someone",
   service_provider_himself: "Service Provider Himself",
-  converted: "Converted",
+  converted: "Processed",
   need_follow_up: "Need Follow Up",
   // legacy values (kept so old rows still render)
   called: "Called",
@@ -187,6 +187,7 @@ const STATUS_TONE: Record<string, string> = {
   new: "bg-primary",
   undeliver: "bg-destructive",
   wrong_number: "bg-destructive",
+  wrong_lead: "bg-destructive",
   already_got_someone: "bg-destructive",
   service_provider_himself: "bg-destructive",
   converted: "bg-success",
@@ -246,7 +247,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important, service, images, submitted_by_role",
+          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, service, images, submitted_by_role",
         )
         // Pin important / urgent jobs to the top, then most recent first.
         .order("is_important", { ascending: false })
@@ -378,7 +379,7 @@ function Inner() {
   };
 
   const isAdmin = auth.primaryRole === "admin";
-  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__" | "__wrong__">("new");
+  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__">("__all__");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -422,28 +423,17 @@ function Inner() {
     });
   }, [areaFilter, auth.user?.id, list.data, ownerFilter, query, dateRange]);
 
-  const wrongLeads = useMemo(
-    () => filtered.filter((l) => l.cs_outcome === "wrong_lead"),
-    [filtered],
-  );
-  // Wrong leads live in their own bucket; hide them from every regular tab.
-  const activePool = useMemo(
-    () => filtered.filter((l) => l.cs_outcome !== "wrong_lead"),
-    [filtered],
-  );
-
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const s of PIPELINE_STATUSES) c[s] = 0;
-    for (const l of activePool) c[l.cs_status] = (c[l.cs_status] ?? 0) + 1;
+    for (const l of filtered) c[l.cs_status] = (c[l.cs_status] ?? 0) + 1;
     return c;
-  }, [activePool]);
+  }, [filtered]);
 
   const visibleLeads = useMemo(() => {
-    if (activeStatus === "__wrong__") return wrongLeads;
-    if (activeStatus === "__all__") return activePool;
-    return activePool.filter((l) => l.cs_status === activeStatus);
-  }, [activePool, wrongLeads, activeStatus]);
+    if (activeStatus === "__all__") return filtered;
+    return filtered.filter((l) => l.cs_status === activeStatus);
+  }, [filtered, activeStatus]);
   const shownLeads = visibleLeads.slice(0, visibleLimit);
 
   function exportLeads() {
@@ -661,22 +651,6 @@ function Inner() {
             </span>
           </button>
         ))}
-        <button
-          onClick={() => setActiveStatus("__wrong__")}
-          className={cn(
-            "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
-            activeStatus === "__wrong__"
-              ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          title="Leads marked as Wrong lead by CS"
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
-          Wrong leads
-          <span className="text-[10.5px] text-muted-foreground tabular-nums">
-            {wrongLeads.length}
-          </span>
-        </button>
       </div>
 
       {list.error && (
@@ -847,7 +821,6 @@ function LeadCard({
   const qc = useQueryClient();
   const auth = useAuth();
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
-  const [outcome, setOutcome] = useState<Lead["cs_outcome"]>(lead.cs_outcome);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [saving, setSaving] = useState(false);
   const [assigning, setAssigning] = useState(false);
@@ -874,18 +847,6 @@ function LeadCard({
       return false;
     }
     return true;
-  }
-
-  async function changeOutcome(nextValue: string) {
-    const next = (nextValue === "__none__" ? null : nextValue) as Lead["cs_outcome"];
-    const prev = outcome;
-    setOutcome(next);
-    if (await saveField({ cs_outcome: next })) {
-      toast.success(next ? `Outcome → ${next.replace(/_/g, " ")}` : "Outcome cleared");
-      qc.invalidateQueries({ queryKey: ["cs_leads"] });
-    } else {
-      setOutcome(prev);
-    }
   }
 
   async function changeStatus(next: CsStatus) {
@@ -1120,22 +1081,6 @@ function LeadCard({
         </Select>
       </div>
 
-      {/* Outcome (visible to forwarder) */}
-      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-        <Select value={outcome ?? "__none__"} onValueChange={changeOutcome}>
-          <SelectTrigger className="h-8 text-[12px]">
-            <SelectValue placeholder="Outcome…" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">— Outcome not set —</SelectItem>
-            <SelectItem value="already_done">Already done</SelectItem>
-            <SelectItem value="wrong_number">Wrong number</SelectItem>
-            <SelectItem value="processed">Processed</SelectItem>
-            <SelectItem value="wrong_lead">Wrong lead</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Manual field filled by CS */}
       <div className="mt-3" onClick={(e) => e.stopPropagation()}>
         <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -1261,6 +1206,7 @@ function StatusBadge({ status }: { status: string }) {
       ? "bg-success/15 text-success border-success/30"
       : status === "undeliver" ||
           status === "wrong_number" ||
+          status === "wrong_lead" ||
           status === "already_got_someone" ||
           status === "service_provider_himself" ||
           status === "closed_lost" ||
@@ -1302,7 +1248,6 @@ function LeadDrawer({
   const auth = useAuth();
   const qc = useQueryClient();
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
-  const [csOutcome, setCsOutcome] = useState<Lead["cs_outcome"]>(lead.cs_outcome);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
@@ -1334,7 +1279,6 @@ function LeadDrawer({
           cs_notes: newNotes as Json,
           followup_at: followup ? new Date(followup).toISOString() : null,
           assigned_to: assignedTo,
-          cs_outcome: csOutcome,
           marketing_notes: compose.trim() || null,
         } as never)
         .eq("id", lead.id);
@@ -1453,28 +1397,6 @@ function LeadDrawer({
               maxLength={2000}
               placeholder="Compose a message or note for this lead..."
             />
-          </div>
-          <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Outcome (visible to forwarder)
-            </Label>
-            <Select
-              value={csOutcome ?? "__none__"}
-              onValueChange={(v) =>
-                setCsOutcome(v === "__none__" ? null : (v as Lead["cs_outcome"]))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">— Not set —</SelectItem>
-                <SelectItem value="already_done">Already done</SelectItem>
-                <SelectItem value="wrong_number">Wrong number</SelectItem>
-                <SelectItem value="processed">Processed</SelectItem>
-                <SelectItem value="wrong_lead">Wrong lead</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
