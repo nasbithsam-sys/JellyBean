@@ -723,6 +723,31 @@ function Inner() {
         </div>
       </div>
 
+      {isAdmin && selected.size > 0 && (
+        <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-[12.5px]">
+          <span className="font-medium">{selected.size} selected</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7"
+            onClick={() => setSelected(new Set())}
+          >
+            Clear
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-7 ml-auto"
+            onClick={() => setConfirmDelete(true)}
+            disabled={deleting}
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+            Delete selected
+          </Button>
+        </div>
+      )}
+
+
       {canRunAi && (
         <div className="space-y-1">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
