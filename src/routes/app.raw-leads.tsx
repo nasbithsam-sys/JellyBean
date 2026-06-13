@@ -24,6 +24,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
   Loader2,
   ExternalLink,
   RefreshCw,
@@ -35,6 +46,7 @@ import {
   Download,
   Copy,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -291,6 +303,20 @@ function Inner() {
   };
 
   const [aiRunning, setAiRunning] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const toggleSelect = useCallback((key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+
 
 
   const currentUserId = auth.user?.id ?? null;
@@ -307,6 +333,31 @@ function Inner() {
     gcTime: Infinity,
     refetchOnWindowFocus: false,
   });
+
+  const deleteSelected = useCallback(async () => {
+    if (!isAdmin || selected.size === 0) return;
+    const keys = Array.from(selected);
+    setDeleting(true);
+    try {
+      const CHUNK = 25;
+      for (let i = 0; i < keys.length; i += CHUNK) {
+        const slice = keys.slice(i, i + CHUNK);
+        const { error } = await supabase.from(TABLE).delete().in("row_key", slice);
+        if (error) throw error;
+      }
+      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
+        (prev ?? []).filter((e) => !selected.has(e.row_key)),
+      );
+      toast.success(`Deleted ${keys.length} lead${keys.length === 1 ? "" : "s"}`);
+      setSelected(new Set());
+      setConfirmDelete(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+      cacheQuery.refetch();
+    } finally {
+      setDeleting(false);
+    }
+  }, [isAdmin, selected, qc, databaseLimit, cacheQuery]);
 
   // ── Shared AI lock so two users can't fire the AI batch at once ───────────
   const aiLockQuery = useQuery({
@@ -672,6 +723,31 @@ function Inner() {
         </div>
       </div>
 
+      {isAdmin && selected.size > 0 && (
+        <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-[12.5px]">
+          <span className="font-medium">{selected.size} selected</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7"
+            onClick={() => setSelected(new Set())}
+          >
+            Clear
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-7 ml-auto"
+            onClick={() => setConfirmDelete(true)}
+            disabled={deleting}
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+            Delete selected
+          </Button>
+        </div>
+      )}
+
+
       {canRunAi && (
         <div className="space-y-1">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
@@ -760,6 +836,7 @@ function Inner() {
             style={{ minWidth: 1240 }}
           >
             <colgroup>
+              <col style={{ width: 36 }} />
               <col style={{ width: 60 }} />
               <col style={{ width: 140 }} />
               <col style={{ width: 125 }} />
@@ -776,6 +853,26 @@ function Inner() {
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface">
               <tr>
+                <th className="border-b border-border px-2 py-2">
+                  <Checkbox
+                    checked={
+                      shownRows.length > 0 &&
+                      shownRows.every((row) => selected.has(row.row_key))
+                    }
+                    onCheckedChange={(checked) => {
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        if (checked) {
+                          for (const row of shownRows) next.add(row.row_key);
+                        } else {
+                          for (const row of shownRows) next.delete(row.row_key);
+                        }
+                        return next;
+                      });
+                    }}
+                    aria-label="Select all visible"
+                  />
+                </th>
                 <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
                   Row #
                 </th>
@@ -796,7 +893,7 @@ function Inner() {
             <tbody>
               {!cacheQuery.isLoading && visible.length === 0 && !error && (
                 <tr>
-                  <td colSpan={13} className="text-center py-12 text-muted-foreground">
+                  <td colSpan={14} className="text-center py-12 text-muted-foreground">
                     {tab === "new"
                       ? "No leads yet. Run your scraper extension to push leads here."
                       : "Nothing here yet."}
@@ -811,22 +908,36 @@ function Inner() {
                 const mine = !!currentUserId && e.assigned_to === currentUserId;
                 const claimedByOther =
                   !!e.assigned_to && e.assigned_to !== currentUserId;
+                const isSelected = selected.has(k);
                 return (
                   <tr
                     key={k}
                     className={cn(
                       "transition-colors align-top cursor-pointer",
-                      mine
-                        ? "bg-primary/10 hover:bg-primary/15"
-                        : claimedByOther
-                          ? "bg-muted/40 hover:bg-muted/60 opacity-80"
-                          : "hover:bg-accent/40",
+                      isSelected
+                        ? "bg-primary/15 hover:bg-primary/20"
+                        : mine
+                          ? "bg-primary/10 hover:bg-primary/15"
+                          : claimedByOther
+                            ? "bg-muted/40 hover:bg-muted/60 opacity-80"
+                            : "hover:bg-accent/40",
                     )}
                     onClick={() => setDetailFor(e)}
                   >
+                    <td
+                      className="border-b border-border px-2 py-2"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelect(k)}
+                        aria-label="Select row"
+                      />
+                    </td>
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] font-mono text-muted-foreground tabular-nums">
                       {e.sheet_row ?? "—"}
                     </td>
+
                     <td className="border-b border-border px-2.5 py-2">
                       <div className="font-medium truncate" title={r["Account Name"]}>
                         {r["Account Name"] || "—"}
@@ -1065,7 +1176,33 @@ function Inner() {
           }}
         />
       )}
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selected.size} raw lead{selected.size === 1 ? "" : "s"}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the selected leads from the database. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                deleteSelected();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
   );
 }
 
