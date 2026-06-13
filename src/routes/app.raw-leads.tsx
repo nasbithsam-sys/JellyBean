@@ -303,6 +303,44 @@ function Inner() {
   };
 
   const [aiRunning, setAiRunning] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const toggleSelect = useCallback((key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const deleteSelected = useCallback(async () => {
+    if (!isAdmin || selected.size === 0) return;
+    const keys = Array.from(selected);
+    setDeleting(true);
+    try {
+      const CHUNK = 25;
+      for (let i = 0; i < keys.length; i += CHUNK) {
+        const slice = keys.slice(i, i + CHUNK);
+        const { error } = await supabase.from(TABLE).delete().in("row_key", slice);
+        if (error) throw error;
+      }
+      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
+        (prev ?? []).filter((e) => !selected.has(e.row_key)),
+      );
+      toast.success(`Deleted ${keys.length} lead${keys.length === 1 ? "" : "s"}`);
+      setSelected(new Set());
+      setConfirmDelete(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+      cacheQuery.refetch();
+    } finally {
+      setDeleting(false);
+    }
+  }, [isAdmin, selected, qc, databaseLimit, cacheQuery]);
+
 
 
   const currentUserId = auth.user?.id ?? null;
