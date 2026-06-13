@@ -836,6 +836,7 @@ function Inner() {
             style={{ minWidth: 1240 }}
           >
             <colgroup>
+              <col style={{ width: 36 }} />
               <col style={{ width: 60 }} />
               <col style={{ width: 140 }} />
               <col style={{ width: 125 }} />
@@ -852,6 +853,26 @@ function Inner() {
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface">
               <tr>
+                <th className="border-b border-border px-2 py-2">
+                  <Checkbox
+                    checked={
+                      shownRows.length > 0 &&
+                      shownRows.every((row) => selected.has(row.row_key))
+                    }
+                    onCheckedChange={(checked) => {
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        if (checked) {
+                          for (const row of shownRows) next.add(row.row_key);
+                        } else {
+                          for (const row of shownRows) next.delete(row.row_key);
+                        }
+                        return next;
+                      });
+                    }}
+                    aria-label="Select all visible"
+                  />
+                </th>
                 <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
                   Row #
                 </th>
@@ -872,7 +893,7 @@ function Inner() {
             <tbody>
               {!cacheQuery.isLoading && visible.length === 0 && !error && (
                 <tr>
-                  <td colSpan={13} className="text-center py-12 text-muted-foreground">
+                  <td colSpan={14} className="text-center py-12 text-muted-foreground">
                     {tab === "new"
                       ? "No leads yet. Run your scraper extension to push leads here."
                       : "Nothing here yet."}
@@ -887,22 +908,36 @@ function Inner() {
                 const mine = !!currentUserId && e.assigned_to === currentUserId;
                 const claimedByOther =
                   !!e.assigned_to && e.assigned_to !== currentUserId;
+                const isSelected = selected.has(k);
                 return (
                   <tr
                     key={k}
                     className={cn(
                       "transition-colors align-top cursor-pointer",
-                      mine
-                        ? "bg-primary/10 hover:bg-primary/15"
-                        : claimedByOther
-                          ? "bg-muted/40 hover:bg-muted/60 opacity-80"
-                          : "hover:bg-accent/40",
+                      isSelected
+                        ? "bg-primary/15 hover:bg-primary/20"
+                        : mine
+                          ? "bg-primary/10 hover:bg-primary/15"
+                          : claimedByOther
+                            ? "bg-muted/40 hover:bg-muted/60 opacity-80"
+                            : "hover:bg-accent/40",
                     )}
                     onClick={() => setDetailFor(e)}
                   >
+                    <td
+                      className="border-b border-border px-2 py-2"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelect(k)}
+                        aria-label="Select row"
+                      />
+                    </td>
                     <td className="border-b border-border px-2.5 py-2 text-[11.5px] font-mono text-muted-foreground tabular-nums">
                       {e.sheet_row ?? "—"}
                     </td>
+
                     <td className="border-b border-border px-2.5 py-2">
                       <div className="font-medium truncate" title={r["Account Name"]}>
                         {r["Account Name"] || "—"}
