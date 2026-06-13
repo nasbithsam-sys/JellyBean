@@ -1305,6 +1305,7 @@ function LeadDrawer({
   const [csOutcome, setCsOutcome] = useState<Lead["cs_outcome"]>(lead.cs_outcome);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
+  const [compose, setCompose] = useState(lead.marketing_notes ?? "");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
@@ -1334,6 +1335,7 @@ function LeadDrawer({
           followup_at: followup ? new Date(followup).toISOString() : null,
           assigned_to: assignedTo,
           cs_outcome: csOutcome,
+          marketing_notes: compose.trim() || null,
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
@@ -1396,9 +1398,6 @@ function LeadDrawer({
           <Info label="Customer exact requirement" value={lead.post_text} multiline />
         )}
         {lead.context && <Info label="Context" value={lead.context} multiline />}
-        {lead.marketing_notes && (
-          <Info label="Marketing notes" value={lead.marketing_notes} multiline />
-        )}
         {Array.isArray(lead.images) && lead.images.length > 0 && (
           <div>
             <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
@@ -1442,6 +1441,18 @@ function LeadDrawer({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Compose
+            </Label>
+            <Textarea
+              value={compose}
+              onChange={(e) => setCompose(e.target.value)}
+              rows={4}
+              maxLength={2000}
+              placeholder="Compose a message or note for this lead..."
+            />
           </div>
           <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
