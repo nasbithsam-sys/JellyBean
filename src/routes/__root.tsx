@@ -37,8 +37,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/84b7529d-1f3e-4b93-86d1-a96e1589bddb/id-preview-9e56f80c--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1781363351995.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/84b7529d-1f3e-4b93-86d1-a96e1589bddb/id-preview-9e56f80c--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1781363351995.png" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/XI93seEGA6eScdxwF1KlwHiSA6d2/social-images/social-1781369293890-leadgrid_crm_logo.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/XI93seEGA6eScdxwF1KlwHiSA6d2/social-images/social-1781369293890-leadgrid_crm_logo.webp" },
     ],
     links: [
       { rel: "preconnect", href: "https://rsms.me/" },
