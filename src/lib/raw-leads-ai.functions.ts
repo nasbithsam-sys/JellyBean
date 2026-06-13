@@ -147,13 +147,22 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
     await ensureRequesterCanAnalyze(context.userId);
 
     const orderedKeys = [...new Set(data.rowKeys)].slice(0, 50);
-    const { data: rows, error } = await supabaseAdmin
-      .from("raw_lead_cache")
-      .select("row_key, data")
-      .in("row_key", orderedKeys);
-    if (error) throw new Error(error.message);
 
-    const byKey = new Map((rows ?? []).map((row) => [row.row_key, row]));
+    // Chunk the .in() lookup — long row_keys can push the PostgREST GET URL
+    // past its length limit and surface as a generic "Bad Request".
+    const CHUNK = 10;
+    const rows: Array<{ row_key: string; data: unknown }> = [];
+    for (let i = 0; i < orderedKeys.length; i += CHUNK) {
+      const slice = orderedKeys.slice(i, i + CHUNK);
+      const { data: part, error } = await supabaseAdmin
+        .from("raw_lead_cache")
+        .select("row_key, data")
+        .in("row_key", slice);
+      if (error) throw new Error(error.message);
+      if (part) rows.push(...part);
+    }
+
+    const byKey = new Map(rows.map((row) => [row.row_key, row]));
     const leads = orderedKeys
       .map((rowKey, index) => {
         const row = byKey.get(rowKey);
