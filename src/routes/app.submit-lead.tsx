@@ -358,12 +358,10 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const isSubmitterRole = role === "facebook" || role === "seo";
-  const isFacebookRole = role === "facebook";
   const [name, setName] = useState("");
   const [service, setService] = useState("");
   const [area, setArea] = useState("");
   const [number, setNumber] = useState("");
-  const [zipcode, setZipcode] = useState("");
   const [passItTo, setPassItTo] = useState("");
   const [context, setContext] = useState("");
   const [important, setImportant] = useState(false);
@@ -431,7 +429,6 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         customer_number: number.trim(),
         service: isSubmitterRole ? service.trim() || null : null,
         main_area: area.trim() || null,
-        zipcode: isFacebookRole ? zipcode.trim() || null : null,
         pass_it_to: isSubmitterRole ? null : passItTo.trim() || null,
         context: context.trim() || null,
         images: imageUrls,
@@ -508,17 +505,6 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
               inputMode="tel"
             />
           </div>
-          {isFacebookRole && (
-            <div>
-              <Label className="mb-1.5 block">Zipcode</Label>
-              <Input
-                value={zipcode}
-                onChange={(e) => setZipcode(e.target.value)}
-                maxLength={20}
-                inputMode="numeric"
-              />
-            </div>
-          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
