@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Database, KeyRound, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, Loader2, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,9 +32,8 @@ function Inner() {
   const health = useQuery({
     queryKey: ["crm-health"],
     queryFn: async () => {
-      const [settings, cursor, profiles, rawCache, qualified, browserProfiles, activityLogs] =
+      const [cursor, profiles, rawCache, qualified, browserProfiles, activityLogs] =
         await Promise.all([
-          supabase.from("app_settings").select("admin_otp_required").maybeSingle(),
           supabase
             .from("shared_state")
             .select("value, updated_at")
@@ -48,7 +47,6 @@ function Inner() {
         ]);
 
       const checks: Check[] = [
-        resultCheck("Supabase settings", settings.error, "App settings readable"),
         resultCheck(
           "Raw lead cursor",
           cursor.error,
@@ -77,7 +75,6 @@ function Inner() {
       ];
 
       return {
-        adminOtpRequired: settings.data?.admin_otp_required === true,
         cursorValue:
           cursor.data?.value &&
           typeof cursor.data.value === "object" &&
@@ -113,11 +110,7 @@ function Inner() {
           label="Raw cursor"
           value={health.data?.cursorValue ? `Row ${health.data.cursorValue}` : "Not set"}
         />
-        <SummaryCard
-          icon={KeyRound}
-          label="Admin login code"
-          value={health.data?.adminOtpRequired ? "Required" : "Optional"}
-        />
+        <SummaryCard icon={Users} label="Access" value="Password only" />
         <SummaryCard icon={CheckCircle2} label="Exports" value="Browser CSV only" />
       </div>
 

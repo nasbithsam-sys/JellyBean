@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 export function PageHeader({
   title,
@@ -14,20 +15,17 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "flex items-start justify-between gap-4 px-7 pt-5 pb-4 border-b border-border-strong",
-        "bg-background sticky top-0 z-30",
+        "flex items-center justify-between gap-4 px-8 pt-6 pb-5 border-b border-border/70",
+        "bg-background/82 backdrop-blur-xl sticky top-0 z-30",
         className,
       )}
     >
-      <div className="min-w-0 border-l-[3px] border-primary pl-3">
-        <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono mb-1">
-          Leadgrid / Ops
-        </div>
-        <h1 className="text-[20px] leading-tight font-semibold tracking-normal text-foreground">
+      <div className="min-w-0">
+        <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.02em] text-foreground">
           {title}
         </h1>
         {description && (
-          <p className="text-[12.5px] text-muted-foreground mt-1 max-w-2xl">{description}</p>
+          <p className="text-[14px] text-muted-foreground mt-1.5 max-w-3xl">{description}</p>
         )}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -56,7 +54,15 @@ export function RoleGate({
   current: Role | null;
   children: React.ReactNode;
 }) {
-  if (!current || !allow.includes(current)) {
+  if (!current) {
+    return (
+      <div className="flex items-center justify-center p-10 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!allow.includes(current)) {
     return (
       <div className="glass-card p-10 text-center max-w-md mx-auto mt-10">
         <div className="text-sm font-medium">Restricted</div>

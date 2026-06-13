@@ -1,23 +1,18 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import { useAuth } from "@/hooks/use-auth";
+import { AuthProvider, useAuthState } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
-import { requireOtpVerified } from "@/lib/login-otp.functions";
 
 export const Route = createFileRoute("/app")({
   component: AuthenticatedLayout,
 });
 
 function AuthenticatedLayout() {
-  const auth = useAuth();
+  const auth = useAuthState();
   const { loading, session, signOut } = auth;
   const navigate = useNavigate();
   const inactive = auth.profile?.is_active === false;
-  const verifyOtp = useServerFn(requireOtpVerified);
-  const [otpChecked, setOtpChecked] = useState(false);
 
   useEffect(() => {
     if (loading) return;
@@ -30,25 +25,9 @@ function AuthenticatedLayout() {
       navigate({ to: "/login" });
       return;
     }
-    // Server-side OTP enforcement: client-only check is bypassable.
-    let cancelled = false;
-    void (async () => {
-      try {
-        await verifyOtp({ data: undefined });
-        if (!cancelled) setOtpChecked(true);
-      } catch {
-        if (cancelled) return;
-        toast.error("Additional verification required. Please sign in again.");
-        await signOut();
-        navigate({ to: "/login" });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, session, inactive, signOut, navigate, verifyOtp]);
+  }, [loading, session, inactive, signOut, navigate]);
 
-  if (loading || !session || inactive || !otpChecked) {
+  if (loading || !session || inactive) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -76,8 +55,10 @@ function AuthenticatedLayout() {
   }
 
   return (
-    <AppShell auth={auth}>
-      <Outlet />
-    </AppShell>
+    <AuthProvider value={auth}>
+      <AppShell auth={auth}>
+        <Outlet />
+      </AppShell>
+    </AuthProvider>
   );
 }

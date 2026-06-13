@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
-import { randomInt } from "crypto";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -25,78 +24,6 @@ async function ensureRequesterIsAdmin(admin: ReturnType<typeof adminClient>, use
   if (!data) throw new Error("Forbidden: admin only");
 }
 
-function newCode(): string {
-  return String(randomInt(0, 1_000_000)).padStart(6, "0");
-}
-
-const OTP_MAX_AGE_MS = 72 * 60 * 60 * 1000; // 72 hours
-
-// Admin: generate (or rotate) the one-time login code for a user
-export const adminRotateLoginOtp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input) => z.object({ userId: z.string().uuid() }).parse(input))
-  .handler(async ({ data, context }) => {
-    const admin = adminClient();
-    await ensureRequesterIsAdmin(admin, context.userId);
-    const code = newCode();
-    const { error } = await admin
-      .from("profiles")
-      .update({ login_otp: code, login_otp_updated_at: new Date().toISOString() })
-      .eq("user_id", data.userId);
-    if (error) throw new Error(error.message);
-    return { code };
-  });
-
-// Called by the user during login (after password) to consume their one-time code.
-// On success the code is rotated to a fresh value that only admin can see.
-export const consumeLoginOtp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input) => z.object({ code: z.string().trim().min(4).max(12) }).parse(input))
-  .handler(async ({ data, context }) => {
-    const admin = adminClient();
-    const { data: prof, error } = await admin
-      .from("profiles")
-      .select("login_otp, login_otp_updated_at")
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!prof?.login_otp) throw new Error("No login code issued. Ask an admin.");
-    const issuedAt = prof.login_otp_updated_at ? new Date(prof.login_otp_updated_at) : null;
-    if (!issuedAt || Date.now() - issuedAt.getTime() > OTP_MAX_AGE_MS) {
-      throw new Error("Login code has expired. Ask an admin to generate a new one.");
-    }
-    if (prof.login_otp !== data.code.trim()) throw new Error("Invalid code");
-    // Rotate to a new one-time code so it can't be reused, and record server-side verification
-    const next = newCode();
-    const nowIso = new Date().toISOString();
-    const { error: uErr } = await admin
-      .from("profiles")
-      .update({
-        login_otp: next,
-        login_otp_updated_at: nowIso,
-        otp_verified_at: nowIso,
-      })
-      .eq("user_id", context.userId);
-    if (uErr) throw new Error(uErr.message);
-    return { ok: true };
-  });
-
-// Admin: read a user's current code (so admin can hand it to them)
-export const adminGetLoginOtp = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input) => z.object({ userId: z.string().uuid() }).parse(input))
-  .handler(async ({ data, context }) => {
-    const admin = adminClient();
-    await ensureRequesterIsAdmin(admin, context.userId);
-    const { data: prof, error } = await admin
-      .from("profiles")
-      .select("login_otp, login_otp_updated_at")
-      .eq("user_id", data.userId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return { code: prof?.login_otp ?? null, updatedAt: prof?.login_otp_updated_at ?? null };
-  });
-
 // Admin: delete any user (including other admins). Cannot delete self.
 export const adminDeleteUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -111,45 +38,4 @@ export const adminDeleteUser = createServerFn({ method: "POST" })
     const { error } = await admin.auth.admin.deleteUser(data.userId);
     if (error) throw new Error(error.message);
     return { ok: true };
-  });
-
-// Server-side check that the current session has completed OTP (when required).
-// Compares otp_verified_at against the JWT iat so each fresh sign-in must re-verify.
-export const requireOtpVerified = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const admin = adminClient();
-    const { data: prof, error } = await admin
-      .from("profiles")
-      .select("otp_required, otp_verified_at, is_active")
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!prof) throw new Error("Profile not found");
-    if (!prof.is_active) throw new Error("Account inactive");
-
-    const { data: roles, error: rErr } = await admin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId);
-    if (rErr) throw new Error(rErr.message);
-    const roleList = (roles ?? []).map((r) => r.role as string);
-    const { data: settings } = await admin
-      .from("app_settings")
-      .select("admin_otp_required")
-      .maybeSingle();
-    const isAdmin = roleList.includes("admin");
-    const isCsOnly = roleList.includes("cs") && !isAdmin;
-    // Only admins (when admin_otp_required is on) still use the one-time login code.
-    // CS role never uses the code; other roles sign in with username + password.
-    const adminNeedsOtp = isAdmin && Boolean(settings?.admin_otp_required);
-    const needsOtp = isCsOnly ? false : prof.otp_required === true || adminNeedsOtp;
-    if (!needsOtp) return { ok: true as const };
-
-    const iatSec = Number((context.claims as { iat?: number } | null)?.iat ?? 0);
-    const verifiedMs = prof.otp_verified_at ? Date.parse(prof.otp_verified_at) : 0;
-    if (!verifiedMs || verifiedMs < iatSec * 1000) {
-      throw new Error("OTP verification required");
-    }
-    return { ok: true as const };
   });

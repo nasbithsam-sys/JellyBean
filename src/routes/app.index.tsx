@@ -21,6 +21,28 @@ export const Route = createFileRoute("/app/")({
   component: DashboardHome,
 });
 
+const CS_STATUSES = [
+  "new",
+  "undeliver",
+  "wrong_number",
+  "wrong_lead",
+  "already_got_someone",
+  "service_provider_himself",
+  "converted",
+  "need_follow_up",
+] as const;
+
+const CS_LABELS: Record<string, string> = {
+  new: "New to contact",
+  undeliver: "Undeliver",
+  wrong_number: "Wrong number",
+  wrong_lead: "Wrong lead",
+  already_got_someone: "Already got someone",
+  service_provider_himself: "Service provider himself",
+  converted: "Processed",
+  need_follow_up: "Need follow-up",
+};
+
 function DashboardHome() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -60,29 +82,24 @@ function AdminDashboard() {
     queryKey: ["admin-dashboard-stats"],
     queryFn: async () => {
       const today = startOfDay(new Date()).toISOString();
-      const rawStatuses = ["new", "qualified", "cancelled"] as const;
-      const csStatuses = [
-        "new",
-        "called",
-        "messaged",
-        "follow_up",
-        "interested",
-        "converted",
-        "closed_won",
-        "need_follow_up",
-      ] as const;
-
-      const [rawNew, rawSent, rawCancelled, todayRaw, todayQualified, ...csResults] =
+      const [rawNew, rawForwarded, rawNotFound, rawWrong, todayRaw, todayForwarded, ...csResults] =
         await Promise.all([
-          ...rawStatuses.map((status) => {
-            let q = supabase
-              .from("raw_lead_cache")
-              .select("id", { count: "exact", head: true });
-            if (status === "qualified") q = q.eq("lead", "yes");
-            else if (status === "cancelled") q = q.eq("lead", "no");
-            else q = q.is("lead", null);
-            return q;
-          }),
+          supabase
+            .from("raw_lead_cache")
+            .select("id", { count: "exact", head: true })
+            .is("category", null),
+          supabase
+            .from("raw_lead_cache")
+            .select("id", { count: "exact", head: true })
+            .eq("category", "forwarded"),
+          supabase
+            .from("raw_lead_cache")
+            .select("id", { count: "exact", head: true })
+            .eq("category", "not_found"),
+          supabase
+            .from("raw_lead_cache")
+            .select("id", { count: "exact", head: true })
+            .eq("category", "wrong"),
           supabase
             .from("raw_lead_cache")
             .select("id", { count: "exact", head: true })
@@ -90,8 +107,8 @@ function AdminDashboard() {
           supabase
             .from("qualified_leads")
             .select("id", { count: "exact", head: true })
-            .gte("created_at", today),
-          ...csStatuses.map((status) =>
+            .gte("assigned_at", today),
+          ...CS_STATUSES.map((status) =>
             supabase
               .from("qualified_leads")
               .select("id", { count: "exact", head: true })
@@ -100,50 +117,64 @@ function AdminDashboard() {
         ]);
 
       const csCounts: Record<string, number> = {};
-      csStatuses.forEach((status, index) => {
+      CS_STATUSES.forEach((status, index) => {
         csCounts[status] = csResults[index]?.count ?? 0;
       });
 
       return {
         rawCounts: {
           new: rawNew.count ?? 0,
-          sent: rawSent.count ?? 0,
-          cancelled: rawCancelled.count ?? 0,
+          forwarded: rawForwarded.count ?? 0,
+          notFound: rawNotFound.count ?? 0,
+          wrong: rawWrong.count ?? 0,
         },
         csCounts,
         todayRaw: todayRaw.count ?? 0,
-        todayQualified: todayQualified.count ?? 0,
+        todayForwarded: todayForwarded.count ?? 0,
       };
     },
   });
 
   const tiles = [
-    { label: "New raw leads", value: stats.data?.rawCounts.new ?? 0, icon: Inbox, tone: "primary" },
-    { label: "Sent to CS", value: stats.data?.rawCounts.sent ?? 0, icon: Send, tone: "accent" },
     {
-      label: "Cancelled",
-      value: stats.data?.rawCounts.cancelled ?? 0,
+      label: "New raw leads",
+      value: stats.data?.rawCounts.new ?? 0,
+      icon: Inbox,
+      tone: "primary",
+    },
+    {
+      label: "Forwarded to CS",
+      value: stats.data?.rawCounts.forwarded ?? 0,
+      icon: Send,
+      tone: "accent",
+    },
+    {
+      label: "Number not found",
+      value: stats.data?.rawCounts.notFound ?? 0,
       icon: AlertCircle,
       tone: "muted",
     },
     {
-      label: "Converted",
-      value: (stats.data?.csCounts.converted ?? 0) + (stats.data?.csCounts.closed_won ?? 0),
+      label: "Wrong posts",
+      value: stats.data?.rawCounts.wrong ?? 0,
+      icon: AlertCircle,
+      tone: "muted",
+    },
+    {
+      label: "Processed",
+      value: stats.data?.csCounts.converted ?? 0,
       icon: Trophy,
       tone: "success",
     },
     {
       label: "Follow-ups",
-      value: stats.data?.csCounts.follow_up ?? 0,
+      value: stats.data?.csCounts.need_follow_up ?? 0,
       icon: Clock,
       tone: "warning",
     },
     {
-      label: "In-progress",
-      value:
-        (stats.data?.csCounts.called ?? 0) +
-        (stats.data?.csCounts.messaged ?? 0) +
-        (stats.data?.csCounts.interested ?? 0),
+      label: "New to contact",
+      value: stats.data?.csCounts.new ?? 0,
       icon: CheckCircle2,
       tone: "primary",
     },
@@ -182,7 +213,7 @@ function AdminDashboard() {
             <h3 className="text-sm font-semibold mb-2">Today</h3>
             <div className="text-[13px] text-muted-foreground">
               <div>{stats.data?.todayRaw ?? 0} new raw leads captured</div>
-              <div>{stats.data?.todayQualified ?? 0} qualified leads passed to CS</div>
+              <div>{stats.data?.todayForwarded ?? 0} leads forwarded to CS</div>
             </div>
           </div>
           <div className="glass-card p-5">
@@ -193,7 +224,7 @@ function AdminDashboard() {
                 .slice(0, 6)
                 .map(([k, v]) => (
                   <div key={k} className="flex justify-between">
-                    <span className="capitalize">{k.replace(/_/g, " ")}</span>
+                    <span>{CS_LABELS[k] ?? k.replace(/_/g, " ")}</span>
                     <span className="tabular-nums">{v}</span>
                   </div>
                 ))}

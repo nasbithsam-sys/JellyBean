@@ -5,20 +5,23 @@ export type Theme = "dark" | "light";
 const KEY = "theme";
 
 function read(): Theme {
-  if (typeof window === "undefined") return "dark";
-  const v = window.localStorage.getItem(KEY);
-  return v === "light" ? "light" : "dark";
+  return "light";
 }
 
 function apply(t: Theme) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  root.classList.toggle("light", t === "light");
-  root.classList.toggle("dark", t === "dark");
+  root.classList.add("light");
+  root.classList.remove("dark");
+  try {
+    window.localStorage.setItem(KEY, "light");
+  } catch {
+    // Local storage can be unavailable in restricted browsing modes.
+  }
 }
 
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     const t = read();
@@ -27,14 +30,8 @@ export function useTheme() {
   }, []);
 
   const toggle = () => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    try {
-      window.localStorage.setItem(KEY, next);
-    } catch {
-      // Local storage can be unavailable in restricted browsing modes.
-    }
-    apply(next);
+    setTheme("light");
+    apply("light");
   };
 
   return { theme, toggle };

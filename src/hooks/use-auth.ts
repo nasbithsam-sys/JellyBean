@@ -1,4 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -18,7 +27,6 @@ export interface AuthProfile {
   username: string | null;
   email: string;
   is_active: boolean;
-  otp_required: boolean;
 }
 
 export interface AuthState {
@@ -39,7 +47,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-export function useAuth(): AuthState {
+const AuthContext = createContext<AuthState | null>(null);
+
+export function useAuthState(): AuthState {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
@@ -57,7 +67,7 @@ export function useAuth(): AuthState {
       await Promise.all([
         supabase
           .from("profiles")
-          .select("id, user_id, full_name, username, email, is_active, otp_required")
+          .select("id, user_id, full_name, username, email, is_active")
           .eq("user_id", uid)
           .maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", uid),
@@ -138,4 +148,20 @@ export function useAuth(): AuthState {
                 : null;
 
   return { loading, session, user, profile, roles, primaryRole, refresh, signOut };
+}
+
+export function AuthProvider({
+  value,
+  children,
+}: {
+  value: AuthState;
+  children: ReactNode;
+}) {
+  return createElement(AuthContext.Provider, { value }, children);
+}
+
+export function useAuth(): AuthState {
+  const auth = useContext(AuthContext);
+  if (!auth) throw new Error("useAuth must be used inside AuthProvider");
+  return auth;
 }
