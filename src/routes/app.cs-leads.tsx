@@ -112,7 +112,6 @@ function showBrowserNotification(title: string, body: string) {
 
 type Lead = {
   id: string;
-  address: string | null;
   customer_name: string;
   customer_number: string;
   context: string | null;
@@ -133,7 +132,6 @@ type Lead = {
   service: string | null;
   images: string[];
   submitted_by_role: string | null;
-  zipcode: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -248,7 +246,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, address, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important, service, images, submitted_by_role, zipcode",
+          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important, service, images, submitted_by_role",
         )
         // Pin important / urgent jobs to the top, then most recent first.
         .order("is_important", { ascending: false })
@@ -399,8 +397,6 @@ function Inner() {
           l.main_area,
           l.sub_area,
           l.pass_it_to,
-          l.zipcode,
-          l.address,
         ].some((f) => f?.toLowerCase().includes(q))
       ) {
         return false;
@@ -1393,8 +1389,6 @@ function LeadDrawer({
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
         </div>
         {lead.service && <Info label="Service" value={lead.service} />}
-        {lead.zipcode && <Info label="Zipcode" value={lead.zipcode} />}
-        {lead.address && <Info label="Address" value={lead.address} multiline />}
         {lead.submitted_by_role && (
           <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
         )}
