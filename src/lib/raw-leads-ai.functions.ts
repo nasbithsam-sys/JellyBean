@@ -182,7 +182,11 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
 
     if (results.length === 0) throw new Error("AI returned no usable lead decisions");
 
+    // The raw_lead_cache.lead column only accepts 'yes' | 'no' | NULL
+    // (per raw_lead_cache_lead_chk). 'review' decisions are returned to
+    // the client but not persisted — they stay unclassified in the DB.
     for (const { row_key, lead } of results) {
+      if (lead !== "yes" && lead !== "no") continue;
       const { error: updateError } = await supabaseAdmin
         .from("raw_lead_cache")
         .update({ lead } as never)

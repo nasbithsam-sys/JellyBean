@@ -502,14 +502,21 @@ function Inner() {
           rowKeys: aiTargets.map((entry) => entry.row_key),
         },
       });
-      const leadByKey = new Map(result.results.map((item) => [item.row_key, item.lead]));
+      const leadByKey = new Map(
+        result.results
+          .filter((item) => item.lead === "yes" || item.lead === "no")
+          .map((item) => [item.row_key, item.lead as "yes" | "no"]),
+      );
       qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
         (prev ?? []).map((entry) => {
           const lead = leadByKey.get(entry.row_key);
           return lead ? { ...entry, lead } : entry;
         }),
       );
-      toast.success(`AI checked ${result.analyzed}: ${result.yes} Yes, ${result.no} No`);
+      const reviewCount = result.results.filter((r) => r.lead === "review").length;
+      toast.success(
+        `AI checked ${result.analyzed}: ${result.yes} Yes, ${result.no} No${reviewCount ? `, ${reviewCount} Review` : ""}`,
+      );
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
