@@ -27,6 +27,9 @@ type RawLeadAiResult = {
   lead: LeadDecision;
 };
 
+const OPENAI_BATCH_SIZE = 10;
+const MAX_POST_TEXT_CHARS = 1500;
+
 type OpenAiResponse = {
   output_text?: string;
   output?: Array<{
@@ -79,6 +82,12 @@ function parseAiResults(text: string, rowKeys: string[]): RawLeadAiResult[] {
       row_key: rowKeys[Number(item.id) - 1],
       lead: item.lead,
     }));
+}
+
+function trimForAi(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length <= MAX_POST_TEXT_CHARS) return trimmed;
+  return `${trimmed.slice(0, MAX_POST_TEXT_CHARS)}...`;
 }
 
 async function classifyWithOpenAi({
@@ -180,14 +189,20 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
     if (leads.length === 0) throw new Error("No selected raw leads have post text to analyze");
 
     const systemPrompt = data.prompt?.trim() || FROZEN_LEAD_PROMPT;
-    const outputText = await classifyWithOpenAi({
-      systemPrompt,
-      leads: leads.map(({ id, account, area, postText }) => ({ id, account, area, postText })),
-    });
-    const results = parseAiResults(
-      outputText,
-      leads.map((lead) => lead.rowKey),
-    );
+    const results: RawLeadAiResult[] = [];
+    for (let i = 0; i < leads.length; i += OPENAI_BATCH_SIZE) {
+      const batch = leads.slice(i, i + OPENAI_BATCH_SIZE);
+      const outputText = await classifyWithOpenAi({
+        systemPrompt,
+        leads: batch.map(({ id, account, area, postText }) => ({
+          id,
+          account,
+          area,
+          postText: trimForAi(postText),
+        })),
+      });
+      results.push(...parseAiResults(outputText, batch.map((lead) => lead.rowKey)));
+    }
 
     if (results.length === 0) throw new Error("AI returned no usable lead decisions");
 
