@@ -364,7 +364,6 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   const [area, setArea] = useState("");
   const [number, setNumber] = useState("");
   const [zipcode, setZipcode] = useState("");
-  const [address, setAddress] = useState("");
   const [passItTo, setPassItTo] = useState("");
   const [context, setContext] = useState("");
   const [important, setImportant] = useState(false);
@@ -433,7 +432,6 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         service: isSubmitterRole ? service.trim() || null : null,
         main_area: area.trim() || null,
         zipcode: isFacebookRole ? zipcode.trim() || null : null,
-        address: isFacebookRole ? address.trim() || null : null,
         pass_it_to: isSubmitterRole ? null : passItTo.trim() || null,
         context: context.trim() || null,
         images: imageUrls,
@@ -511,25 +509,15 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
             />
           </div>
           {isFacebookRole && (
-            <>
-              <div>
-                <Label className="mb-1.5 block">Zipcode</Label>
-                <Input
-                  value={zipcode}
-                  onChange={(e) => setZipcode(e.target.value)}
-                  maxLength={20}
-                  inputMode="numeric"
-                />
-              </div>
-              <div>
-                <Label className="mb-1.5 block">Address</Label>
-                <Input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  maxLength={240}
-                />
-              </div>
-            </>
+            <div>
+              <Label className="mb-1.5 block">Zipcode</Label>
+              <Input
+                value={zipcode}
+                onChange={(e) => setZipcode(e.target.value)}
+                maxLength={20}
+                inputMode="numeric"
+              />
+            </div>
           )}
         </div>
       ) : (
