@@ -27,7 +27,7 @@ type RawLeadAiResult = {
   lead: LeadDecision;
 };
 
-const OPENAI_BATCH_SIZE = 10;
+const OPENAI_BATCH_SIZE = 50;
 const MAX_POST_TEXT_CHARS = 1500;
 
 type OpenAiResponse = {
