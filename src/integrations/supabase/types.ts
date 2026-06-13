@@ -571,6 +571,7 @@ export type Database = {
         | "no_response"
         | "undeliver"
         | "wrong_number"
+        | "wrong_lead"
         | "already_got_someone"
         | "service_provider_himself"
         | "need_follow_up"
@@ -732,6 +733,7 @@ export const Constants = {
         "no_response",
         "undeliver",
         "wrong_number",
+        "wrong_lead",
         "already_got_someone",
         "service_provider_himself",
         "need_follow_up",

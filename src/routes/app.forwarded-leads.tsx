@@ -19,7 +19,15 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/forwarded-leads")({ component: Page });
 
-type Outcome = "already_done" | "wrong_number" | "processed" | null;
+type ForwardedStatus =
+  | "new"
+  | "undeliver"
+  | "wrong_number"
+  | "wrong_lead"
+  | "already_got_someone"
+  | "service_provider_himself"
+  | "converted"
+  | "need_follow_up";
 
 type Row = {
   id: string;
@@ -27,24 +35,43 @@ type Row = {
   customer_number: string;
   main_area: string | null;
   sub_area: string | null;
-  cs_status: string;
-  cs_outcome: Outcome;
+  cs_status: ForwardedStatus | string;
   assigned_at: string;
   updated_at: string;
   created_by: string | null;
 };
 
-const OUTCOME_LABEL: Record<string, string> = {
-  already_done: "Already done",
+const STATUS_LABEL: Record<string, string> = {
+  new: "Pending",
+  undeliver: "Undeliver",
   wrong_number: "Wrong number",
-  processed: "Processed",
+  wrong_lead: "Wrong lead",
+  already_got_someone: "Already got someone",
+  service_provider_himself: "Service provider himself",
+  converted: "Processed",
+  need_follow_up: "Need follow-up",
 };
 
-const OUTCOME_TONE: Record<string, string> = {
-  already_done: "bg-warning/15 text-warning border-warning/30",
+const STATUS_TONE: Record<string, string> = {
+  new: "bg-muted text-muted-foreground border-border",
+  undeliver: "bg-destructive/15 text-destructive border-destructive/30",
   wrong_number: "bg-destructive/15 text-destructive border-destructive/30",
-  processed: "bg-success/15 text-success border-success/30",
+  wrong_lead: "bg-destructive/15 text-destructive border-destructive/30",
+  already_got_someone: "bg-destructive/15 text-destructive border-destructive/30",
+  service_provider_himself: "bg-destructive/15 text-destructive border-destructive/30",
+  converted: "bg-success/15 text-success border-success/30",
+  need_follow_up: "bg-warning/15 text-warning border-warning/30",
 };
+
+const OUTCOME_FILTERS = [
+  "undeliver",
+  "wrong_number",
+  "wrong_lead",
+  "already_got_someone",
+  "service_provider_himself",
+  "converted",
+  "need_follow_up",
+] as const;
 
 function Page() {
   const auth = useAuth();
@@ -68,9 +95,7 @@ function Inner() {
   const qc = useQueryClient();
   const isAdmin = auth.primaryRole === "admin";
   const [query, setQuery] = useState("");
-  const [outcomeFilter, setOutcomeFilter] = useState<"all" | "pending" | Exclude<Outcome, null>>(
-    "all",
-  );
+  const [outcomeFilter, setOutcomeFilter] = useState<"all" | "pending" | ForwardedStatus>("all");
 
   const todayStart = useMemo(() => {
     const d = new Date();
@@ -102,7 +127,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, main_area, sub_area, cs_status, cs_outcome, assigned_at, updated_at, created_by",
+          "id, customer_name, customer_number, main_area, sub_area, cs_status, assigned_at, updated_at, created_by",
         )
         .order("updated_at", { ascending: false })
         .limit(500);
@@ -114,8 +139,8 @@ function Inner() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (list.data ?? []).filter((r) => {
-      if (outcomeFilter === "pending" && r.cs_outcome) return false;
-      if (outcomeFilter !== "all" && outcomeFilter !== "pending" && r.cs_outcome !== outcomeFilter)
+      if (outcomeFilter === "pending" && r.cs_status !== "new") return false;
+      if (outcomeFilter !== "all" && outcomeFilter !== "pending" && r.cs_status !== outcomeFilter)
         return false;
       if (
         q &&
@@ -151,7 +176,7 @@ function Inner() {
             Pending outcome
           </div>
           <div className="text-2xl font-bold mt-1 tabular-nums">
-            {(list.data ?? []).filter((r) => !r.cs_outcome).length}
+            {(list.data ?? []).filter((r) => r.cs_status === "new").length}
           </div>
         </div>
       </div>
@@ -174,10 +199,12 @@ function Inner() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All outcomes</SelectItem>
-            <SelectItem value="pending">Pending (no outcome)</SelectItem>
-            <SelectItem value="already_done">Already done</SelectItem>
-            <SelectItem value="wrong_number">Wrong number</SelectItem>
-            <SelectItem value="processed">Processed</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            {OUTCOME_FILTERS.map((status) => (
+              <SelectItem key={status} value={status}>
+                {STATUS_LABEL[status]}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button
@@ -244,17 +271,17 @@ function Inner() {
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    {r.cs_outcome ? (
+                    {r.cs_status === "new" ? (
+                      <span className="text-muted-foreground italic">Pending</span>
+                    ) : (
                       <span
                         className={cn(
                           "text-[10.5px] px-2 py-0.5 rounded-full border font-medium",
-                          OUTCOME_TONE[r.cs_outcome],
+                          STATUS_TONE[r.cs_status] ?? "bg-muted text-muted-foreground border-border",
                         )}
                       >
-                        {OUTCOME_LABEL[r.cs_outcome]}
+                        {STATUS_LABEL[r.cs_status] ?? r.cs_status.replace(/_/g, " ")}
                       </span>
-                    ) : (
-                      <span className="text-muted-foreground italic">Pending</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground tabular-nums">
