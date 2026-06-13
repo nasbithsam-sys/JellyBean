@@ -112,6 +112,7 @@ function showBrowserNotification(title: string, body: string) {
 
 type Lead = {
   id: string;
+  address: string | null;
   customer_name: string;
   customer_number: string;
   context: string | null;
@@ -132,6 +133,7 @@ type Lead = {
   service: string | null;
   images: string[];
   submitted_by_role: string | null;
+  zipcode: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -246,7 +248,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important, service, images, submitted_by_role",
+          "id, address, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, cs_outcome, is_important, service, images, submitted_by_role, zipcode",
         )
         // Pin important / urgent jobs to the top, then most recent first.
         .order("is_important", { ascending: false })
@@ -391,9 +393,15 @@ function Inner() {
     return (list.data ?? []).filter((l) => {
       if (
         q &&
-        ![l.customer_name, l.customer_number, l.main_area, l.sub_area, l.pass_it_to].some((f) =>
-          f?.toLowerCase().includes(q),
-        )
+        ![
+          l.customer_name,
+          l.customer_number,
+          l.main_area,
+          l.sub_area,
+          l.pass_it_to,
+          l.zipcode,
+          l.address,
+        ].some((f) => f?.toLowerCase().includes(q))
       ) {
         return false;
       }
@@ -1023,9 +1031,7 @@ function LeadCard({
           <div className="min-w-0">
             <span className="text-muted-foreground">Main Area: </span>
             <span className="text-foreground/90 font-medium">{lead.main_area}</span>
-            {lead.sub_area && (
-              <span className="text-muted-foreground"> · {lead.sub_area}</span>
-            )}
+            {lead.sub_area && <span className="text-muted-foreground"> · {lead.sub_area}</span>}
           </div>
         </div>
       )}
@@ -1136,7 +1142,9 @@ function LeadCard({
 
       {/* Manual field filled by CS */}
       <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Number Name</Label>
+        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Number Name
+        </Label>
         <Input
           value={numberName}
           onChange={(e) => setNumberName(e.target.value)}
@@ -1385,6 +1393,8 @@ function LeadDrawer({
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
         </div>
         {lead.service && <Info label="Service" value={lead.service} />}
+        {lead.zipcode && <Info label="Zipcode" value={lead.zipcode} />}
+        {lead.address && <Info label="Address" value={lead.address} multiline />}
         {lead.submitted_by_role && (
           <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
         )}
