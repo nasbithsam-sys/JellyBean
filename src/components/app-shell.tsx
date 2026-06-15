@@ -64,8 +64,14 @@ const ADMIN_FULL: Item[] = [
   ...ADMIN.slice(3),
 ];
 
+const SUB_ADMIN: Item[] = ADMIN_FULL.filter(
+  (item) =>
+    item.to !== "/app/cs-leads" && item.to !== "/app/logs" && item.to !== "/app/settings",
+);
+
 function itemsForRole(role: AppRole | null): Item[] {
   if (role === "admin") return ADMIN_FULL;
+  if (role === "sub_admin") return SUB_ADMIN;
   if (role === "scraping") return SCRAPING;
   if (role === "processor") return PROCESSOR;
   if (role === "cs") return CS;
@@ -78,6 +84,11 @@ function initials(name?: string | null, email?: string | null) {
   const src = name?.trim() || email?.trim() || "?";
   const parts = src.split(/[\s.@]+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || src[0]!.toUpperCase();
+}
+
+function roleLabel(role: AppRole | null) {
+  if (role === "sub_admin") return "Sub-admin";
+  return role?.replace(/_/g, " ") ?? "no role";
 }
 
 export function AppShell({ auth, children }: { auth: AuthState; children: React.ReactNode }) {
@@ -153,7 +164,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
               <div className="text-[13px] font-semibold truncate text-foreground">{displayName}</div>
               <div className="text-[11px] text-muted-foreground capitalize flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                {auth.primaryRole ?? "no role"}
+                {roleLabel(auth.primaryRole)}
               </div>
             </div>
             <button

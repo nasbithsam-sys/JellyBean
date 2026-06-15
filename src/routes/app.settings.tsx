@@ -111,6 +111,12 @@ type UserRow = {
   role: string | null;
 };
 
+function roleLabel(role: string | null) {
+  if (!role) return "-";
+  if (role === "sub_admin") return "Sub-admin";
+  return role.replace(/_/g, " ");
+}
+
 function UsersTab() {
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -255,7 +261,7 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
       <td className="font-medium">{user.full_name || "-"}</td>
       <td className="font-mono text-xs">{user.username ?? "-"}</td>
       <td>{user.email}</td>
-      <td className="capitalize">{user.role ?? "-"}</td>
+      <td className="capitalize">{roleLabel(user.role)}</td>
       <td>
         <span className={user.is_active ? "text-success" : "text-muted-foreground"}>
           {user.is_active ? "Active" : "Inactive"}
@@ -296,6 +302,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     password: "",
     role: "scraping" as
       | "admin"
+      | "sub_admin"
       | "scraping"
       | "processor"
       | "cs"
@@ -361,6 +368,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="sub_admin">Sub-admin</SelectItem>
                 <SelectItem value="scraping">Scraping</SelectItem>
                 <SelectItem value="processor">Processor</SelectItem>
                 <SelectItem value="cs">CS</SelectItem>

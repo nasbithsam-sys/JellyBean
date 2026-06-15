@@ -6,6 +6,7 @@ import type { Database } from "@/integrations/supabase/types";
 
 const roleSchema = z.enum([
   "admin",
+  "sub_admin",
   "scraping",
   "processor",
   "cs",

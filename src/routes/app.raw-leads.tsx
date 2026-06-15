@@ -228,7 +228,7 @@ function Page() {
         description="Live feed from your scraper extension. Stored in Supabase — shared across all your devices."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "processor", "acc_handler"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "sub_admin", "processor", "acc_handler"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
@@ -256,7 +256,7 @@ function Inner() {
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_LEAD_PROMPT);
   const [promptDirty, setPromptDirty] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
-  const isAdmin = auth.primaryRole === "admin";
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
 
   const promptQuery = useQuery({
     queryKey: ["lead-ai-prompt"],
@@ -325,7 +325,10 @@ function Inner() {
 
   const currentUserId = auth.user?.id ?? null;
   const currentUserName = auth.profile?.full_name || auth.user?.email || null;
-  const canRunAi = auth.primaryRole === "admin" || auth.primaryRole === "processor";
+  const canRunAi =
+    auth.primaryRole === "admin" ||
+    auth.primaryRole === "sub_admin" ||
+    auth.primaryRole === "processor";
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({

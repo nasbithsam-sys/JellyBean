@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const ALLOWED_RAW_LEAD_ROLES = ["admin", "processor", "acc_handler"] as const;
+const ALLOWED_RAW_LEAD_ROLES = ["admin", "sub_admin", "processor", "acc_handler"] as const;
 
 type RawLeadRole = (typeof ALLOWED_RAW_LEAD_ROLES)[number];
 
@@ -57,7 +57,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     );
     if (!hasAllowedRole) throw new Error("Forbidden: raw leads access required");
 
-    const isAdmin = roles.includes("admin");
+    const isAdmin = roles.includes("admin") || roles.includes("sub_admin");
     const columns = "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to";
 
     const buildQuery = () => {
