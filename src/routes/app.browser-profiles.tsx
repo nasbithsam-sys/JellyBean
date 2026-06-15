@@ -16,7 +16,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Download, Rocket, Trash2, Search, Globe, Plus, Info, Upload } from "lucide-react";
+import {
+  Loader2,
+  Download,
+  Rocket,
+  Trash2,
+  Search,
+  Globe,
+  Plus,
+  Info,
+  Upload,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
@@ -57,6 +70,77 @@ type Profile = {
   launch_history: LaunchHistoryEntry[] | null;
 };
 
+type SortDirection = "asc" | "desc";
+type ProfileSortKey =
+  | "profile_name"
+  | "profile_id"
+  | "group"
+  | "account_area"
+  | "geo"
+  | "added_date"
+  | "last_launched";
+type ProfileSort = { key: ProfileSortKey; direction: SortDirection };
+
+function compareText(a: string, b: string) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function profileSortValue(profile: Profile, key: ProfileSortKey) {
+  switch (key) {
+    case "profile_name":
+      return profile.profile_name;
+    case "profile_id":
+      return profile.incogniton_profile_id;
+    case "group":
+      return profile.group_name ?? "";
+    case "account_area":
+      return profile.account_area ?? "";
+    case "geo":
+      return profile.latitude != null && profile.longitude != null
+        ? `${profile.latitude.toFixed(6)},${profile.longitude.toFixed(6)}`
+        : "";
+    case "added_date":
+      return new Date(profile.created_at).getTime() || 0;
+    case "last_launched":
+      return profile.last_launched_at ? new Date(profile.last_launched_at).getTime() || 0 : 0;
+  }
+}
+
+function compareProfiles(a: Profile, b: Profile, sort: ProfileSort) {
+  const av = profileSortValue(a, sort.key);
+  const bv = profileSortValue(b, sort.key);
+  const result =
+    typeof av === "number" && typeof bv === "number"
+      ? av - bv
+      : compareText(String(av), String(bv));
+  return sort.direction === "asc" ? result : -result;
+}
+
+function SortHeader({
+  label,
+  active,
+  direction,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  direction: SortDirection;
+  onClick: () => void;
+}) {
+  const Icon = !active ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex w-full items-center justify-between gap-1 text-left font-medium text-muted-foreground hover:text-foreground"
+      title={`Sort by ${label}`}
+    >
+      <span>{label}</span>
+      <Icon className="h-3 w-3 shrink-0" />
+    </button>
+  );
+}
+
 function Page() {
   const auth = useAuth();
   return (
@@ -82,6 +166,10 @@ function Inner() {
   const auth = useAuth();
   const [query, setQuery] = useState("");
   const [addedDateFilter, setAddedDateFilter] = useState("");
+  const [profileSort, setProfileSort] = useState<ProfileSort>({
+    key: "added_date",
+    direction: "desc",
+  });
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -113,7 +201,7 @@ function Inner() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (profiles.data ?? []).filter((p) => {
+    const list = (profiles.data ?? []).filter((p) => {
       if (addedDateFilter && dateKey(p.created_at) !== addedDateFilter) return false;
       if (!q) return true;
       return (
@@ -122,7 +210,16 @@ function Inner() {
         (p.account_area ?? "").toLowerCase().includes(q)
       );
     });
-  }, [addedDateFilter, profiles.data, query]);
+    return [...list].sort((a, b) => compareProfiles(a, b, profileSort));
+  }, [addedDateFilter, profileSort, profiles.data, query]);
+
+  const toggleProfileSort = (key: ProfileSortKey) => {
+    setProfileSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { key, direction: key === "added_date" || key === "last_launched" ? "desc" : "asc" },
+    );
+  };
 
   useEffect(() => {
     const validIds = new Set((profiles.data ?? []).map((profile) => profile.id));
@@ -316,13 +413,62 @@ function Inner() {
                   onCheckedChange={(checked) => toggleAllFiltered(checked === true)}
                 />
               </th>
-              <th>Profile Name</th>
-              <th>Profile ID</th>
-              <th>Group</th>
-              <th>Account Area</th>
-              <th>Geo</th>
-              <th>Added Date</th>
-              <th>Last Launched</th>
+              <th>
+                <SortHeader
+                  label="Profile Name"
+                  active={profileSort.key === "profile_name"}
+                  direction={profileSort.direction}
+                  onClick={() => toggleProfileSort("profile_name")}
+                />
+              </th>
+              <th>
+                <SortHeader
+                  label="Profile ID"
+                  active={profileSort.key === "profile_id"}
+                  direction={profileSort.direction}
+                  onClick={() => toggleProfileSort("profile_id")}
+                />
+              </th>
+              <th>
+                <SortHeader
+                  label="Group"
+                  active={profileSort.key === "group"}
+                  direction={profileSort.direction}
+                  onClick={() => toggleProfileSort("group")}
+                />
+              </th>
+              <th>
+                <SortHeader
+                  label="Account Area"
+                  active={profileSort.key === "account_area"}
+                  direction={profileSort.direction}
+                  onClick={() => toggleProfileSort("account_area")}
+                />
+              </th>
+              <th>
+                <SortHeader
+                  label="Geo"
+                  active={profileSort.key === "geo"}
+                  direction={profileSort.direction}
+                  onClick={() => toggleProfileSort("geo")}
+                />
+              </th>
+              <th>
+                <SortHeader
+                  label="Added Date"
+                  active={profileSort.key === "added_date"}
+                  direction={profileSort.direction}
+                  onClick={() => toggleProfileSort("added_date")}
+                />
+              </th>
+              <th>
+                <SortHeader
+                  label="Last Launched"
+                  active={profileSort.key === "last_launched"}
+                  direction={profileSort.direction}
+                  onClick={() => toggleProfileSort("last_launched")}
+                />
+              </th>
               <th className="text-right">Actions</th>
             </tr>
           </thead>
@@ -984,7 +1130,6 @@ function ImportDialog({
   );
 }
 
-
 function ExportDialog({
   open,
   profiles,
@@ -1070,7 +1215,6 @@ function ExportDialog({
     </Dialog>
   );
 }
-
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

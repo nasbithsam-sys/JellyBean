@@ -47,6 +47,9 @@ import {
   Copy,
   Sparkles,
   Trash2,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -104,6 +107,21 @@ type RawLeadPage = {
   hasMore: boolean;
 };
 const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
+type SortDirection = "asc" | "desc";
+type RawLeadSortKey =
+  | "row"
+  | "account_name"
+  | "sub_area"
+  | "posted_at"
+  | "post_text"
+  | "lead"
+  | "lead_link"
+  | "captured_date"
+  | "captured_time"
+  | "account_area"
+  | "incog_account"
+  | "assignment";
+type RawLeadSort = { key: RawLeadSortKey; direction: SortDirection };
 
 const AI_LOCK_KEY = "raw_leads.ai_lock";
 const AI_LOCK_MAX_AGE_MS = 5 * 60 * 1000;
@@ -122,6 +140,21 @@ const RAW_LEAD_COLUMNS = [
   "Incog Account",
 ] as const;
 
+type RawLeadColumn = (typeof RAW_LEAD_COLUMNS)[number];
+
+const RAW_LEAD_SORT_BY_COLUMN: Record<RawLeadColumn, RawLeadSortKey> = {
+  "Account Name": "account_name",
+  "Sub Area / Neighborhood": "sub_area",
+  "Posted Date & Time": "posted_at",
+  "Post Text": "post_text",
+  Lead: "lead",
+  "Lead Link": "lead_link",
+  "Captured Date (UTC)": "captured_date",
+  "Captured Time (UTC)": "captured_time",
+  "Account Area": "account_area",
+  "Incog Account": "incog_account",
+};
+
 // ── Row helpers ───────────────────────────────────────────────────────────────
 function keyFor(r: Row) {
   return (
@@ -135,6 +168,94 @@ function parseCapturedAt(r: Row): number {
   if (!d) return 0;
   const t = Date.parse(d);
   return Number.isNaN(t) ? 0 : t;
+}
+
+function parseDateTime(value?: string | null, time?: string | null): number {
+  const joined = [value, time].filter(Boolean).join(" ");
+  if (!joined.trim()) return 0;
+  const parsed = Date.parse(joined);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function compareText(a: string, b: string) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function rawLeadSortValue(
+  entry: CacheEntry,
+  key: RawLeadSortKey,
+  actions: Record<string, Action>,
+  currentUserId: string | null,
+) {
+  const r = entry.data;
+  switch (key) {
+    case "row":
+      return entry.sheet_row ?? 0;
+    case "account_name":
+      return r["Account Name"] ?? "";
+    case "sub_area":
+      return r["Sub Area / Neighborhood"] ?? "";
+    case "posted_at":
+      return parseDateTime(r["Posted Date & Time"]);
+    case "post_text":
+      return r["Post Text"] ?? "";
+    case "lead":
+      return effectiveLead(r, actions[entry.row_key]) || "";
+    case "lead_link":
+      return r["Lead Link"] ?? "";
+    case "captured_date":
+      return parseDateTime(r["Captured Date (UTC)"], r["Captured Time (UTC)"]);
+    case "captured_time":
+      return r["Captured Time (UTC)"] ?? "";
+    case "account_area":
+      return r["Account Area"] ?? "";
+    case "incog_account":
+      return r["Incog Account"] ?? "";
+    case "assignment":
+      if (!entry.assigned_to) return "unassigned";
+      return entry.assigned_to === currentUserId ? "assigned to you" : "claimed";
+  }
+}
+
+function compareRawLeadEntries(
+  a: CacheEntry,
+  b: CacheEntry,
+  sort: RawLeadSort,
+  actions: Record<string, Action>,
+  currentUserId: string | null,
+) {
+  const av = rawLeadSortValue(a, sort.key, actions, currentUserId);
+  const bv = rawLeadSortValue(b, sort.key, actions, currentUserId);
+  const result =
+    typeof av === "number" && typeof bv === "number"
+      ? av - bv
+      : compareText(String(av), String(bv));
+  return sort.direction === "asc" ? result : -result;
+}
+
+function SortHeader({
+  label,
+  active,
+  direction,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  direction: SortDirection;
+  onClick: () => void;
+}) {
+  const Icon = !active ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex w-full items-center justify-between gap-1 text-left font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+      title={`Sort by ${label}`}
+    >
+      <span>{label}</span>
+      <Icon className="h-3 w-3 shrink-0" />
+    </button>
+  );
 }
 
 function capturedIsoFromRow(r: Row): string | null {
@@ -161,7 +282,8 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "review" |
 
 // ── Supabase cache helpers ────────────────────────────────────────────────────
 async function loadCache(limit: number): Promise<CacheEntry[]> {
-  const columns = "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to";
+  const columns =
+    "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to";
 
   const { data, error } = await supabase
     .from(TABLE)
@@ -228,7 +350,10 @@ function Page() {
         description="Live feed from your scraper extension. Stored in Supabase — shared across all your devices."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "sub_admin", "processor", "acc_handler"]} current={auth.primaryRole}>
+        <RoleGate
+          allow={["admin", "sub_admin", "processor", "acc_handler"]}
+          current={auth.primaryRole}
+        >
           <Inner />
         </RoleGate>
       </PageBody>
@@ -250,6 +375,10 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [leadFilter, setLeadFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [rawLeadSort, setRawLeadSort] = useState<RawLeadSort>({
+    key: "posted_at",
+    direction: "desc",
+  });
   const [pageIndex, setPageIndex] = useState(0);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
@@ -284,17 +413,15 @@ function Inner() {
     if (!isAdmin) return;
     setSavingPrompt(true);
     try {
-      const { error } = await supabase
-        .from("shared_state")
-        .upsert(
-          {
-            key: "lead_ai_prompt",
-            value: { text: aiPrompt } as never,
-            updated_by: currentUserId,
-            updated_at: new Date().toISOString(),
-          } as never,
-          { onConflict: "key" },
-        );
+      const { error } = await supabase.from("shared_state").upsert(
+        {
+          key: "lead_ai_prompt",
+          value: { text: aiPrompt } as never,
+          updated_by: currentUserId,
+          updated_at: new Date().toISOString(),
+        } as never,
+        { onConflict: "key" },
+      );
       if (error) throw error;
       setPromptDirty(false);
       toast.success("Prompt saved for all users");
@@ -311,6 +438,14 @@ function Inner() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const toggleRawLeadSort = useCallback((key: RawLeadSortKey) => {
+    setRawLeadSort((current) =>
+      current.key === key
+        ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { key, direction: key === "posted_at" ? "desc" : "asc" },
+    );
+  }, []);
+
   const toggleSelect = useCallback((key: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -319,9 +454,6 @@ function Inner() {
       return next;
     });
   }, []);
-
-
-
 
   const currentUserId = auth.user?.id ?? null;
   const currentUserName = auth.profile?.full_name || auth.user?.email || null;
@@ -401,8 +533,7 @@ function Inner() {
   });
   const aiLock = aiLockQuery.data ?? null;
   const aiLockActive =
-    !!aiLock?.started_at &&
-    Date.now() - new Date(aiLock.started_at).getTime() < AI_LOCK_MAX_AGE_MS;
+    !!aiLock?.started_at && Date.now() - new Date(aiLock.started_at).getTime() < AI_LOCK_MAX_AGE_MS;
   const aiLockedByOther = aiLockActive && aiLock?.user_id !== currentUserId;
 
   // Build action map keyed by row_key for fast lookup
@@ -482,8 +613,10 @@ function Inner() {
           e.data["Account Area"] === areaFilter || e.data["Sub Area / Neighborhood"] === areaFilter,
       );
     }
-    return list;
-  }, [actions, areaFilter, buckets, leadFilter, query, tab]);
+    return [...list].sort((a, b) =>
+      compareRawLeadEntries(a, b, rawLeadSort, actions, currentUserId),
+    );
+  }, [actions, areaFilter, buckets, currentUserId, leadFilter, query, rawLeadSort, tab]);
 
   const shownRows = visible;
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
@@ -571,7 +704,11 @@ function Inner() {
     setAiRunning(true);
     try {
       await writeAiLock(
-        { user_id: currentUserId!, user_name: currentUserName, started_at: new Date().toISOString() },
+        {
+          user_id: currentUserId!,
+          user_name: currentUserName,
+          started_at: new Date().toISOString(),
+        },
         currentUserId,
       );
       qc.invalidateQueries({ queryKey: ["raw-leads-ai-lock"] });
@@ -706,9 +843,7 @@ function Inner() {
               }
               const keys = targets.map((e) => e.row_key);
               const keySet = new Set(keys);
-              updateCachedEntries((e) =>
-                keySet.has(e.row_key) ? { ...e, category: "wrong" } : e,
-              );
+              updateCachedEntries((e) => (keySet.has(e.row_key) ? { ...e, category: "wrong" } : e));
               try {
                 // row_keys are full Nextdoor URLs — batch to avoid
                 // exceeding the request URL length limit (which surfaces
@@ -770,12 +905,7 @@ function Inner() {
       {isAdmin && selected.size > 0 && (
         <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-[12.5px]">
           <span className="font-medium">{selected.size} selected</span>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7"
-            onClick={() => setSelected(new Set())}
-          >
+          <Button size="sm" variant="ghost" className="h-7" onClick={() => setSelected(new Set())}>
             Clear
           </Button>
           <Button
@@ -790,7 +920,6 @@ function Inner() {
           </Button>
         </div>
       )}
-
 
       {canRunAi && (
         <div className="space-y-1">
@@ -823,9 +952,7 @@ function Inner() {
                     onClick={savePrompt}
                     disabled={!promptDirty || savingPrompt}
                   >
-                    {savingPrompt ? (
-                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                    ) : null}
+                    {savingPrompt ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
                     {promptDirty ? "Save prompt" : "Saved"}
                   </Button>
                 )}
@@ -900,8 +1027,7 @@ function Inner() {
                 <th className="border-b border-border px-2 py-2">
                   <Checkbox
                     checked={
-                      shownRows.length > 0 &&
-                      shownRows.every((row) => selected.has(row.row_key))
+                      shownRows.length > 0 && shownRows.every((row) => selected.has(row.row_key))
                     }
                     onCheckedChange={(checked) => {
                       setSelected((prev) => {
@@ -918,18 +1044,33 @@ function Inner() {
                   />
                 </th>
                 <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
-                  Row #
+                  <SortHeader
+                    label="Row #"
+                    active={rawLeadSort.key === "row"}
+                    direction={rawLeadSort.direction}
+                    onClick={() => toggleRawLeadSort("row")}
+                  />
                 </th>
                 {RAW_LEAD_COLUMNS.map((h) => (
                   <th
                     key={h}
                     className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight"
                   >
-                    {h}
+                    <SortHeader
+                      label={h}
+                      active={rawLeadSort.key === RAW_LEAD_SORT_BY_COLUMN[h]}
+                      direction={rawLeadSort.direction}
+                      onClick={() => toggleRawLeadSort(RAW_LEAD_SORT_BY_COLUMN[h])}
+                    />
                   </th>
                 ))}
                 <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
-                  Assignment
+                  <SortHeader
+                    label="Assignment"
+                    active={rawLeadSort.key === "assignment"}
+                    direction={rawLeadSort.direction}
+                    onClick={() => toggleRawLeadSort("assignment")}
+                  />
                 </th>
                 <th className="border-b border-border px-2 py-2" />
               </tr>
@@ -950,8 +1091,7 @@ function Inner() {
                 const a = actions[k] || {};
                 const lv = effectiveLead(r, a);
                 const mine = !!currentUserId && e.assigned_to === currentUserId;
-                const claimedByOther =
-                  !!e.assigned_to && e.assigned_to !== currentUserId;
+                const claimedByOther = !!e.assigned_to && e.assigned_to !== currentUserId;
                 const isSelected = selected.has(k);
                 return (
                   <tr
@@ -1012,7 +1152,9 @@ function Inner() {
                     >
                       <Select
                         value={lv || ""}
-                        onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" | "review" })}
+                        onValueChange={(v) =>
+                          updateAction(k, { lead: v as "yes" | "no" | "review" })
+                        }
                       >
                         <SelectTrigger
                           className={cn(
@@ -1020,8 +1162,7 @@ function Inner() {
                             lv === "yes" && "bg-success/15 text-success border-success/30",
                             lv === "no" &&
                               "bg-destructive/15 text-destructive border-destructive/30",
-                            lv === "review" &&
-                              "bg-warning/15 text-warning border-warning/30",
+                            lv === "review" && "bg-warning/15 text-warning border-warning/30",
                           )}
                         >
                           <SelectValue placeholder="—" />
@@ -1178,10 +1319,9 @@ function Inner() {
               </Button>
             </div>
             <p className="text-muted-foreground">
-              Raw Leads uses database pagination for this table, which keeps Supabase usage
-              lighter. Use Refresh or the pagination controls to pull accepted rows from the
-              database. Duplicate Nextdoor post IDs or links are reported back to the extension as
-              skipped.
+              Raw Leads uses database pagination for this table, which keeps Supabase usage lighter.
+              Use Refresh or the pagination controls to pull accepted rows from the database.
+              Duplicate Nextdoor post IDs or links are reported back to the extension as skipped.
             </p>
           </div>
           <DialogFooter>
@@ -1233,7 +1373,9 @@ function Inner() {
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {selected.size} raw lead{selected.size === 1 ? "" : "s"}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete {selected.size} raw lead{selected.size === 1 ? "" : "s"}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               This permanently removes the selected leads from the database. This cannot be undone.
             </AlertDialogDescription>
@@ -1255,7 +1397,6 @@ function Inner() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-
   );
 }
 
@@ -1526,9 +1667,7 @@ function QualifyDialog({
                 className="mt-0.5 h-4 w-4 accent-warning cursor-pointer"
               />
               <div className="text-[12.5px]">
-                <div className="font-medium text-foreground">
-                  Mark as important / urgent job
-                </div>
+                <div className="font-medium text-foreground">Mark as important / urgent job</div>
                 <div className="text-[11.5px] text-muted-foreground">
                   Pins this lead to the top of the CS pipeline so it gets called first.
                 </div>

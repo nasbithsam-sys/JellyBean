@@ -135,6 +135,7 @@ type Lead = {
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
 const PIPELINE_STATUSES = [
+  "new",
   "undeliver",
   "wrong_number",
   "wrong_lead",
@@ -163,7 +164,7 @@ function Page() {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  new: "New (to contact)",
+  new: "New to contact",
   undeliver: "Undeliver",
   wrong_number: "Wrong Number",
   wrong_lead: "Wrong Lead",
@@ -392,13 +393,9 @@ function Inner() {
     return (list.data ?? []).filter((l) => {
       if (
         q &&
-        ![
-          l.customer_name,
-          l.customer_number,
-          l.main_area,
-          l.sub_area,
-          l.pass_it_to,
-        ].some((f) => f?.toLowerCase().includes(q))
+        ![l.customer_name, l.customer_number, l.main_area, l.sub_area, l.pass_it_to].some((f) =>
+          f?.toLowerCase().includes(q),
+        )
       ) {
         return false;
       }

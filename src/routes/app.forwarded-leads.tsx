@@ -42,7 +42,7 @@ type Row = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  new: "Pending",
+  new: "New to contact",
   undeliver: "Undeliver",
   wrong_number: "Wrong number",
   wrong_lead: "Wrong lead",
@@ -53,7 +53,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_TONE: Record<string, string> = {
-  new: "bg-muted text-muted-foreground border-border",
+  new: "bg-primary/15 text-primary border-primary/30",
   undeliver: "bg-destructive/15 text-destructive border-destructive/30",
   wrong_number: "bg-destructive/15 text-destructive border-destructive/30",
   wrong_lead: "bg-destructive/15 text-destructive border-destructive/30",
@@ -277,7 +277,8 @@ function Inner() {
                       <span
                         className={cn(
                           "text-[10.5px] px-2 py-0.5 rounded-full border font-medium",
-                          STATUS_TONE[r.cs_status] ?? "bg-muted text-muted-foreground border-border",
+                          STATUS_TONE[r.cs_status] ??
+                            "bg-muted text-muted-foreground border-border",
                         )}
                       >
                         {STATUS_LABEL[r.cs_status] ?? r.cs_status.replace(/_/g, " ")}
