@@ -575,6 +575,7 @@ export type Database = {
         | "already_got_someone"
         | "service_provider_himself"
         | "need_follow_up"
+        | "wrong_lead"
       raw_lead_cancel_reason:
         | "not_a_lead"
         | "general_post"
@@ -737,6 +738,7 @@ export const Constants = {
         "already_got_someone",
         "service_provider_himself",
         "need_follow_up",
+        "wrong_lead",
       ],
       raw_lead_cancel_reason: [
         "not_a_lead",

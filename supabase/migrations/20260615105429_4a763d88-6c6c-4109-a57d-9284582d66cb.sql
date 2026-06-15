@@ -1,0 +1,1 @@
+ALTER TYPE public.cs_status ADD VALUE IF NOT EXISTS 'wrong_lead';
