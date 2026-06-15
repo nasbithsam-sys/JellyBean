@@ -73,10 +73,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
         // "New" = uncategorized AND unclassified. Once AI/user marks a lead
         // yes/no it leaves the New tab even if no category was assigned yet,
         // so previously processed leads don't reappear here.
-        const qNew = q as typeof q & {
-          is: (column: string, value: null) => typeof q;
-        };
-        return qNew.is("category", null).is("lead", null);
+        return (q.is("category", null) as typeof q).is("lead", null);
       }
       return q.eq("category", category);
     };
