@@ -9,14 +9,10 @@ import {
   Settings,
   Headphones,
   LogOut,
-  Command,
   Globe,
-  Sun,
-  Moon,
   ShieldCheck,
   Send,
 } from "lucide-react";
-import { useTheme } from "@/hooks/use-theme";
 import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -88,46 +84,25 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   const path = useRouterState({ select: (s) => s.location.pathname });
   const items = itemsForRole(auth.primaryRole);
   const displayName = auth.profile?.full_name || auth.user?.email || "-";
-  const { theme, toggle: toggleTheme } = useTheme();
   useRealtimeSync(auth.primaryRole);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <aside className="w-[248px] shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col h-screen">
-
-        <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-sm border border-sidebar-border bg-sidebar-accent grid place-items-center">
-              <span className="text-[12px] font-mono font-semibold text-primary">LG</span>
+      <aside className="w-[264px] shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col h-screen">
+        <div className="px-5 pt-5 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground shadow-sm grid place-items-center">
+              <span className="text-[13px] font-semibold">LG</span>
             </div>
             <div className="leading-tight">
-              <div className="text-[13px] font-semibold tracking-normal text-foreground">
-                Leadgrid
-              </div>
-              <div className="text-[10px] uppercase tracking-[0.16em] text-sidebar-foreground/55 font-mono">
-                Field Ops
-              </div>
+              <div className="text-[15px] font-semibold tracking-tight text-foreground">Leadgrid</div>
+              <div className="text-[12px] text-muted-foreground">CRM workspace</div>
             </div>
           </div>
         </div>
 
-        <div className="px-3 py-3">
-          <div className="flex items-center gap-2 px-2.5 h-8 rounded-sm bg-sidebar-accent/70 border border-sidebar-border text-[11.5px] text-sidebar-foreground/70 cursor-default select-none">
-            <Command className="h-3.5 w-3.5" />
-            <span className="font-mono uppercase tracking-wide">Console</span>
-            <span className="ml-auto inline-flex items-center gap-0.5">
-              <kbd className="px-1.5 py-0.5 rounded-sm bg-background/40 border border-sidebar-border text-[10px]">
-                Ctrl
-              </kbd>
-              <kbd className="px-1.5 py-0.5 rounded-sm bg-background/40 border border-sidebar-border text-[10px]">
-                K
-              </kbd>
-            </span>
-          </div>
-        </div>
-
-        <nav className="flex-1 min-h-0 px-2 py-2 space-y-1 overflow-y-auto">
-          <div className="px-2 pb-1 text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/45 font-medium">
+        <nav className="flex-1 min-h-0 px-3 py-2 space-y-1 overflow-y-auto">
+          <div className="px-3 pb-2 text-[11px] uppercase tracking-[0.12em] text-muted-foreground font-medium">
             Workspace
           </div>
           {items.map((item) => {
@@ -139,26 +114,28 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  "group relative flex items-center gap-2.5 px-2.5 py-2 rounded-sm text-[13px] font-medium transition-all border border-transparent",
+                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-medium transition-all",
                   active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border"
-                    : "text-sidebar-foreground/75 hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground hover:border-sidebar-border",
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
                 )}
               >
-                {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] bg-primary" />
-                )}
                 <Icon
                   className={cn(
-                    "h-[15px] w-[15px] transition-colors",
-                    active
-                      ? "text-primary"
-                      : "text-sidebar-foreground/55 group-hover:text-sidebar-foreground",
+                    "h-[17px] w-[17px] transition-colors",
+                    active ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground",
                   )}
                 />
                 <span className="flex-1 truncate">{item.label}</span>
                 {item.shortcut && (
-                  <kbd className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] px-1.5 py-0.5 rounded-sm bg-sidebar-border/70 text-sidebar-foreground/60">
+                  <kbd
+                    className={cn(
+                      "opacity-0 group-hover:opacity-100 transition-opacity text-[10px] px-1.5 py-0.5 rounded-md",
+                      active
+                        ? "bg-white/18 text-primary-foreground"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
                     {item.shortcut}
                   </kbd>
                 )}
@@ -167,40 +144,31 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           })}
         </nav>
 
-        <div className="border-t border-sidebar-border p-3">
-          <div className="flex items-center gap-2.5 px-2 py-2 rounded-sm bg-sidebar-accent/35 hover:bg-sidebar-accent/55 transition-colors border border-sidebar-border/60">
-            <div className="h-8 w-8 rounded-sm bg-secondary grid place-items-center text-[12px] font-semibold ring-1 ring-sidebar-border">
+        <div className="border-t border-sidebar-border p-4">
+          <div className="flex items-center gap-3 rounded-2xl bg-card border border-border p-3 shadow-sm">
+            <div className="h-9 w-9 rounded-full bg-secondary grid place-items-center text-[12px] font-semibold text-secondary-foreground">
               {initials(auth.profile?.full_name, auth.user?.email)}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] font-medium truncate">{displayName}</div>
-              <div className="text-[10.5px] text-sidebar-foreground/55 capitalize flex items-center gap-1">
-                <span className="h-1.5 w-1.5 bg-success animate-pulse-glow" />
+              <div className="text-[13px] font-semibold truncate text-foreground">{displayName}</div>
+              <div className="text-[11px] text-muted-foreground capitalize flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-success" />
                 {auth.primaryRole ?? "no role"}
               </div>
             </div>
             <button
-              onClick={toggleTheme}
-              title={theme === "dark" ? "Switch to light" : "Switch to dark"}
-              className="h-7 w-7 grid place-items-center rounded-sm text-sidebar-foreground/60 hover:text-foreground hover:bg-sidebar-accent transition-colors"
-            >
-              {theme === "dark" ? (
-                <Sun className="h-3.5 w-3.5" />
-              ) : (
-                <Moon className="h-3.5 w-3.5" />
-              )}
-            </button>
-            <button
               onClick={() => void auth.signOut()}
               title="Sign out"
-              className="h-7 w-7 grid place-items-center rounded-sm text-sidebar-foreground/60 hover:text-foreground hover:bg-sidebar-accent transition-colors"
+              className="h-8 w-8 grid place-items-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
       </aside>
-      <main className="flex-1 min-w-0 h-screen overflow-y-auto overflow-x-hidden">{children}</main>
+      <main className="flex-1 min-w-0 h-screen overflow-y-auto overflow-x-hidden bg-background">
+        {children}
+      </main>
     </div>
   );
 }

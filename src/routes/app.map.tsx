@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Switch } from "@/components/ui/switch";
@@ -58,6 +59,7 @@ function Inner() {
   const [radiusMode, setRadiusMode] = useState<MapRadiusMode>("daily");
   const [LeafletMap, setLeafletMap] = useState<LeafletMapComp | null>(null);
   const [tempPin, setTempPin] = useState<{ lat: number; lng: number } | null>(null);
+  const coverageScrollerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const visualsValue = localStorage.getItem("map.visuals");
@@ -135,6 +137,11 @@ function Inner() {
   const coveredToday = placed.filter((profile) => profile.launched_today).length;
   const missingToday = placed.length - coveredToday;
   const fullRadiusCount = radiusMode === "all" ? placed.length : coveredToday;
+  const scrollCoverage = (direction: -1 | 1) => {
+    const node = coverageScrollerRef.current;
+    if (!node) return;
+    node.scrollBy({ left: direction * Math.round(node.clientWidth * 0.78), behavior: "smooth" });
+  };
 
   return (
     <div className="grid lg:grid-cols-5 gap-4">
@@ -225,32 +232,85 @@ function Inner() {
       </div>
 
       <div className="lg:col-span-2 glass-card p-5">
-        <h3 className="text-sm font-semibold tracking-tight mb-4">Coverage by area</h3>
-        <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-sm font-semibold tracking-tight">Coverage by area</h3>
+            <p className="text-[11.5px] text-muted-foreground mt-0.5">
+              Swipe or use arrows to move through areas.
+            </p>
+          </div>
+          {coverage.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => scrollCoverage(-1)}
+                className="h-8 w-8 grid place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground hover:bg-accent transition-colors"
+                aria-label="Scroll coverage areas left"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollCoverage(1)}
+                className="h-8 w-8 grid place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground hover:bg-accent transition-colors"
+                aria-label="Scroll coverage areas right"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2 mb-5">
           <Stat label="Covered" value={coveredToday} />
           <Stat label="Missing" value={missingToday} />
         </div>
         {coverage.length === 0 ? (
           <div className="text-sm text-muted-foreground">No pinned profiles.</div>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-3">
+          <div
+            ref={coverageScrollerRef}
+            className="-mx-1 flex gap-3 overflow-x-auto scroll-smooth px-1 pb-2 [scrollbar-width:thin] snap-x snap-mandatory"
+          >
             {coverage.map(([area, counts]) => {
               const covered = counts.covered > 0;
+              const percent = counts.total > 0 ? Math.round((counts.covered / counts.total) * 100) : 0;
               return (
-                <div key={area}>
-                  <div className="flex items-center justify-between text-[12.5px] mb-1 gap-2">
-                    <span className="truncate">{area}</span>
-                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                      {counts.launches} {counts.launches === 1 ? "launch" : "launches"}
+                <div
+                  key={area}
+                  className="min-w-[210px] max-w-[210px] snap-start rounded-2xl border border-border bg-card p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-foreground" title={area}>
+                        {area}
+                      </div>
+                      <div className="mt-1 text-[11.5px] text-muted-foreground">
+                        {counts.covered}/{counts.total} profiles covered
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold",
+                        covered
+                          ? "bg-primary/10 text-primary"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {percent}%
                     </span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-surface overflow-hidden">
+                  <div className="mt-4 h-2 rounded-full bg-surface overflow-hidden">
                     <div
                       className={cn(
                         "h-full transition-all duration-500",
-                        covered ? "w-full bg-primary" : "w-0",
+                        covered ? "bg-primary" : "bg-muted-foreground/40",
                       )}
+                      style={{ width: `${percent}%` }}
                     />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-[11.5px] text-muted-foreground">
+                    <span>{counts.launches} {counts.launches === 1 ? "launch" : "launches"}</span>
+                    <span>{counts.total - counts.covered} missing</span>
                   </div>
                 </div>
               );

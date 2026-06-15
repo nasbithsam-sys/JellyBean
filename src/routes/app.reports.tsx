@@ -17,25 +17,35 @@ function toIsoDay(d: Date) {
 function computeRange(preset: DatePreset, from: string, to: string) {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfTomorrow = new Date(startOfToday); startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+  const startOfTomorrow = new Date(startOfToday);
+  startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
   switch (preset) {
     case "today":
       return { from: startOfToday.toISOString(), to: startOfTomorrow.toISOString() };
     case "yesterday": {
-      const y = new Date(startOfToday); y.setDate(y.getDate() - 1);
+      const y = new Date(startOfToday);
+      y.setDate(y.getDate() - 1);
       return { from: y.toISOString(), to: startOfToday.toISOString() };
     }
     case "7d": {
-      const s = new Date(startOfToday); s.setDate(s.getDate() - 6);
+      const s = new Date(startOfToday);
+      s.setDate(s.getDate() - 6);
       return { from: s.toISOString(), to: startOfTomorrow.toISOString() };
     }
     case "30d": {
-      const s = new Date(startOfToday); s.setDate(s.getDate() - 29);
+      const s = new Date(startOfToday);
+      s.setDate(s.getDate() - 29);
       return { from: s.toISOString(), to: startOfTomorrow.toISOString() };
     }
     case "custom": {
       const f = from ? new Date(from + "T00:00:00").toISOString() : null;
-      const t = to ? (() => { const d = new Date(to + "T00:00:00"); d.setDate(d.getDate() + 1); return d.toISOString(); })() : null;
+      const t = to
+        ? (() => {
+            const d = new Date(to + "T00:00:00");
+            d.setDate(d.getDate() + 1);
+            return d.toISOString();
+          })()
+        : null;
       return { from: f, to: t };
     }
     default:
@@ -46,22 +56,35 @@ function computeRange(preset: DatePreset, from: string, to: string) {
 
 export const Route = createFileRoute("/app/reports")({ component: Page });
 
-const RAW_STATUSES = ["new", "qualified", "cancelled"] as const;
+const RAW_STATUSES = ["new", "forwarded", "not_found", "wrong"] as const;
 const CS_STATUSES = [
   "new",
-  "called",
-  "messaged",
-  "follow_up",
-  "interested",
-  "converted",
-  "closed_won",
-  "closed_lost",
   "undeliver",
   "wrong_number",
+  "wrong_lead",
   "already_got_someone",
   "service_provider_himself",
+  "converted",
   "need_follow_up",
 ] as const;
+
+const RAW_LABELS: Record<string, string> = {
+  new: "New",
+  forwarded: "Forwarded to CS",
+  not_found: "Number not found",
+  wrong: "Wrong posts",
+};
+
+const CS_LABELS: Record<string, string> = {
+  new: "New to contact",
+  undeliver: "Undeliver",
+  wrong_number: "Wrong number",
+  wrong_lead: "Wrong lead",
+  already_got_someone: "Already got someone",
+  service_provider_himself: "Service provider himself",
+  converted: "Processed",
+  need_follow_up: "Need follow-up",
+};
 
 function Page() {
   const auth = useAuth();
@@ -86,9 +109,8 @@ function Inner() {
           let q = supabase
             .from("raw_lead_cache")
             .select("id", { count: "exact", head: true });
-          if (status === "qualified") q = q.eq("lead", "yes");
-          else if (status === "cancelled") q = q.eq("lead", "no");
-          else q = q.is("lead", null);
+          if (status === "new") q = q.is("category", null);
+          else q = q.eq("category", status);
           return q;
         }),
       );
@@ -177,10 +199,14 @@ function Inner() {
       "crm-report.csv",
       ["Section", "Metric", "Value"],
       [
-        ...Object.entries(raw.data ?? {}).map(([label, value]) => ["Raw leads", label, value]),
+        ...Object.entries(raw.data ?? {}).map(([label, value]) => [
+          "Raw leads",
+          RAW_LABELS[label] ?? label.replace(/_/g, " "),
+          value,
+        ]),
         ...Object.entries(cs.data ?? {}).map(([label, value]) => [
           "CS pipeline",
-          label.replace(/_/g, " "),
+          CS_LABELS[label] ?? label.replace(/_/g, " "),
           value,
         ]),
         ["Sources", "Total accounts", accountsCount.data ?? 0],
@@ -227,14 +253,14 @@ function Inner() {
       <Section title="Raw leads by status">
         <Grid>
           {Object.entries(raw.data ?? {}).map(([k, v]) => (
-            <Stat key={k} label={k} value={v} />
+            <Stat key={k} label={RAW_LABELS[k] ?? k.replace(/_/g, " ")} value={v} />
           ))}
         </Grid>
       </Section>
       <Section title="CS pipeline by status">
         <Grid>
           {Object.entries(cs.data ?? {}).map(([k, v]) => (
-            <Stat key={k} label={k.replace(/_/g, " ")} value={v} />
+            <Stat key={k} label={CS_LABELS[k] ?? k.replace(/_/g, " ")} value={v} />
           ))}
         </Grid>
       </Section>

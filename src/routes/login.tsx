@@ -1,21 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
+import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
-import { consumeLoginOtp } from "@/lib/login-otp.functions";
 
 type LoginProfile = {
   is_active: boolean;
-  otp_required?: boolean;
-};
-
-type LoginSettings = {
-  admin_otp_required: boolean;
 };
 
 export const Route = createFileRoute("/login")({
@@ -24,14 +17,10 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const consumeOtp = useServerFn(consumeLoginOtp);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [otpRequired, setOtpRequired] = useState(false);
-  const [code, setCode] = useState("");
 
-  // Already signed in? If they still owe an OTP, ask; otherwise route to app.
   useEffect(() => {
     void (async () => {
       const { data: sess } = await supabase.auth.getSession();
@@ -42,28 +31,18 @@ function LoginPage() {
         toast.error("Your account is inactive. Please contact an administrator.");
         return;
       }
-      if (access.needsOtp) setOtpRequired(true);
-      else navigate({ to: "/app" });
+      navigate({ to: "/app" });
     })();
   }, [navigate]);
 
-  async function getLoginAccess(uid: string): Promise<{ isActive: boolean; needsOtp: boolean }> {
-    const [{ data: profile }, { data: rolesData }, { data: settings }] = await Promise.all([
-      supabase.from("profiles").select("is_active, otp_required").eq("user_id", uid).maybeSingle(),
-      supabase.from("user_roles").select("role").eq("user_id", uid),
-      supabase.from("app_settings").select("admin_otp_required").maybeSingle(),
-    ]);
-    const roles = (rolesData ?? []).map((r) => r.role as string);
-    const isAdmin = roles.includes("admin");
-    const isCsOnly = roles.includes("cs") && !isAdmin;
-    const adminNeedsOtp =
-      isAdmin && Boolean((settings as LoginSettings | null)?.admin_otp_required);
-    const profileOtp = (profile as (LoginProfile & { otp_required?: boolean }) | null)?.otp_required;
-    // CS role never uses the one-time login code — username + password only.
-    const needsOtp = isCsOnly ? false : profileOtp === true || adminNeedsOtp;
+  async function getLoginAccess(uid: string): Promise<{ isActive: boolean }> {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_active")
+      .eq("user_id", uid)
+      .maybeSingle();
     return {
       isActive: (profile as LoginProfile | null)?.is_active ?? false,
-      needsOtp,
     };
   }
 
@@ -99,10 +78,6 @@ function LoginPage() {
           toast.error("Your account is inactive. Please contact an administrator.");
           return;
         }
-        if (access.needsOtp) {
-          setOtpRequired(true);
-          return;
-        }
       }
       navigate({ to: "/app" });
     } finally {
@@ -110,107 +85,113 @@ function LoginPage() {
     }
   }
 
-  async function handleOtpVerify(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      await consumeOtp({ data: { code: code.trim() } });
-      navigate({ to: "/app" });
-    } catch (err) {
-      toast.error((err as Error).message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
-      <div className="w-full max-w-sm relative animate-fade-in-up">
-        <div className="mb-6 flex flex-col items-start border-l-[3px] border-primary pl-3">
-          <div className="h-10 w-10 rounded-sm border border-border bg-card grid place-items-center">
-            <span className="text-[13px] font-mono font-semibold text-primary">LG</span>
-          </div>
-          <h1 className="text-[22px] font-semibold tracking-normal mt-4">Leadgrid access</h1>
-          <p className="text-[12px] text-muted-foreground mt-1 font-mono uppercase tracking-wide">
-            Field Ops Console
-          </p>
-        </div>
-        {otpRequired ? (
-          <form onSubmit={handleOtpVerify} className="glass-card p-6 space-y-4 ring-glow">
-            <div>
-              <Label
-                htmlFor="otp"
-                className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium"
-              >
-                One-time login code
-              </Label>
-              <Input
-                id="otp"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="123 456"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                maxLength={6}
-                className="mt-2 tracking-[0.4em] text-center text-lg h-12 font-mono"
-              />
-              <p className="text-[11.5px] text-muted-foreground mt-2 text-center">
-                Ask your admin for the current 6-digit code. It rotates after every use.
+    <div className="min-h-screen bg-[linear-gradient(135deg,#f7fbff_0%,#eef5ff_48%,#ffffff_100%)] px-4 py-8 flex items-center justify-center">
+      <div className="w-full max-w-5xl grid overflow-hidden rounded-[28px] border border-white/80 bg-white/82 shadow-[0_32px_90px_-50px_rgba(30,64,175,0.45)] backdrop-blur-xl md:grid-cols-[0.92fr_1fr] animate-fade-in-up">
+        <section className="hidden md:flex flex-col justify-between bg-[linear-gradient(160deg,#2563eb_0%,#4f46e5_56%,#7c3aed_100%)] p-9 text-white">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-white/16 ring-1 ring-white/22 grid place-items-center">
+                <span className="text-sm font-semibold">LG</span>
+              </div>
+              <div>
+                <div className="text-lg font-semibold tracking-tight">Leadgrid</div>
+                <div className="text-sm text-white/68">Lead operations CRM</div>
+              </div>
+            </div>
+            <div className="mt-16 max-w-sm">
+              <h1 className="text-[34px] leading-[1.05] font-semibold tracking-[-0.02em]">
+                Manage every lead from one calm workspace.
+              </h1>
+              <p className="mt-4 text-sm leading-6 text-white/72">
+                Review raw leads, forward qualified jobs, and keep CS follow-up moving without
+                extra login codes.
               </p>
             </div>
-            <Button type="submit" className="w-full h-10" disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Verify
-            </Button>
-          </form>
-        ) : (
-          <form onSubmit={handleSignIn} className="glass-card p-6 space-y-4 ring-glow">
-            <div>
-              <Label
-                htmlFor="id"
-                className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium"
-              >
-                Email or username
-              </Label>
-              <Input
-                id="id"
-                autoComplete="username"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                required
-                className="mt-2 h-10"
-              />
+          </div>
+          <div className="grid gap-3 text-sm text-white/82">
+            {["Password-only access", "Role-based CRM views", "Live Supabase lead data"].map(
+              (item) => (
+                <div key={item} className="flex items-center gap-2.5">
+                  <CheckCircle2 className="h-4 w-4 text-white" />
+                  <span>{item}</span>
+                </div>
+              ),
+            )}
+          </div>
+        </section>
+
+        <section className="p-7 sm:p-10 md:p-12">
+          <div className="md:hidden mb-8 flex items-center gap-3">
+            <div className="h-11 w-11 rounded-2xl bg-primary text-primary-foreground grid place-items-center">
+              <span className="text-sm font-semibold">LG</span>
             </div>
             <div>
-              <Label
-                htmlFor="pw"
-                className="text-[12px] uppercase tracking-wide text-muted-foreground font-medium"
-              >
-                Password
-              </Label>
-              <Input
-                id="pw"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="mt-2 h-10"
-              />
+              <div className="text-lg font-semibold tracking-tight">Leadgrid</div>
+              <div className="text-sm text-muted-foreground">Lead operations CRM</div>
             </div>
-            <Button
-              type="submit"
-              className="w-full h-10 shadow-md hover:shadow-lg"
-              disabled={submitting}
+          </div>
+
+          <div className="max-w-md mx-auto">
+            <div className="mb-8">
+              <p className="text-sm font-medium text-primary">Welcome back</p>
+              <h1 className="mt-2 text-[30px] leading-tight font-semibold tracking-[-0.02em]">
+                Sign in to your workspace
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Use your assigned email or username and password.
+              </p>
+            </div>
+
+            <form onSubmit={handleSignIn} className="space-y-5">
+              <div>
+            <Label
+              htmlFor="id"
+                  className="text-[13px] font-medium text-foreground"
             >
-              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Sign in
-            </Button>
-            <p className="text-[11.5px] text-muted-foreground text-center pt-2">
-              Accounts are provisioned by your administrator.
-            </p>
-          </form>
-        )}
+              Email or username
+            </Label>
+            <Input
+              id="id"
+              autoComplete="username"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              required
+                  className="mt-2 h-12 rounded-xl bg-white"
+            />
+          </div>
+          <div>
+            <Label
+              htmlFor="pw"
+                  className="text-[13px] font-medium text-foreground"
+            >
+              Password
+            </Label>
+            <Input
+              id="pw"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+                  className="mt-2 h-12 rounded-xl bg-white"
+            />
+          </div>
+          <Button
+            type="submit"
+                className="w-full h-12 rounded-xl text-[15px] shadow-[0_12px_28px_-16px_rgba(37,99,235,0.8)]"
+            disabled={submitting}
+          >
+            {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Sign in
+                {!submitting && <ArrowRight className="h-4 w-4" />}
+          </Button>
+              <p className="text-[12.5px] text-muted-foreground text-center pt-2">
+            Accounts are provisioned by your administrator.
+          </p>
+        </form>
+          </div>
+        </section>
       </div>
     </div>
   );

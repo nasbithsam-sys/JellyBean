@@ -37,7 +37,10 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
     z
-      .object({ limit: z.number().int().min(1).max(2000).default(200) })
+      .object({
+        limit: z.number().int().min(1).max(500).default(200),
+        offset: z.number().int().min(0).default(0),
+      })
       .parse(input ?? {}),
   )
   .handler(async ({ data, context }) => {
@@ -62,31 +65,16 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
         .from("raw_lead_cache")
         .select(columns)
         .order("captured_at", { ascending: false, nullsFirst: false })
-        .limit(data.limit);
+        .range(data.offset, data.offset + data.limit);
       if (!isAdmin) query = query.or(`assigned_to.is.null,assigned_to.eq.${context.userId}`);
       return query;
     };
 
-    const buildNewQuery = () => {
-      let query = supabaseAdmin
-        .from("raw_lead_cache")
-        .select(columns)
-        .is("category", null)
-        .order("captured_at", { ascending: false, nullsFirst: false })
-        .limit(data.limit);
-      if (!isAdmin) query = query.or(`assigned_to.is.null,assigned_to.eq.${context.userId}`);
-      return query;
-    };
-
-    const [{ data: latest, error }, { data: newest, error: newError }] = await Promise.all([
-      buildQuery(),
-      buildNewQuery(),
-    ]);
+    const { data: latest, error } = await buildQuery();
     if (error) throw new Error(error.message);
-    if (newError) throw new Error(newError.message);
 
     const merged = new Map<string, RawLeadCacheRow>();
-    for (const entry of [...(latest ?? []), ...(newest ?? [])]) {
+    for (const entry of latest ?? []) {
       merged.set(entry.row_key, {
         row_key: entry.row_key,
         data: normalizeData(entry.data),
@@ -100,7 +88,13 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       });
     }
 
-    return Array.from(merged.values()).sort(
+    const rows = Array.from(merged.values()).sort(
       (a, b) => new Date(b.captured_at ?? 0).getTime() - new Date(a.captured_at ?? 0).getTime(),
     );
+    const entries = rows.slice(0, data.limit);
+    return {
+      entries,
+      nextOffset: rows.length > data.limit ? data.offset + data.limit : null,
+      hasMore: rows.length > data.limit,
+    };
   });

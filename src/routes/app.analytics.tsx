@@ -20,8 +20,29 @@ import type { Database } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/app/analytics")({ component: Page });
 
-type RawLeadStatus = Database["public"]["Enums"]["raw_lead_status"];
 type CsStatus = Database["public"]["Enums"]["cs_status"];
+
+const CS_STATUSES = [
+  "new",
+  "undeliver",
+  "wrong_number",
+  "wrong_lead",
+  "already_got_someone",
+  "service_provider_himself",
+  "converted",
+  "need_follow_up",
+] as const satisfies readonly CsStatus[];
+
+const CS_LABELS: Record<string, string> = {
+  new: "New to contact",
+  undeliver: "Undeliver",
+  wrong_number: "Wrong number",
+  wrong_lead: "Wrong lead",
+  already_got_someone: "Already got someone",
+  service_provider_himself: "Service provider himself",
+  converted: "Processed",
+  need_follow_up: "Need follow-up",
+};
 
 function Page() {
   const auth = useAuth();
@@ -51,21 +72,19 @@ function Inner() {
           start: d.toISOString(),
           end: addDays(d, 1).toISOString(),
           captured: 0,
-          qualified: 0,
-          cancelled: 0,
+          forwarded: 0,
+          wrong: 0,
           sentToCS: 0,
         };
       });
 
-      const countRaw = (start: string, end: string, status?: RawLeadStatus) => {
+      const countRaw = (start: string, end: string, category?: "forwarded" | "wrong") => {
         let q = supabase
           .from("raw_lead_cache")
           .select("id", { count: "exact", head: true })
           .gte("captured_at", start)
           .lt("captured_at", end);
-        if (status === "qualified") q = q.eq("lead", "yes");
-        else if (status === "cancelled") q = q.eq("lead", "no");
-        else if (status === "new") q = q.is("lead", null);
+        if (category) q = q.eq("category", category);
         return q;
       };
       const countQualified = (start: string, end: string) =>
@@ -78,8 +97,8 @@ function Inner() {
       const results = await Promise.all(
         days.flatMap((d) => [
           countRaw(d.start, d.end),
-          countRaw(d.start, d.end, "qualified"),
-          countRaw(d.start, d.end, "cancelled"),
+          countRaw(d.start, d.end, "forwarded"),
+          countRaw(d.start, d.end, "wrong"),
           countQualified(d.start, d.end),
         ]),
       );
@@ -89,28 +108,13 @@ function Inner() {
         const day = days[Math.floor(index / 4)];
         const metric = index % 4;
         if (metric === 0) day.captured = result.count ?? 0;
-        if (metric === 1) day.qualified = result.count ?? 0;
-        if (metric === 2) day.cancelled = result.count ?? 0;
+        if (metric === 1) day.forwarded = result.count ?? 0;
+        if (metric === 2) day.wrong = result.count ?? 0;
         if (metric === 3) day.sentToCS = result.count ?? 0;
       });
 
-      const csStatuses = [
-        "new",
-        "called",
-        "messaged",
-        "follow_up",
-        "interested",
-        "converted",
-        "closed_won",
-        "closed_lost",
-        "undeliver",
-        "wrong_number",
-        "already_got_someone",
-        "service_provider_himself",
-        "need_follow_up",
-      ] as const satisfies readonly CsStatus[];
       const csResults = await Promise.all(
-        csStatuses.map((status) =>
+        CS_STATUSES.map((status) =>
           supabase
             .from("qualified_leads")
             .select("id", { count: "exact", head: true })
@@ -122,7 +126,7 @@ function Inner() {
         .map((result, index) => {
           if (result.error) throw result.error;
           return {
-            status: csStatuses[index].replace(/_/g, " "),
+            status: CS_LABELS[CS_STATUSES[index]] ?? CS_STATUSES[index].replace(/_/g, " "),
             count: result.count ?? 0,
           };
         })
@@ -137,10 +141,10 @@ function Inner() {
   const csBuckets = useMemo(() => analytics.data?.csBuckets ?? [], [analytics.data?.csBuckets]);
 
   const totals = useMemo(() => {
-    const t = { captured: 0, qualified: 0, sentToCS: 0 };
+    const t = { captured: 0, forwarded: 0, sentToCS: 0 };
     series.forEach((d) => {
       t.captured += d.captured;
-      t.qualified += d.qualified;
+      t.forwarded += d.forwarded;
       t.sentToCS += d.sentToCS;
     });
     return t;
@@ -151,14 +155,14 @@ function Inner() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Metric label="Total captured" value={totals.captured} sub="last 30 days" />
         <Metric
-          label="Qualified"
-          value={totals.qualified}
-          sub={`${totals.captured ? Math.round((totals.qualified / totals.captured) * 100) : 0}% conversion`}
+          label="Forwarded"
+          value={totals.forwarded}
+          sub={`${totals.captured ? Math.round((totals.forwarded / totals.captured) * 100) : 0}% of captured`}
         />
         <Metric label="Sent to CS" value={totals.sentToCS} sub="handoffs" />
       </div>
 
-      <Card title="Lead flow" subtitle="Captured / qualified / cancelled by day">
+      <Card title="Lead flow" subtitle="Captured / forwarded / wrong posts by day">
         <div className="h-72">
           <ResponsiveContainer>
             <AreaChart data={series} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -167,7 +171,7 @@ function Inner() {
                   <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.4} />
                   <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
                 </linearGradient>
-                <linearGradient id="gradQual" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="gradForwarded" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="var(--color-success)" stopOpacity={0.35} />
                   <stop offset="95%" stopColor="var(--color-success)" stopOpacity={0} />
                 </linearGradient>
@@ -205,10 +209,10 @@ function Inner() {
               />
               <Area
                 type="monotone"
-                dataKey="qualified"
+                dataKey="forwarded"
                 stroke="var(--color-success)"
                 strokeWidth={2}
-                fill="url(#gradQual)"
+                fill="url(#gradForwarded)"
               />
             </AreaChart>
           </ResponsiveContainer>

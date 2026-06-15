@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,12 +23,10 @@ import {
   Settings as SettingsIcon,
   Users as UsersIcon,
   Trash2,
-  RefreshCw,
-  Copy,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { adminCreateUser, adminResetPassword, adminSetActive } from "@/lib/admin-users.functions";
-import { adminDeleteUser, adminRotateLoginOtp, adminGetLoginOtp } from "@/lib/login-otp.functions";
+import { adminDeleteUser } from "@/lib/login-otp.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/settings")({ component: Page });
@@ -92,62 +89,18 @@ function TabBtn({
 }
 
 function GeneralTab() {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [adminOtp, setAdminOtp] = useState(false);
-
-  useEffect(() => {
-    void (async () => {
-      const { data, error } = await supabase
-        .from("app_settings")
-        .select("admin_otp_required")
-        .maybeSingle();
-      if (!error && data) setAdminOtp(data.admin_otp_required);
-      setLoading(false);
-    })();
-  }, []);
-
-  async function save(next: boolean) {
-    setSaving(true);
-    setAdminOtp(next);
-    const { error } = await supabase
-      .from("app_settings")
-      .update({ admin_otp_required: next, updated_at: new Date().toISOString() })
-      .eq("id", true);
-    if (error) {
-      toast.error(error.message);
-      setAdminOtp(!next);
-    } else toast.success("Saved");
-    setSaving(false);
-  }
-
-  if (loading)
-    return (
-      <div className="h-40 grid place-items-center text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-      </div>
-    );
-
   return (
     <div className="space-y-4 max-w-2xl">
       <div className="bg-card border rounded-lg p-5">
         <h3 className="text-sm font-semibold mb-1">Authentication</h3>
-        <p className="text-xs text-muted-foreground mb-4">
-          Marketing and CS roles always require an admin-issued login code. You can additionally
-          require it for admins.
+        <p className="text-xs text-muted-foreground">
+          Login codes and OTP prompts are disabled for every role. Users sign in with their
+          provisioned username or email and password only.
         </p>
-        <div className="flex items-center justify-between">
-          <Label htmlFor="otp" className="text-sm font-medium">
-            Require login code for admins
-          </Label>
-          <Switch id="otp" checked={adminOtp} disabled={saving} onCheckedChange={save} />
-        </div>
       </div>
     </div>
   );
 }
-
-// ---------------- Users tab ----------------
 
 type UserRow = {
   user_id: string;
@@ -202,7 +155,6 @@ function UsersTab() {
               <th>Username</th>
               <th>Email</th>
               <th>Role</th>
-              <th>Login code</th>
               <th>Status</th>
               <th className="text-right">Actions</th>
             </tr>
@@ -210,8 +162,8 @@ function UsersTab() {
           <tbody>
             {usersQuery.isLoading && (
               <tr>
-                <td colSpan={7} className="text-center text-muted-foreground py-6">
-                  Loading…
+                <td colSpan={6} className="text-center text-muted-foreground py-6">
+                  Loading...
                 </td>
               </tr>
             )}
@@ -224,7 +176,7 @@ function UsersTab() {
             ))}
             {usersQuery.data?.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center text-muted-foreground py-6">
+                <td colSpan={6} className="text-center text-muted-foreground py-6">
                   No users yet.
                 </td>
               </tr>
@@ -249,27 +201,7 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
   const setActive = useServerFn(adminSetActive);
   const resetPw = useServerFn(adminResetPassword);
   const deleteUser = useServerFn(adminDeleteUser);
-  const rotateOtp = useServerFn(adminRotateLoginOtp);
-  const getOtp = useServerFn(adminGetLoginOtp);
   const [busy, setBusy] = useState(false);
-  const [otp, setOtp] = useState<string | null>(null);
-  const [otpLoading, setOtpLoading] = useState(false);
-
-  // Only admin and CS still use the one-time login code.
-  // Scraping, processor and acc_handler sign in with username + password only.
-  const needsOtp = user.role === "admin" || user.role === "cs";
-
-  useEffect(() => {
-    if (!needsOtp) return;
-    void (async () => {
-      try {
-        const res = await getOtp({ data: { userId: user.user_id } });
-        setOtp(res.code);
-      } catch {
-        /* ignore */
-      }
-    })();
-  }, [needsOtp, user.user_id, getOtp]);
 
   async function toggleActive() {
     setBusy(true);
@@ -283,6 +215,7 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
       setBusy(false);
     }
   }
+
   async function reset() {
     const pw = window.prompt(`New password for ${user.full_name}`);
     if (!pw || pw.length < 8) {
@@ -299,6 +232,7 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
       setBusy(false);
     }
   }
+
   async function remove() {
     if (
       !window.confirm(`Permanently delete ${user.full_name || user.email}? This cannot be undone.`)
@@ -315,66 +249,13 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
       setBusy(false);
     }
   }
-  async function rotate() {
-    setOtpLoading(true);
-    try {
-      const res = await rotateOtp({ data: { userId: user.user_id } });
-      setOtp(res.code);
-      toast.success("New login code generated");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setOtpLoading(false);
-    }
-  }
-  async function copyOtp() {
-    if (!otp) return;
-    await navigator.clipboard.writeText(otp);
-    toast.success("Code copied");
-  }
 
   return (
     <tr>
-      <td className="font-medium">{user.full_name || "—"}</td>
-      <td className="font-mono text-xs">{user.username ?? "—"}</td>
+      <td className="font-medium">{user.full_name || "-"}</td>
+      <td className="font-mono text-xs">{user.username ?? "-"}</td>
       <td>{user.email}</td>
-      <td className="capitalize">{user.role ?? "—"}</td>
-      <td>
-        {needsOtp ? (
-          <div className="flex items-center gap-1.5">
-            <code className="font-mono text-xs px-2 py-0.5 rounded bg-muted">
-              {otp ?? "— — — — — —"}
-            </code>
-            {otp && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6"
-                onClick={copyOtp}
-                title="Copy"
-              >
-                <Copy className="h-3 w-3" />
-              </Button>
-            )}
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-6 w-6"
-              onClick={rotate}
-              disabled={otpLoading}
-              title="Generate new code"
-            >
-              {otpLoading ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3 w-3" />
-              )}
-            </Button>
-          </div>
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        )}
-      </td>
+      <td className="capitalize">{user.role ?? "-"}</td>
       <td>
         <span className={user.is_active ? "text-success" : "text-muted-foreground"}>
           {user.is_active ? "Active" : "Inactive"}
@@ -423,6 +304,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
       | "seo",
     isActive: true,
   });
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -436,6 +318,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
       setSubmitting(false);
     }
   }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
       <div

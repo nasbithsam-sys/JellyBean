@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
@@ -58,7 +58,7 @@ import { fetchRawLeadCache } from "@/lib/raw-leads.functions";
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
 const TABLE = "raw_lead_cache";
-const RAW_LEADS_PAGE_SIZE = 200;
+const RAW_LEADS_PAGE_SIZE = 100;
 const DEFAULT_LEAD_PROMPT = `Home repair lead filter.
 
 Mark only YES, NO, or REVIEW.
@@ -97,6 +97,11 @@ type CacheEntry = {
   lead_link: string | null;
   sheet_row: number | null;
   assigned_to: string | null;
+};
+type RawLeadPage = {
+  entries: CacheEntry[];
+  nextOffset: number | null;
+  hasMore: boolean;
 };
 const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
 
@@ -245,8 +250,7 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [leadFilter, setLeadFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
-  const [visibleLimit, setVisibleLimit] = useState(80);
-  const [databaseLimit, setDatabaseLimit] = useState(RAW_LEADS_PAGE_SIZE);
+  const [pageIndex, setPageIndex] = useState(0);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_LEAD_PROMPT);
@@ -325,14 +329,43 @@ function Inner() {
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", databaseLimit],
+    queryKey: ["raw-lead-cache", pageIndex],
     queryFn: async () =>
-      (await fetchRawLeads({ data: { limit: databaseLimit } })) as CacheEntry[],
+      (await fetchRawLeads({
+        data: { limit: RAW_LEADS_PAGE_SIZE, offset: pageIndex * RAW_LEADS_PAGE_SIZE },
+      })) as RawLeadPage,
+    placeholderData: keepPreviousData,
     // staleTime: 0 (default) — allows invalidateQueries() from useRealtimeSync
     // to trigger a background refetch whenever new leads arrive from the extension.
     gcTime: Infinity,
     refetchOnWindowFocus: false,
   });
+
+  const updateCachedEntries = useCallback(
+    (updater: (entry: CacheEntry) => CacheEntry) => {
+      qc.setQueryData<RawLeadPage>(["raw-lead-cache", pageIndex], (prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          entries: prev.entries.map(updater),
+        };
+      });
+    },
+    [pageIndex, qc],
+  );
+
+  const removeCachedEntries = useCallback(
+    (shouldRemove: (entry: CacheEntry) => boolean) => {
+      qc.setQueryData<RawLeadPage>(["raw-lead-cache", pageIndex], (prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          entries: prev.entries.filter((entry) => !shouldRemove(entry)),
+        };
+      });
+    },
+    [pageIndex, qc],
+  );
 
   const deleteSelected = useCallback(async () => {
     if (!isAdmin || selected.size === 0) return;
@@ -345,9 +378,7 @@ function Inner() {
         const { error } = await supabase.from(TABLE).delete().in("row_key", slice);
         if (error) throw error;
       }
-      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
-        (prev ?? []).filter((e) => !selected.has(e.row_key)),
-      );
+      removeCachedEntries((entry) => selected.has(entry.row_key));
       toast.success(`Deleted ${keys.length} lead${keys.length === 1 ? "" : "s"}`);
       setSelected(new Set());
       setConfirmDelete(false);
@@ -357,7 +388,7 @@ function Inner() {
     } finally {
       setDeleting(false);
     }
-  }, [isAdmin, selected, qc, databaseLimit, cacheQuery]);
+  }, [isAdmin, selected, removeCachedEntries, cacheQuery]);
 
   // ── Shared AI lock so two users can't fire the AI batch at once ───────────
   const aiLockQuery = useQuery({
@@ -372,7 +403,7 @@ function Inner() {
   const aiLockedByOther = aiLockActive && aiLock?.user_id !== currentUserId;
 
   // Build action map keyed by row_key for fast lookup
-  const entries: CacheEntry[] = cacheQuery.data ?? EMPTY_CACHE_ENTRIES;
+  const entries: CacheEntry[] = cacheQuery.data?.entries ?? EMPTY_CACHE_ENTRIES;
   const actions = useMemo(() => {
     const m: Record<string, Action> = {};
     for (const e of entries) {
@@ -384,9 +415,7 @@ function Inner() {
   const updateAction = useCallback(
     async (k: string, patch: Partial<Action>) => {
       // Optimistic update
-      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
-        (prev ?? []).map((e) => (e.row_key === k ? { ...e, ...patch } : e)),
-      );
+      updateCachedEntries((e) => (e.row_key === k ? { ...e, ...patch } : e));
       try {
         await patchEntry(k, patch as Partial<CacheEntry>);
       } catch (e) {
@@ -394,7 +423,7 @@ function Inner() {
         cacheQuery.refetch();
       }
     },
-    [qc, cacheQuery, databaseLimit],
+    [updateCachedEntries, cacheQuery],
   );
 
   const isFetching = cacheQuery.isFetching;
@@ -453,7 +482,7 @@ function Inner() {
     return list;
   }, [actions, areaFilter, buckets, leadFilter, query, tab]);
 
-  const shownRows = visible.slice(0, visibleLimit);
+  const shownRows = visible;
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
   // AND no user/AI override), so each click marches through the next 50.
   const aiTargets = visible
@@ -462,7 +491,6 @@ function Inner() {
         entry.data["Post Text"]?.trim() && effectiveLead(entry.data, actions[entry.row_key]) === "",
     )
     .slice(0, 50);
-
 
   function exportRows() {
     downloadCsv(
@@ -499,10 +527,8 @@ function Inner() {
         return;
       }
       // Optimistic
-      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
-        (prev ?? []).map((e) =>
-          e.row_key === entry.row_key ? { ...e, assigned_to: currentUserId } : e,
-        ),
+      updateCachedEntries((e) =>
+        e.row_key === entry.row_key ? { ...e, assigned_to: currentUserId } : e,
       );
       const { error } = await supabase
         .from(TABLE)
@@ -517,7 +543,7 @@ function Inner() {
       }
       toast.success("Lead assigned to you");
     },
-    [cacheQuery, currentUserId, databaseLimit, qc],
+    [cacheQuery, currentUserId, updateCachedEntries],
   );
 
   async function runAiLeadCheck() {
@@ -558,12 +584,10 @@ function Inner() {
           .filter((item) => item.lead === "yes" || item.lead === "no")
           .map((item) => [item.row_key, item.lead as "yes" | "no"]),
       );
-      qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
-        (prev ?? []).map((entry) => {
-          const lead = leadByKey.get(entry.row_key);
-          return lead ? { ...entry, lead } : entry;
-        }),
-      );
+      updateCachedEntries((entry) => {
+        const lead = leadByKey.get(entry.row_key);
+        return lead ? { ...entry, lead } : entry;
+      });
       const reviewCount = result.results.filter((r) => r.lead === "review").length;
       toast.success(
         `AI checked ${result.analyzed}: ${result.yes} Yes, ${result.no} No${reviewCount ? `, ${reviewCount} Review` : ""}`,
@@ -596,7 +620,10 @@ function Inner() {
           ).map(([k, label, n]) => (
             <button
               key={k}
-              onClick={() => setTab(k)}
+              onClick={() => {
+                setTab(k);
+                setPageIndex(0);
+              }}
               className={cn(
                 "px-3 h-8 text-[12px] font-medium rounded-md transition-all",
                 tab === k
@@ -614,13 +641,22 @@ function Inner() {
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPageIndex(0);
+            }}
             placeholder="Search…"
             className="h-9 pl-9"
           />
         </div>
 
-        <Select value={leadFilter} onValueChange={setLeadFilter}>
+        <Select
+          value={leadFilter}
+          onValueChange={(value) => {
+            setLeadFilter(value);
+            setPageIndex(0);
+          }}
+        >
           <SelectTrigger className="h-9 w-[118px] text-[12px]">
             <SelectValue placeholder="Lead" />
           </SelectTrigger>
@@ -632,7 +668,13 @@ function Inner() {
           </SelectContent>
         </Select>
 
-        <Select value={areaFilter} onValueChange={setAreaFilter}>
+        <Select
+          value={areaFilter}
+          onValueChange={(value) => {
+            setAreaFilter(value);
+            setPageIndex(0);
+          }}
+        >
           <SelectTrigger className="h-9 w-[150px] text-[12px]">
             <SelectValue placeholder="Area" />
           </SelectTrigger>
@@ -660,10 +702,9 @@ function Inner() {
                 return;
               }
               const keys = targets.map((e) => e.row_key);
-              qc.setQueryData<CacheEntry[]>(["raw-lead-cache", databaseLimit], (prev) =>
-                (prev ?? []).map((e) =>
-                  keys.includes(e.row_key) ? { ...e, category: "wrong" } : e,
-                ),
+              const keySet = new Set(keys);
+              updateCachedEntries((e) =>
+                keySet.has(e.row_key) ? { ...e, category: "wrong" } : e,
               );
               try {
                 // row_keys are full Nextdoor URLs — batch to avoid
@@ -1070,33 +1111,42 @@ function Inner() {
         </div>
       </div>
 
-      {visible.length > shownRows.length && (
-        <div className="flex justify-center">
-          <Button variant="outline" onClick={() => setVisibleLimit((n) => n + 80)}>
-            Load more ({visible.length - shownRows.length} remaining)
-          </Button>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2">
+        <div className="text-[11.5px] text-muted-foreground">
+          Showing {entries.length ? pageIndex * RAW_LEADS_PAGE_SIZE + 1 : 0}-
+          {pageIndex * RAW_LEADS_PAGE_SIZE + entries.length} from database page {pageIndex + 1}
+          {" - "}
+          {visible.length} {visible.length === 1 ? "row matches" : "rows match"} current filters
         </div>
-      )}
-
-      {visible.length === shownRows.length && entries.length >= databaseLimit && (
-        <div className="flex justify-center">
+        <div className="flex items-center gap-2">
+          {cacheQuery.isFetching && (
+            <span className="inline-flex items-center text-[11.5px] text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              Updating
+            </span>
+          )}
           <Button
             variant="outline"
-            onClick={() => {
-              setDatabaseLimit((limit) => limit + RAW_LEADS_PAGE_SIZE);
-              setVisibleLimit((limit) => limit + 80);
-            }}
-            disabled={isFetching}
+            size="sm"
+            className="h-8"
+            onClick={() => setPageIndex((page) => Math.max(0, page - 1))}
+            disabled={pageIndex === 0 || cacheQuery.isFetching}
           >
-            {isFetching && <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />}
-            Load more from database
+            Previous
+          </Button>
+          <div className="h-8 min-w-[82px] inline-flex items-center justify-center rounded-md border border-border bg-card px-3 text-[12px] font-medium">
+            Page {pageIndex + 1}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => setPageIndex((page) => page + 1)}
+            disabled={!cacheQuery.data?.hasMore || cacheQuery.isFetching}
+          >
+            Next
           </Button>
         </div>
-      )}
-
-      <div className="text-[11.5px] text-muted-foreground">
-        {shownRows.length} of {visible.length} {visible.length === 1 ? "row" : "rows"} shown ·{" "}
-        {entries.length} loaded from the latest {databaseLimit}
       </div>
 
       {/* Ingest endpoint info */}
@@ -1125,8 +1175,8 @@ function Inner() {
               </Button>
             </div>
             <p className="text-muted-foreground">
-              Raw Leads does not use live realtime reloads for this table, which keeps Supabase
-              usage lighter. Use Refresh or Load more to pull the latest accepted rows from the
+              Raw Leads uses database pagination for this table, which keeps Supabase usage
+              lighter. Use Refresh or the pagination controls to pull accepted rows from the
               database. Duplicate Nextdoor post IDs or links are reported back to the extension as
               skipped.
             </p>
@@ -1410,6 +1460,7 @@ function QualifyDialog({
         original_lead_link: row["Lead Link"] || null,
         assigned_by: actorId,
         created_by: actorId,
+        cs_status: "new",
         is_important: isImportant,
       } as never);
       if (error) throw error;
