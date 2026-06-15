@@ -35,6 +35,17 @@ CREATE POLICY "raw_lead_cache: sub_admin delete"
 ON public.raw_lead_cache FOR DELETE TO authenticated
 USING (public.current_user_has_role_text('sub_admin'));
 
+DROP POLICY IF EXISTS "raw_leads: sub_admin read" ON public.raw_leads;
+CREATE POLICY "raw_leads: sub_admin read"
+ON public.raw_leads FOR SELECT TO authenticated
+USING (public.current_user_has_role_text('sub_admin'));
+
+DROP POLICY IF EXISTS "raw_leads: sub_admin update" ON public.raw_leads;
+CREATE POLICY "raw_leads: sub_admin update"
+ON public.raw_leads FOR UPDATE TO authenticated
+USING (public.current_user_has_role_text('sub_admin'))
+WITH CHECK (public.current_user_has_role_text('sub_admin'));
+
 DROP POLICY IF EXISTS "qualified_leads: sub_admin read" ON public.qualified_leads;
 CREATE POLICY "qualified_leads: sub_admin read"
 ON public.qualified_leads FOR SELECT TO authenticated
