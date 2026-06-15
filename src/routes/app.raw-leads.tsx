@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useMemo, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
@@ -103,6 +103,7 @@ type CacheEntry = {
 };
 type RawLeadPage = {
   entries: CacheEntry[];
+  counts: Record<"new" | "forwarded" | "not_found" | "wrong", number>;
   nextOffset: number | null;
   hasMore: boolean;
 };
@@ -464,12 +465,15 @@ function Inner() {
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", pageIndex],
+    queryKey: ["raw-lead-cache", tab, pageIndex],
     queryFn: async () =>
       (await fetchRawLeads({
-        data: { limit: RAW_LEADS_PAGE_SIZE, offset: pageIndex * RAW_LEADS_PAGE_SIZE },
+        data: {
+          limit: RAW_LEADS_PAGE_SIZE,
+          offset: pageIndex * RAW_LEADS_PAGE_SIZE,
+          category: tab,
+        },
       })) as RawLeadPage,
-    placeholderData: keepPreviousData,
     // staleTime: 0 (default) — allows invalidateQueries() from useRealtimeSync
     // to trigger a background refetch whenever new leads arrive from the extension.
     gcTime: Infinity,
@@ -478,7 +482,7 @@ function Inner() {
 
   const updateCachedEntries = useCallback(
     (updater: (entry: CacheEntry) => CacheEntry) => {
-      qc.setQueryData<RawLeadPage>(["raw-lead-cache", pageIndex], (prev) => {
+      qc.setQueryData<RawLeadPage>(["raw-lead-cache", tab, pageIndex], (prev) => {
         if (!prev) return prev;
         return {
           ...prev,
@@ -486,12 +490,12 @@ function Inner() {
         };
       });
     },
-    [pageIndex, qc],
+    [pageIndex, qc, tab],
   );
 
   const removeCachedEntries = useCallback(
     (shouldRemove: (entry: CacheEntry) => boolean) => {
-      qc.setQueryData<RawLeadPage>(["raw-lead-cache", pageIndex], (prev) => {
+      qc.setQueryData<RawLeadPage>(["raw-lead-cache", tab, pageIndex], (prev) => {
         if (!prev) return prev;
         return {
           ...prev,
@@ -499,7 +503,7 @@ function Inner() {
         };
       });
     },
-    [pageIndex, qc],
+    [pageIndex, qc, tab],
   );
 
   const deleteSelected = useCallback(async () => {
@@ -517,6 +521,7 @@ function Inner() {
       toast.success(`Deleted ${keys.length} lead${keys.length === 1 ? "" : "s"}`);
       setSelected(new Set());
       setConfirmDelete(false);
+      cacheQuery.refetch();
     } catch (e) {
       toast.error((e as Error).message);
       cacheQuery.refetch();
@@ -538,6 +543,12 @@ function Inner() {
 
   // Build action map keyed by row_key for fast lookup
   const entries: CacheEntry[] = cacheQuery.data?.entries ?? EMPTY_CACHE_ENTRIES;
+  useEffect(() => {
+    if (!cacheQuery.isFetching && cacheQuery.data && entries.length === 0 && pageIndex > 0) {
+      setPageIndex((page) => Math.max(0, page - 1));
+    }
+  }, [cacheQuery.data, cacheQuery.isFetching, entries.length, pageIndex]);
+
   const actions = useMemo(() => {
     const m: Record<string, Action> = {};
     for (const e of entries) {
@@ -548,38 +559,27 @@ function Inner() {
 
   const updateAction = useCallback(
     async (k: string, patch: Partial<Action>) => {
-      // Optimistic update
-      updateCachedEntries((e) => (e.row_key === k ? { ...e, ...patch } : e));
+      const changesSection = Object.prototype.hasOwnProperty.call(patch, "category");
+      if (changesSection) {
+        removeCachedEntries((entry) => entry.row_key === k);
+      } else {
+        updateCachedEntries((e) => (e.row_key === k ? { ...e, ...patch } : e));
+      }
       try {
         await patchEntry(k, patch as Partial<CacheEntry>);
+        if (changesSection) {
+          cacheQuery.refetch();
+        }
       } catch (e) {
         toast.error((e as Error).message);
         cacheQuery.refetch();
       }
     },
-    [updateCachedEntries, cacheQuery],
+    [cacheQuery, removeCachedEntries, updateCachedEntries],
   );
 
   const isFetching = cacheQuery.isFetching;
   const error = cacheQuery.error as Error | null;
-
-  // Bucket entries
-  const buckets = useMemo(() => {
-    const b: Record<"new" | "forwarded" | "not_found" | "wrong", CacheEntry[]> = {
-      new: [],
-      forwarded: [],
-      not_found: [],
-      wrong: [],
-    };
-    for (const e of entries) {
-      const cat = e.category;
-      if (cat === "forwarded") b.forwarded.push(e);
-      else if (cat === "not_found") b.not_found.push(e);
-      else if (cat === "wrong") b.wrong.push(e);
-      else b.new.push(e);
-    }
-    return b;
-  }, [entries]);
 
   const areaOptions = useMemo(() => {
     const areas = new Set<string>();
@@ -591,7 +591,7 @@ function Inner() {
   }, [entries]);
 
   const visible = useMemo(() => {
-    let list = buckets[tab];
+    let list = entries;
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((e) =>
@@ -616,7 +616,17 @@ function Inner() {
     return [...list].sort((a, b) =>
       compareRawLeadEntries(a, b, rawLeadSort, actions, currentUserId),
     );
-  }, [actions, areaFilter, buckets, currentUserId, leadFilter, query, rawLeadSort, tab]);
+  }, [actions, areaFilter, currentUserId, entries, leadFilter, query, rawLeadSort]);
+
+  const tabCounts = cacheQuery.data?.counts ?? {
+    new: 0,
+    forwarded: 0,
+    not_found: 0,
+    wrong: 0,
+  };
+  const activeTabCount = tabCounts[tab];
+  const pageStart = entries.length ? pageIndex * RAW_LEADS_PAGE_SIZE + 1 : 0;
+  const pageEnd = Math.min(pageIndex * RAW_LEADS_PAGE_SIZE + entries.length, activeTabCount);
 
   const shownRows = visible;
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
@@ -752,10 +762,10 @@ function Inner() {
         <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
           {(
             [
-              ["new", "New", buckets.new.length],
-              ["forwarded", "Forwarded", buckets.forwarded.length],
-              ["not_found", "Number not found", buckets.not_found.length],
-              ["wrong", "Wrong posts", buckets.wrong.length],
+              ["new", "New", tabCounts.new],
+              ["forwarded", "Forwarded", tabCounts.forwarded],
+              ["not_found", "Number not found", tabCounts.not_found],
+              ["wrong", "Wrong posts", tabCounts.wrong],
             ] as const
           ).map(([k, label, n]) => (
             <button
@@ -834,7 +844,7 @@ function Inner() {
             variant="outline"
             className="h-9"
             onClick={async () => {
-              const targets = buckets.new.filter(
+              const targets = entries.filter(
                 (e) => effectiveLead(e.data, actions[e.row_key]) === "no",
               );
               if (targets.length === 0) {
@@ -860,6 +870,7 @@ function Inner() {
                 toast.success(
                   `Moved ${targets.length} "No" lead${targets.length === 1 ? "" : "s"} to Wrong posts`,
                 );
+                cacheQuery.refetch();
               } catch (e) {
                 toast.error((e as Error).message);
                 cacheQuery.refetch();
@@ -1257,8 +1268,9 @@ function Inner() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2">
         <div className="text-[11.5px] text-muted-foreground">
-          Showing {entries.length ? pageIndex * RAW_LEADS_PAGE_SIZE + 1 : 0}-
-          {pageIndex * RAW_LEADS_PAGE_SIZE + entries.length} from database page {pageIndex + 1}
+          Showing {pageStart}-{pageEnd} of {activeTabCount} in this section
+          {" - page "}
+          {pageIndex + 1}
           {" - "}
           {visible.length} {visible.length === 1 ? "row matches" : "rows match"} current filters
         </div>
