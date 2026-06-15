@@ -551,13 +551,13 @@ export type Database = {
     Enums: {
       app_role:
         | "admin"
-        | "sub_admin"
         | "scraping"
         | "cs"
         | "processor"
         | "acc_handler"
         | "facebook"
         | "seo"
+        | "sub_admin"
       cs_status:
         | "new"
         | "called"
@@ -572,10 +572,10 @@ export type Database = {
         | "no_response"
         | "undeliver"
         | "wrong_number"
-        | "wrong_lead"
         | "already_got_someone"
         | "service_provider_himself"
         | "need_follow_up"
+        | "wrong_lead"
       raw_lead_cancel_reason:
         | "not_a_lead"
         | "general_post"
@@ -713,13 +713,13 @@ export const Constants = {
     Enums: {
       app_role: [
         "admin",
-        "sub_admin",
         "scraping",
         "cs",
         "processor",
         "acc_handler",
         "facebook",
         "seo",
+        "sub_admin",
       ],
       cs_status: [
         "new",
@@ -735,10 +735,10 @@ export const Constants = {
         "no_response",
         "undeliver",
         "wrong_number",
-        "wrong_lead",
         "already_got_someone",
         "service_provider_himself",
         "need_follow_up",
+        "wrong_lead",
       ],
       raw_lead_cancel_reason: [
         "not_a_lead",
