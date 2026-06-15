@@ -20,7 +20,7 @@ function Page() {
     <div>
       <PageHeader title="Health" description="Lightweight admin checks for the CRM setup." />
       <PageBody>
-        <RoleGate allow={["admin"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "sub_admin"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>

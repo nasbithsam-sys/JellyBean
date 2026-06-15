@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type AppRole =
   | "admin"
+  | "sub_admin"
   | "scraping"
   | "processor"
   | "cs"
@@ -133,19 +134,21 @@ export function useAuthState(): AuthState {
 
   const primaryRole: AppRole | null = roles.includes("admin")
     ? "admin"
-    : roles.includes("scraping")
-      ? "scraping"
-      : roles.includes("processor")
-        ? "processor"
-        : roles.includes("cs")
-          ? "cs"
-          : roles.includes("acc_handler")
-            ? "acc_handler"
-            : roles.includes("facebook")
-              ? "facebook"
-              : roles.includes("seo")
-                ? "seo"
-                : null;
+    : roles.includes("sub_admin")
+      ? "sub_admin"
+      : roles.includes("scraping")
+        ? "scraping"
+        : roles.includes("processor")
+          ? "processor"
+          : roles.includes("cs")
+            ? "cs"
+            : roles.includes("acc_handler")
+              ? "acc_handler"
+              : roles.includes("facebook")
+                ? "facebook"
+                : roles.includes("seo")
+                  ? "seo"
+                  : null;
 
   return { loading, session, user, profile, roles, primaryRole, refresh, signOut };
 }

@@ -53,7 +53,7 @@ function Page() {
   const auth = useAuth();
   return (
     <RoleGate
-      allow={["facebook", "seo", "admin", "processor", "acc_handler"]}
+      allow={["facebook", "seo", "admin", "sub_admin", "processor", "acc_handler"]}
       current={auth.primaryRole}
     >
       <Dashboard />

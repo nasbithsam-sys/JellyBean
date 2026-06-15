@@ -67,7 +67,7 @@ function Page() {
       />
       <PageBody className="!pt-5">
         <RoleGate
-          allow={["admin", "scraping", "acc_handler"]}
+          allow={["admin", "sub_admin", "scraping", "acc_handler"]}
           current={auth.primaryRole}
         >
           <Inner />

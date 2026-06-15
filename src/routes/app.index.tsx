@@ -59,7 +59,7 @@ function DashboardHome() {
       navigate({ to: "/app/submit-lead", replace: true });
   }, [auth.loading, role, navigate]);
 
-  if (role !== "admin") {
+  if (role !== "admin" && role !== "sub_admin") {
     return (
       <div className="min-h-[60vh] grid place-items-center">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

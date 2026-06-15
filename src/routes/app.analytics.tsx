@@ -50,7 +50,7 @@ function Page() {
     <div>
       <PageHeader title="Analytics" description="The last 30 days at a glance." />
       <PageBody>
-        <RoleGate allow={["admin"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "sub_admin"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>

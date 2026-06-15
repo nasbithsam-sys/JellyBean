@@ -82,7 +82,7 @@ function Page() {
         description="Leads you forwarded to CS, and how CS resolved them."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "processor"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "sub_admin", "processor"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
@@ -93,7 +93,7 @@ function Page() {
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
-  const isAdmin = auth.primaryRole === "admin";
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
   const [query, setQuery] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState<"all" | "pending" | ForwardedStatus>("all");
 
