@@ -18,8 +18,6 @@ type RawLeadCacheRow = {
   assigned_to: string | null;
 };
 
-type RawLeadCategoryFilter = "new" | "forwarded" | "not_found" | "wrong";
-
 function normalizeLead(value: string | null): "yes" | "no" | null {
   return value === "yes" || value === "no" ? value : null;
 }
@@ -42,7 +40,6 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       .object({
         limit: z.number().int().min(1).max(500).default(200),
         offset: z.number().int().min(0).default(0),
-        category: z.enum(["new", "forwarded", "not_found", "wrong"]).default("new"),
       })
       .parse(input ?? {}),
   )
@@ -64,53 +61,18 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const columns =
       "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to";
 
-    const applyCategory = <T>(query: T, category: RawLeadCategoryFilter) => {
-      const q = query as T & {
-        is: (column: string, value: null) => T;
-        eq: (column: string, value: string) => T;
-      };
-      return category === "new" ? q.is("category", null) : q.eq("category", category);
-    };
-
-    const applyAccess = <T>(query: T) => {
-      const q = query as T & { or: (filters: string) => T };
-      if (!isAdmin) return q.or(`assigned_to.is.null,assigned_to.eq.${context.userId}`);
-      return query;
-    };
-
     const buildQuery = () => {
-      const query = supabaseAdmin
+      let query = supabaseAdmin
         .from("raw_lead_cache")
         .select(columns)
         .order("captured_at", { ascending: false, nullsFirst: false })
-        .range(data.offset, data.offset + data.limit - 1);
-      return applyAccess(applyCategory(query, data.category));
+        .range(data.offset, data.offset + data.limit);
+      if (!isAdmin) query = query.or(`assigned_to.is.null,assigned_to.eq.${context.userId}`);
+      return query;
     };
 
     const { data: latest, error } = await buildQuery();
     if (error) throw new Error(error.message);
-
-    const countCategory = async (category: RawLeadCategoryFilter) => {
-      const query = supabaseAdmin
-        .from("raw_lead_cache")
-        .select("row_key", { count: "exact", head: true });
-      const { count, error: countError } = await applyAccess(applyCategory(query, category));
-      if (countError) throw new Error(countError.message);
-      return count ?? 0;
-    };
-
-    const [newCount, forwardedCount, notFoundCount, wrongCount] = await Promise.all([
-      countCategory("new"),
-      countCategory("forwarded"),
-      countCategory("not_found"),
-      countCategory("wrong"),
-    ]);
-    const activeCount = {
-      new: newCount,
-      forwarded: forwardedCount,
-      not_found: notFoundCount,
-      wrong: wrongCount,
-    }[data.category];
 
     const merged = new Map<string, RawLeadCacheRow>();
     for (const entry of latest ?? []) {
@@ -133,13 +95,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const entries = rows.slice(0, data.limit);
     return {
       entries,
-      counts: {
-        new: newCount,
-        forwarded: forwardedCount,
-        not_found: notFoundCount,
-        wrong: wrongCount,
-      },
-      nextOffset: data.offset + data.limit < activeCount ? data.offset + data.limit : null,
-      hasMore: data.offset + data.limit < activeCount,
+      nextOffset: rows.length > data.limit ? data.offset + data.limit : null,
+      hasMore: rows.length > data.limit,
     };
   });
