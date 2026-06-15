@@ -234,11 +234,6 @@ function compareRawLeadEntries(
   return sort.direction === "asc" ? result : -result;
 }
 
-function entryBelongsToTab(entry: CacheEntry, tab: "new" | "forwarded" | "not_found" | "wrong") {
-  if (tab === "new") return entry.category == null;
-  return entry.category === tab;
-}
-
 function SortHeader({
   label,
   active,
@@ -443,7 +438,6 @@ function Inner() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [repairedEmptyPageKey, setRepairedEmptyPageKey] = useState<string | null>(null);
 
   const toggleRawLeadSort = useCallback((key: RawLeadSortKey) => {
     setRawLeadSort((current) =>
@@ -549,31 +543,11 @@ function Inner() {
 
   // Build action map keyed by row_key for fast lookup
   const entries: CacheEntry[] = cacheQuery.data?.entries ?? EMPTY_CACHE_ENTRIES;
-  const tabCounts = cacheQuery.data?.counts ?? {
-    new: 0,
-    forwarded: 0,
-    not_found: 0,
-    wrong: 0,
-  };
-  const activeTabCount = tabCounts[tab];
   useEffect(() => {
-    if (cacheQuery.isFetching || !cacheQuery.data) return;
-    if (entries.length > 0) {
-      if (repairedEmptyPageKey) setRepairedEmptyPageKey(null);
-      return;
-    }
-    if (pageIndex > 0) {
+    if (!cacheQuery.isFetching && cacheQuery.data && entries.length === 0 && pageIndex > 0) {
       setPageIndex((page) => Math.max(0, page - 1));
-      return;
     }
-    if (activeTabCount > 0) {
-      const repairKey = `${tab}:${pageIndex}:${activeTabCount}`;
-      if (repairedEmptyPageKey !== repairKey) {
-        setRepairedEmptyPageKey(repairKey);
-        void cacheQuery.refetch();
-      }
-    }
-  }, [activeTabCount, cacheQuery, entries.length, pageIndex, repairedEmptyPageKey, tab]);
+  }, [cacheQuery.data, cacheQuery.isFetching, entries.length, pageIndex]);
 
   const actions = useMemo(() => {
     const m: Record<string, Action> = {};
@@ -617,7 +591,7 @@ function Inner() {
   }, [entries]);
 
   const visible = useMemo(() => {
-    let list = entries.filter((entry) => entryBelongsToTab(entry, tab));
+    let list = entries;
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((e) =>
@@ -642,8 +616,15 @@ function Inner() {
     return [...list].sort((a, b) =>
       compareRawLeadEntries(a, b, rawLeadSort, actions, currentUserId),
     );
-  }, [actions, areaFilter, currentUserId, entries, leadFilter, query, rawLeadSort, tab]);
+  }, [actions, areaFilter, currentUserId, entries, leadFilter, query, rawLeadSort]);
 
+  const tabCounts = cacheQuery.data?.counts ?? {
+    new: 0,
+    forwarded: 0,
+    not_found: 0,
+    wrong: 0,
+  };
+  const activeTabCount = tabCounts[tab];
   const pageStart = entries.length ? pageIndex * RAW_LEADS_PAGE_SIZE + 1 : 0;
   const pageEnd = Math.min(pageIndex * RAW_LEADS_PAGE_SIZE + entries.length, activeTabCount);
 
@@ -872,7 +853,7 @@ function Inner() {
               }
               const keys = targets.map((e) => e.row_key);
               const keySet = new Set(keys);
-              removeCachedEntries((entry) => keySet.has(entry.row_key));
+              updateCachedEntries((e) => (keySet.has(e.row_key) ? { ...e, category: "wrong" } : e));
               try {
                 // row_keys are full Nextdoor URLs — batch to avoid
                 // exceeding the request URL length limit (which surfaces
