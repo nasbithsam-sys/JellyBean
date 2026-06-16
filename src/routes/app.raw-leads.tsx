@@ -567,23 +567,10 @@ function Inner() {
   const isFetching = cacheQuery.isFetching;
   const error = cacheQuery.error as Error | null;
 
-  // Bucket entries
-  const buckets = useMemo(() => {
-    const b: Record<"new" | "forwarded" | "not_found" | "wrong", CacheEntry[]> = {
-      new: [],
-      forwarded: [],
-      not_found: [],
-      wrong: [],
-    };
-    for (const e of entries) {
-      const cat = e.category;
-      if (cat === "forwarded") b.forwarded.push(e);
-      else if (cat === "not_found") b.not_found.push(e);
-      else if (cat === "wrong") b.wrong.push(e);
-      else b.new.push(e);
-    }
-    return b;
-  }, [entries]);
+  // Server-side category counts (for tab badges + pagination total)
+  const tabCounts = cacheQuery.data?.counts ?? { new: 0, forwarded: 0, not_found: 0, wrong: 0 };
+  const totalCount = cacheQuery.data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const areaOptions = useMemo(() => {
     const areas = new Set<string>();
@@ -594,8 +581,9 @@ function Inner() {
     return Array.from(areas).sort();
   }, [entries]);
 
+  // Entries are already filtered by category server-side; apply in-page filters/sort.
   const visible = useMemo(() => {
-    let list = buckets[tab];
+    let list = entries;
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((e) =>
@@ -620,7 +608,8 @@ function Inner() {
     return [...list].sort((a, b) =>
       compareRawLeadEntries(a, b, rawLeadSort, actions, currentUserId),
     );
-  }, [actions, areaFilter, buckets, currentUserId, leadFilter, query, rawLeadSort, tab]);
+  }, [actions, areaFilter, currentUserId, entries, leadFilter, query, rawLeadSort]);
+
 
   const shownRows = visible;
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
