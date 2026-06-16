@@ -470,43 +470,41 @@ function Inner() {
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", pageIndex],
+    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize],
     queryFn: async () =>
       (await fetchRawLeads({
-        data: { limit: RAW_LEADS_PAGE_SIZE, offset: pageIndex * RAW_LEADS_PAGE_SIZE },
+        data: { limit: pageSize, offset: pageIndex * pageSize, category: tab },
       })) as RawLeadPage,
     placeholderData: keepPreviousData,
-    // staleTime: 0 (default) — allows invalidateQueries() from useRealtimeSync
-    // to trigger a background refetch whenever new leads arrive from the extension.
     gcTime: Infinity,
     refetchOnWindowFocus: false,
   });
 
+  const cacheKey = useMemo(
+    () => ["raw-lead-cache", tab, pageIndex, pageSize] as const,
+    [tab, pageIndex, pageSize],
+  );
+
   const updateCachedEntries = useCallback(
     (updater: (entry: CacheEntry) => CacheEntry) => {
-      qc.setQueryData<RawLeadPage>(["raw-lead-cache", pageIndex], (prev) => {
+      qc.setQueryData<RawLeadPage>(cacheKey as unknown as readonly unknown[], (prev) => {
         if (!prev) return prev;
-        return {
-          ...prev,
-          entries: prev.entries.map(updater),
-        };
+        return { ...prev, entries: prev.entries.map(updater) };
       });
     },
-    [pageIndex, qc],
+    [cacheKey, qc],
   );
 
   const removeCachedEntries = useCallback(
     (shouldRemove: (entry: CacheEntry) => boolean) => {
-      qc.setQueryData<RawLeadPage>(["raw-lead-cache", pageIndex], (prev) => {
+      qc.setQueryData<RawLeadPage>(cacheKey as unknown as readonly unknown[], (prev) => {
         if (!prev) return prev;
-        return {
-          ...prev,
-          entries: prev.entries.filter((entry) => !shouldRemove(entry)),
-        };
+        return { ...prev, entries: prev.entries.filter((entry) => !shouldRemove(entry)) };
       });
     },
-    [pageIndex, qc],
+    [cacheKey, qc],
   );
+
 
   const deleteSelected = useCallback(async () => {
     if (!isAdmin || selected.size === 0) return;
