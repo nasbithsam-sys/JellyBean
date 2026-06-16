@@ -194,6 +194,23 @@ function Inner() {
     },
   });
 
+  const notFoundByUser = useQuery({
+    queryKey: ["report-not-found-by-user", range.from, range.to],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("report_not_found_by_user", {
+        _from: range.from ?? undefined,
+        _to: range.to ?? undefined,
+      });
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        user_id: string | null;
+        user_name: string;
+        user_email: string | null;
+        not_found_count: number;
+      }>;
+    },
+  });
+
   function exportReport() {
     downloadCsv(
       "crm-report.csv",
