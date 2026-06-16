@@ -104,8 +104,12 @@ type CacheEntry = {
 };
 type RawLeadPage = {
   entries: CacheEntry[];
-  nextOffset: number | null;
+  totalCount: number;
+  counts: { new: number; forwarded: number; not_found: number; wrong: number };
+  pageSize: number;
+  offset: number;
   hasMore: boolean;
+  nextOffset: number | null;
 };
 const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
 type SortDirection = "asc" | "desc";
