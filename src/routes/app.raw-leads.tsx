@@ -404,6 +404,7 @@ function Inner() {
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
+  const [qualifySecondPhone, setQualifySecondPhone] = useState("");
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_LEAD_PROMPT);
   const [promptDirty, setPromptDirty] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
@@ -1426,9 +1427,10 @@ function Inner() {
             setDetailFor(null);
             toast.success("Moved to Duplicate");
           }}
-          onForward={async (phone) => {
+          onForward={async (phone, secondPhone) => {
             await updateAction(detailFor.row_key, { phone });
             setQualifyFor({ ...detailFor, phone });
+            setQualifySecondPhone(secondPhone);
             setDetailFor(null);
           }}
         />
@@ -1438,10 +1440,15 @@ function Inner() {
         <QualifyDialog
           entry={qualifyFor}
           actorId={auth.user?.id ?? null}
-          onClose={() => setQualifyFor(null)}
+          initialSecondPhone={qualifySecondPhone}
+          onClose={() => {
+            setQualifyFor(null);
+            setQualifySecondPhone("");
+          }}
           onSent={async () => {
             await updateAction(qualifyFor.row_key, { category: "forwarded" });
             setQualifyFor(null);
+            setQualifySecondPhone("");
             toast.success("Forwarded to CS");
           }}
         />
@@ -1492,22 +1499,31 @@ function LeadDetailDialog({
   onNotFound: () => void | Promise<void>;
   onWrong: () => void | Promise<void>;
   onDuplicate: () => void | Promise<void>;
-  onForward: (phone: string) => void | Promise<void>;
+  onForward: (phone: string, secondPhone: string) => void | Promise<void>;
   onLeadChange: (lead: "yes" | "no") => void | Promise<void>;
 }) {
   const r = entry.data;
   const [phone, setPhone] = useState(entry.phone ?? "");
+  const [secondPhone, setSecondPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const checkDuplicate = useServerFn(checkDuplicatePhone);
   const phoneDigits = normalizePhone(phone);
+  const secondPhoneDigits = normalizePhone(secondPhone);
   const duplicateQuery = useQuery({
     queryKey: ["duplicate-phone", phoneDigits],
     enabled: phoneDigits.length >= 7,
     queryFn: () => checkDuplicate({ data: { phone } }),
     staleTime: 15_000,
   });
+  const secondDuplicateQuery = useQuery({
+    queryKey: ["duplicate-phone", secondPhoneDigits],
+    enabled: secondPhoneDigits.length >= 7,
+    queryFn: () => checkDuplicate({ data: { phone: secondPhone } }),
+    staleTime: 15_000,
+  });
   const duplicateMatches = (duplicateQuery.data?.matches ?? []) as DuplicatePhoneMatch[];
-  const hasDuplicate = duplicateMatches.length > 0;
+  const secondDuplicateMatches = (secondDuplicateQuery.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const hasDuplicate = duplicateMatches.length > 0 || secondDuplicateMatches.length > 0;
 
   async function handleNotFound() {
     setBusy(true);
@@ -1545,7 +1561,7 @@ function LeadDetailDialog({
     }
     setBusy(true);
     try {
-      await onForward(p);
+      await onForward(p, secondPhone.trim());
     } finally {
       setBusy(false);
     }
@@ -1630,6 +1646,27 @@ function LeadDetailDialog({
               )}
             </div>
           </div>
+          <div>
+            <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+              Second Phone Number
+            </Label>
+            <Input
+              value={secondPhone}
+              onChange={(e) => setSecondPhone(formatPhoneInput(e.target.value))}
+              placeholder="Optional second phone"
+            />
+            {secondDuplicateQuery.isFetching && (
+              <p className="mt-1 text-[11px] text-muted-foreground">Checking duplicates...</p>
+            )}
+            {secondDuplicateMatches.length > 0 && (
+              <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
+                Duplicate second phone number detected in the last 72 hours
+                {secondDuplicateMatches[0]?.customer_name
+                  ? `: ${secondDuplicateMatches[0].customer_name}`
+                  : ""}
+              </div>
+            )}
+          </div>
         </div>
 
         <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between gap-2">
@@ -1682,18 +1719,20 @@ function DetailField({ label, value }: { label: string; value?: string }) {
 function QualifyDialog({
   entry,
   actorId,
+  initialSecondPhone,
   onClose,
   onSent,
 }: {
   entry: CacheEntry;
   actorId: string | null;
+  initialSecondPhone: string;
   onClose: () => void;
   onSent: () => void;
 }) {
   const row = entry.data;
   const [customerName, setCustomerName] = useState(row["Account Name"] ?? "");
   const [customerNumber, setCustomerNumber] = useState(formatPhoneInput(entry.phone ?? ""));
-  const [customerNumber2, setCustomerNumber2] = useState("");
+  const [customerNumber2, setCustomerNumber2] = useState(formatPhoneInput(initialSecondPhone));
   const [postText, setPostText] = useState(row["Post Text"] ?? "");
   const [context, setContext] = useState("");
   const [passItTo, setPassItTo] = useState("");
