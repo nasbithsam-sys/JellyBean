@@ -827,8 +827,9 @@ function Inner() {
             variant="outline"
             className="h-9"
             onClick={async () => {
-              const targets = buckets.new.filter(
-                (e) => effectiveLead(e.data, actions[e.row_key]) === "no",
+              const targets = entries.filter(
+                (e: CacheEntry) =>
+                  e.category === null && effectiveLead(e.data, actions[e.row_key]) === "no",
               );
               if (targets.length === 0) {
                 toast.info("No 'No' leads to move.");
