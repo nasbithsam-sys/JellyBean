@@ -434,9 +434,43 @@ function Inner() {
           </table>
         </div>
       </Section>
+
+      <Section title="Number-not-found checks per user">
+        <div className="bg-card border rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b text-xs text-muted-foreground">
+            Counts raw leads marked as “Number not found”. Uses the same date range as above.
+            Only marks made after this report was added are attributed to a user.
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="px-4 py-2 font-medium">User</th>
+                <th className="px-4 py-2 font-medium">Email</th>
+                <th className="px-4 py-2 font-medium text-right">Marked not found</th>
+              </tr>
+            </thead>
+            <tbody>
+              {notFoundByUser.isLoading && (
+                <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
+              )}
+              {!notFoundByUser.isLoading && (notFoundByUser.data ?? []).length === 0 && (
+                <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No “Number not found” marks in this range.</td></tr>
+              )}
+              {(notFoundByUser.data ?? []).map((r, i) => (
+                <tr key={r.user_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30">
+                  <td className="px-4 py-2 font-medium">{r.user_name}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{r.user_email ?? "—"}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold">{r.not_found_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
     </div>
   );
 }
+
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
