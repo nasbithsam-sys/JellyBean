@@ -745,10 +745,10 @@ function Inner() {
         <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
           {(
             [
-              ["new", "New", buckets.new.length],
-              ["forwarded", "Forwarded", buckets.forwarded.length],
-              ["not_found", "Number not found", buckets.not_found.length],
-              ["wrong", "Wrong posts", buckets.wrong.length],
+              ["new", "New", tabCounts.new],
+              ["forwarded", "Forwarded", tabCounts.forwarded],
+              ["not_found", "Number not found", tabCounts.not_found],
+              ["wrong", "Wrong posts", tabCounts.wrong],
             ] as const
           ).map(([k, label, n]) => (
             <button
