@@ -40,6 +40,7 @@ function normalizeData(value: unknown): Record<string, string> {
 
 const CATEGORY_FILTERS = ["all", "new", "forwarded", "not_found", "wrong", "duplicate"] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
+const DUPLICATE_LOOKBACK_HOURS = 72;
 
 function normalizePhoneDigits(value: string | null | undefined): string {
   const digits = (value ?? "").replace(/\D/g, "");
@@ -195,9 +196,13 @@ export const checkDuplicatePhone = createServerFn({ method: "GET" })
     );
     if (!hasAllowedRole) throw new Error("Forbidden: raw leads access required");
 
+    const duplicateSince = new Date(
+      Date.now() - DUPLICATE_LOOKBACK_HOURS * 60 * 60 * 1000,
+    ).toISOString();
     const { data: rows, error } = await supabaseAdmin
       .from("qualified_leads")
       .select("id, customer_name, customer_number, customer_number_2, assigned_at")
+      .gte("assigned_at", duplicateSince)
       .limit(5000);
     if (error) throw new Error(error.message);
 

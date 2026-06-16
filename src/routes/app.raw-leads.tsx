@@ -1540,7 +1540,7 @@ function LeadDetailDialog({
       return;
     }
     if (hasDuplicate) {
-      toast.error("Duplicate phone number detected.");
+      toast.error("Duplicate phone number detected in the last 72 hours.");
       return;
     }
     setBusy(true);
@@ -1624,7 +1624,7 @@ function LeadDetailDialog({
               )}
               {hasDuplicate && (
                 <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
-                  Duplicate phone number detected
+                  Duplicate phone number detected in the last 72 hours
                   {duplicateMatches[0]?.customer_name ? `: ${duplicateMatches[0].customer_name}` : ""}
                 </div>
               )}
@@ -1719,9 +1719,9 @@ function QualifyDialog({
   const secondaryMatches = (duplicateSecondary.data?.matches ?? []) as DuplicatePhoneMatch[];
   const duplicateMessage =
     primaryMatches.length > 0
-      ? `Duplicate phone number detected${primaryMatches[0]?.customer_name ? `: ${primaryMatches[0].customer_name}` : ""}`
+      ? `Duplicate phone number detected in the last 72 hours${primaryMatches[0]?.customer_name ? `: ${primaryMatches[0].customer_name}` : ""}`
       : secondaryMatches.length > 0
-        ? `Duplicate second phone number detected${secondaryMatches[0]?.customer_name ? `: ${secondaryMatches[0].customer_name}` : ""}`
+        ? `Duplicate second phone number detected in the last 72 hours${secondaryMatches[0]?.customer_name ? `: ${secondaryMatches[0].customer_name}` : ""}`
         : null;
 
   async function send() {
