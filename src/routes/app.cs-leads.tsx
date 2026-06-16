@@ -122,6 +122,8 @@ type Lead = {
   main_area: string | null;
   sub_area: string | null;
   marketing_notes: string | null;
+  requirement_1: string | null;
+  requirement_2: string | null;
   number_name: string | null;
   original_lead_link: string | null;
   cs_status: CsStatus;
@@ -209,6 +211,7 @@ function Inner() {
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkAssignee, setBulkAssignee] = useState<string>("");
   const isCs = auth.primaryRole === "cs";
 
   const toggleSelect = (id: string) => {
@@ -221,8 +224,8 @@ function Inner() {
   };
   const clearSelection = () => setSelectedIds(new Set());
 
-  async function bulkAssignToMe() {
-    if (!auth.user?.id || selectedIds.size === 0) return;
+  async function bulkAssign(nextAssignee: string | null) {
+    if (selectedIds.size === 0) return;
     setBulkBusy(true);
     try {
       const ids = Array.from(selectedIds);
@@ -231,11 +234,14 @@ function Inner() {
         const slice = ids.slice(i, i + CHUNK);
         const { error } = await supabase
           .from("qualified_leads")
-          .update({ assigned_to: auth.user.id })
+          .update({ assigned_to: nextAssignee })
           .in("id", slice);
         if (error) throw error;
       }
-      toast.success(`Assigned ${ids.length} lead${ids.length === 1 ? "" : "s"} to you`);
+      const assigneeName = nextAssignee
+        ? (teamById.get(nextAssignee)?.full_name ?? teamById.get(nextAssignee)?.email ?? "CS")
+        : "Unassigned";
+      toast.success(`Assigned ${ids.length} lead${ids.length === 1 ? "" : "s"} to ${assigneeName}`);
       clearSelection();
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
     } catch (e) {
@@ -245,13 +251,22 @@ function Inner() {
     }
   }
 
+  async function bulkAssignToMe() {
+    if (!auth.user?.id) return;
+    await bulkAssign(auth.user.id);
+  }
+
+  async function bulkAssignAsAdmin() {
+    await bulkAssign(bulkAssignee === UNASSIGNED_VALUE ? null : bulkAssignee);
+  }
+
   const list = useQuery({
     queryKey: ["cs_leads"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, service, images, submitted_by_role",
+          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, service, images, submitted_by_role",
         )
         // Pin important / urgent jobs to the top, then most recent first.
         .order("is_important", { ascending: false })
@@ -396,9 +411,16 @@ function Inner() {
     return (list.data ?? []).filter((l) => {
       if (
         q &&
-        ![l.customer_name, l.customer_number, l.main_area, l.sub_area, l.pass_it_to].some((f) =>
-          f?.toLowerCase().includes(q),
-        )
+        ![
+          l.customer_name,
+          l.customer_number,
+          l.number_name,
+          l.main_area,
+          l.sub_area,
+          l.pass_it_to,
+          l.requirement_1,
+          l.requirement_2,
+        ].some((f) => f?.toLowerCase().includes(q))
       ) {
         return false;
       }
@@ -439,10 +461,24 @@ function Inner() {
   function exportLeads() {
     downloadCsv(
       "cs-leads.csv",
-      ["Customer", "Phone", "Status", "Assigned To", "Area", "Sub Area", "Created"],
+      [
+        "Customer",
+        "Phone",
+        "Number Name",
+        "Requirement 1",
+        "Requirement 2",
+        "Status",
+        "Assigned To",
+        "Area",
+        "Sub Area",
+        "Created",
+      ],
       visibleLeads.map((lead) => [
         lead.customer_name,
         formatPhone(lead.customer_number),
+        lead.number_name ?? "",
+        lead.requirement_1 ?? "",
+        lead.requirement_2 ?? "",
         STATUS_LABEL[lead.cs_status] ?? lead.cs_status,
         lead.assigned_to
           ? (teamById.get(lead.assigned_to)?.full_name ??
@@ -615,23 +651,21 @@ function Inner() {
       {/* Status tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-surface border border-border">
-          {isAdmin && (
-            <button
-              onClick={() => setActiveStatus("__all__")}
-              className={cn(
-                "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
-                activeStatus === "__all__"
-                  ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
-              All Leads
-              <span className="text-[10.5px] text-muted-foreground tabular-nums">
-                {filtered.length}
-              </span>
-            </button>
-          )}
+          <button
+            onClick={() => setActiveStatus("__all__")}
+            className={cn(
+              "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+              activeStatus === "__all__"
+                ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
+            All Leads
+            <span className="text-[10.5px] text-muted-foreground tabular-nums">
+              {filtered.length}
+            </span>
+          </button>
           {PIPELINE_STATUSES.map((s) => (
             <button
               key={s}
@@ -699,7 +733,7 @@ function Inner() {
         </div>
       ) : (
         <>
-          {isCs && (
+          {(isCs || isAdmin) && (
             <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-surface border border-border text-[12px]">
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">
@@ -727,19 +761,50 @@ function Inner() {
                   </button>
                 )}
               </div>
-              <Button
-                size="sm"
-                className="h-8"
-                disabled={selectedIds.size === 0 || bulkBusy}
-                onClick={bulkAssignToMe}
-              >
-                {bulkBusy ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                Assign {selectedIds.size > 0 ? selectedIds.size : ""} to myself
-              </Button>
+              {isAdmin ? (
+                <div className="flex items-center gap-2">
+                  <Select value={bulkAssignee} onValueChange={setBulkAssignee}>
+                    <SelectTrigger className="h-8 w-[190px] text-[12px]">
+                      <SelectValue placeholder="Assign selected to..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
+                      {team.data?.map((m) => (
+                        <SelectItem key={m.user_id} value={m.user_id}>
+                          {m.full_name || m.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    className="h-8"
+                    disabled={selectedIds.size === 0 || bulkBusy || !bulkAssignee}
+                    onClick={bulkAssignAsAdmin}
+                  >
+                    {bulkBusy ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    Assign {selectedIds.size > 0 ? selectedIds.size : ""}
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  className="h-8"
+                  disabled={selectedIds.size === 0 || bulkBusy}
+                  onClick={bulkAssignToMe}
+                >
+                  {bulkBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Assign {selectedIds.size > 0 ? selectedIds.size : ""} to myself
+                </Button>
+              )}
             </div>
           )}
           {viewMode === "cards" ? (
@@ -753,7 +818,7 @@ function Inner() {
                   onOpen={() => setOpened(l)}
                   selected={selectedIds.has(l.id)}
                   onToggleSelect={() => toggleSelect(l.id)}
-                  showSelect={isCs}
+                  showSelect={isCs || isAdmin}
                 />
               ))}
             </div>
@@ -922,6 +987,8 @@ function LeadCard({
   const [assigning, setAssigning] = useState(false);
   const [numberName, setNumberName] = useState(lead.number_name ?? "");
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
+  const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
+  const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
   const initials = (lead.customer_name || "?")
     .split(/\s+/)
     .map((p) => p[0])
@@ -1197,6 +1264,44 @@ function LeadCard({
         />
       </div>
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Requirement 1
+        </Label>
+        <Textarea
+          value={requirement1}
+          rows={2}
+          onChange={(e) => setRequirement1(e.target.value)}
+          onBlur={async () => {
+            if ((requirement1 || "") !== (lead.requirement_1 ?? "")) {
+              if (await saveField({ requirement_1: requirement1 } as Partial<Lead>)) {
+                qc.invalidateQueries({ queryKey: ["cs_leads"] });
+              }
+            }
+          }}
+          className="text-[12px] mt-0.5 resize-none"
+          placeholder="Requirement 1"
+        />
+      </div>
+      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          Requirement 2
+        </Label>
+        <Textarea
+          value={requirement2}
+          rows={2}
+          onChange={(e) => setRequirement2(e.target.value)}
+          onBlur={async () => {
+            if ((requirement2 || "") !== (lead.requirement_2 ?? "")) {
+              if (await saveField({ requirement_2: requirement2 } as Partial<Lead>)) {
+                qc.invalidateQueries({ queryKey: ["cs_leads"] });
+              }
+            }
+          }}
+          className="text-[12px] mt-0.5 resize-none"
+          placeholder="Requirement 2"
+        />
+      </div>
+      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
         <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Compose</Label>
         <Textarea
           value={compose}
@@ -1346,7 +1451,10 @@ function LeadDrawer({
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
+  const [numberName, setNumberName] = useState(lead.number_name ?? "");
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
+  const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
+  const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
@@ -1375,7 +1483,10 @@ function LeadDrawer({
           cs_notes: newNotes as Json,
           followup_at: followup ? new Date(followup).toISOString() : null,
           assigned_to: assignedTo,
+          number_name: numberName.trim() || null,
           marketing_notes: compose.trim() || null,
+          requirement_1: requirement1.trim() || null,
+          requirement_2: requirement2.trim() || null,
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
@@ -1422,7 +1533,6 @@ function LeadDrawer({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {lead.number_name && <Info label="Number Name" value={lead.number_name} />}
           {(lead.main_area || lead.sub_area) && (
             <Info
               label="Area"
@@ -1438,6 +1548,8 @@ function LeadDrawer({
         {lead.post_text && (
           <Info label="Customer exact requirement" value={lead.post_text} multiline />
         )}
+        {lead.requirement_1 && <Info label="Requirement 1" value={lead.requirement_1} multiline />}
+        {lead.requirement_2 && <Info label="Requirement 2" value={lead.requirement_2} multiline />}
         {lead.context && <Info label="Context" value={lead.context} multiline />}
         {Array.isArray(lead.images) && lead.images.length > 0 && (
           <div>
@@ -1485,6 +1597,16 @@ function LeadDrawer({
           </div>
           <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Number Name
+            </Label>
+            <Input
+              value={numberName}
+              onChange={(e) => setNumberName(e.target.value)}
+              placeholder="Number name"
+            />
+          </div>
+          <div>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
               Compose
             </Label>
             <Textarea
@@ -1493,6 +1615,30 @@ function LeadDrawer({
               rows={4}
               maxLength={2000}
               placeholder="Compose a message or note for this lead..."
+            />
+          </div>
+          <div>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Requirement 1
+            </Label>
+            <Textarea
+              value={requirement1}
+              onChange={(e) => setRequirement1(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="Requirement 1"
+            />
+          </div>
+          <div>
+            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+              Requirement 2
+            </Label>
+            <Textarea
+              value={requirement2}
+              onChange={(e) => setRequirement2(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="Requirement 2"
             />
           </div>
           <div>
