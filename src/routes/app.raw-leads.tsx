@@ -385,6 +385,7 @@ function Inner() {
     direction: "desc",
   });
   const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_LEAD_PROMPT);
