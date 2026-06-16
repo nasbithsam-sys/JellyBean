@@ -118,6 +118,22 @@ function Inner() {
     },
   });
 
+  const notFoundCount = useQuery({
+    queryKey: ["forwarded-not-found", auth.user?.id, isAdmin],
+    enabled: !!auth.user?.id,
+    queryFn: async () => {
+      let q = supabase
+        .from("raw_lead_cache")
+        .select("row_key", { count: "exact", head: true })
+        .eq("category", "not_found");
+      if (!isAdmin) q = q.eq("categorized_by", auth.user!.id);
+      const { count, error } = await q;
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+
   const list = useQuery({
     queryKey: ["forwarded-leads", auth.user?.id, isAdmin],
     enabled: !!auth.user?.id,
