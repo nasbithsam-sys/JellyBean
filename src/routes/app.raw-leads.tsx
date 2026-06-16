@@ -1251,10 +1251,12 @@ function Inner() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2">
         <div className="text-[11.5px] text-muted-foreground">
-          Showing {entries.length ? pageIndex * RAW_LEADS_PAGE_SIZE + 1 : 0}-
-          {pageIndex * RAW_LEADS_PAGE_SIZE + entries.length} from database page {pageIndex + 1}
-          {" - "}
-          {visible.length} {visible.length === 1 ? "row matches" : "rows match"} current filters
+          {totalCount === 0
+            ? "No leads in this category"
+            : `Showing ${pageIndex * pageSize + 1}-${pageIndex * pageSize + entries.length} of ${totalCount.toLocaleString()}`}
+          {visible.length !== entries.length && (
+            <> · {visible.length} match current filters</>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {cacheQuery.isFetching && (
@@ -1263,6 +1265,33 @@ function Inner() {
               Updating
             </span>
           )}
+          <Select
+            value={String(pageSize)}
+            onValueChange={(v) => {
+              setPageSize(Number(v));
+              setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[88px] text-[12px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <SelectItem key={size} value={String(size)}>
+                  {size} / page
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => setPageIndex(0)}
+            disabled={pageIndex === 0 || cacheQuery.isFetching}
+          >
+            « First
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1272,20 +1301,30 @@ function Inner() {
           >
             Previous
           </Button>
-          <div className="h-8 min-w-[82px] inline-flex items-center justify-center rounded-md border border-border bg-card px-3 text-[12px] font-medium">
-            Page {pageIndex + 1}
+          <div className="h-8 inline-flex items-center justify-center rounded-md border border-border bg-card px-3 text-[12px] font-medium tabular-nums">
+            Page {pageIndex + 1} / {totalPages}
           </div>
           <Button
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex((page) => page + 1)}
-            disabled={!cacheQuery.data?.hasMore || cacheQuery.isFetching}
+            onClick={() => setPageIndex((page) => Math.min(totalPages - 1, page + 1))}
+            disabled={pageIndex >= totalPages - 1 || cacheQuery.isFetching}
           >
             Next
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => setPageIndex(totalPages - 1)}
+            disabled={pageIndex >= totalPages - 1 || cacheQuery.isFetching}
+          >
+            Last »
+          </Button>
         </div>
       </div>
+
 
       {/* Ingest endpoint info */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
