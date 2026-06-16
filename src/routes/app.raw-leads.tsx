@@ -61,7 +61,8 @@ import { fetchRawLeadCache } from "@/lib/raw-leads.functions";
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
 const TABLE = "raw_lead_cache";
-const RAW_LEADS_PAGE_SIZE = 100;
+const PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
+const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_LEAD_PROMPT = `Home repair lead filter.
 
 Mark only YES, NO, or REVIEW.
