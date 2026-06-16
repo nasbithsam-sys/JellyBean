@@ -116,6 +116,7 @@ type Lead = {
   id: string;
   customer_name: string;
   customer_number: string;
+  customer_number_2: string | null;
   context: string | null;
   post_text: string | null;
   pass_it_to: string | null;
@@ -266,7 +267,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, service, images, submitted_by_role",
+          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, service, images, submitted_by_role",
         )
         // Pin important / urgent jobs to the top, then most recent first.
         .order("is_important", { ascending: false })
@@ -414,6 +415,7 @@ function Inner() {
         ![
           l.customer_name,
           l.customer_number,
+          l.customer_number_2,
           l.number_name,
           l.main_area,
           l.sub_area,
@@ -464,6 +466,7 @@ function Inner() {
       [
         "Customer",
         "Phone",
+        "Second Phone",
         "Number Name",
         "Requirement 1",
         "Requirement 2",
@@ -476,6 +479,7 @@ function Inner() {
       visibleLeads.map((lead) => [
         lead.customer_name,
         formatPhone(lead.customer_number),
+        formatPhone(lead.customer_number_2),
         lead.number_name ?? "",
         lead.requirement_1 ?? "",
         lead.requirement_2 ?? "",
@@ -916,6 +920,7 @@ function CsLeadsTable({
           <tr>
             <th className="text-left px-3 py-2 font-medium">Customer</th>
             <th className="text-left px-3 py-2 font-medium">Phone</th>
+            <th className="text-left px-3 py-2 font-medium">Second Phone</th>
             <th className="text-left px-3 py-2 font-medium">Number Name</th>
             <th className="text-left px-3 py-2 font-medium">Status</th>
             <th className="text-left px-3 py-2 font-medium">Assigned</th>
@@ -936,6 +941,9 @@ function CsLeadsTable({
                 <td className="px-3 py-2 font-medium">{lead.customer_name}</td>
                 <td className="px-3 py-2 text-muted-foreground">
                   {formatPhone(lead.customer_number)}
+                </td>
+                <td className="px-3 py-2 text-muted-foreground">
+                  {lead.customer_number_2 ? formatPhone(lead.customer_number_2) : "-"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{lead.number_name || "-"}</td>
                 <td className="px-3 py-2">
@@ -1142,6 +1150,15 @@ function LeadCard({
           >
             <Phone className="h-3 w-3" /> {formatPhone(lead.customer_number)}
           </a>
+          {lead.customer_number_2 && (
+            <a
+              href={`tel:${lead.customer_number_2}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-primary transition-colors mt-0.5 ml-2"
+            >
+              <Phone className="h-3 w-3" /> {formatPhone(lead.customer_number_2)}
+            </a>
+          )}
         </div>
       </div>
 
@@ -1530,6 +1547,15 @@ function LeadDrawer({
             <Phone className="h-3.5 w-3.5 mr-1.5" />
             {formatPhone(lead.customer_number)}
           </a>
+          {lead.customer_number_2 && (
+            <a
+              href={`tel:${lead.customer_number_2}`}
+              className="text-sm text-primary inline-flex items-center mt-1.5 ml-3 hover:text-primary-glow transition-colors"
+            >
+              <Phone className="h-3.5 w-3.5 mr-1.5" />
+              {formatPhone(lead.customer_number_2)}
+            </a>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

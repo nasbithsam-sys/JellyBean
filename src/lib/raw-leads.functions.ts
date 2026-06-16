@@ -11,7 +11,7 @@ type RawLeadCacheRow = {
   data: Record<string, string>;
   lead: "yes" | "no" | null;
   phone: string | null;
-  category: "forwarded" | "not_found" | "wrong" | null;
+  category: "forwarded" | "not_found" | "wrong" | "duplicate" | null;
   captured_at: string | null;
   lead_link: string | null;
   sheet_row: number | null;
@@ -23,7 +23,12 @@ function normalizeLead(value: string | null): "yes" | "no" | null {
 }
 
 function normalizeCategory(value: string | null): RawLeadCacheRow["category"] {
-  return value === "forwarded" || value === "not_found" || value === "wrong" ? value : null;
+  return value === "forwarded" ||
+    value === "not_found" ||
+    value === "wrong" ||
+    value === "duplicate"
+    ? value
+    : null;
 }
 
 function normalizeData(value: unknown): Record<string, string> {
@@ -33,8 +38,13 @@ function normalizeData(value: unknown): Record<string, string> {
   );
 }
 
-const CATEGORY_FILTERS = ["all", "new", "forwarded", "not_found", "wrong"] as const;
+const CATEGORY_FILTERS = ["all", "new", "forwarded", "not_found", "wrong", "duplicate"] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
+
+function normalizePhoneDigits(value: string | null | undefined): string {
+  const digits = (value ?? "").replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+}
 
 export const fetchRawLeadCache = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -70,7 +80,12 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       category: CategoryFilter,
     ): T => {
       if (category === "new") return query.is("category" as never, null as never);
-      if (category === "forwarded" || category === "not_found" || category === "wrong")
+      if (
+        category === "forwarded" ||
+        category === "not_found" ||
+        category === "wrong" ||
+        category === "duplicate"
+      )
         return query.eq("category" as never, category as never);
       return query;
     };
@@ -103,11 +118,12 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       return count ?? 0;
     };
 
-    const [totalNew, totalForwarded, totalNotFound, totalWrong] = await Promise.all([
+    const [totalNew, totalForwarded, totalNotFound, totalWrong, totalDuplicate] = await Promise.all([
       countFor("new"),
       countFor("forwarded"),
       countFor("not_found"),
       countFor("wrong"),
+      countFor("duplicate"),
     ]);
 
     const totalForCategory =
@@ -119,7 +135,9 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
             ? totalNotFound
             : data.category === "wrong"
               ? totalWrong
-              : totalNew + totalForwarded + totalNotFound + totalWrong;
+              : data.category === "duplicate"
+                ? totalDuplicate
+                : totalNew + totalForwarded + totalNotFound + totalWrong + totalDuplicate;
 
     const entries: RawLeadCacheRow[] = (rows ?? []).map((entry) => ({
       row_key: entry.row_key,
@@ -141,6 +159,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
         forwarded: totalForwarded,
         not_found: totalNotFound,
         wrong: totalWrong,
+        duplicate: totalDuplicate,
       },
       pageSize: data.limit,
       offset: data.offset,
@@ -148,4 +167,54 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       nextOffset:
         data.offset + entries.length < totalForCategory ? data.offset + data.limit : null,
     };
+  });
+
+export const checkDuplicatePhone = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z
+      .object({
+        phone: z.string().default(""),
+      })
+      .parse(input ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const target = normalizePhoneDigits(data.phone);
+    if (target.length < 7) return { duplicate: false, matches: [] };
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rolesData, error: rolesError } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId);
+    if (rolesError) throw new Error(rolesError.message);
+
+    const roles = (rolesData ?? []).map((row) => row.role as string);
+    const hasAllowedRole = roles.some((role): role is RawLeadRole =>
+      ALLOWED_RAW_LEAD_ROLES.includes(role as RawLeadRole),
+    );
+    if (!hasAllowedRole) throw new Error("Forbidden: raw leads access required");
+
+    const { data: rows, error } = await supabaseAdmin
+      .from("qualified_leads")
+      .select("id, customer_name, customer_number, customer_number_2, assigned_at")
+      .limit(5000);
+    if (error) throw new Error(error.message);
+
+    const matches = (rows ?? [])
+      .filter((row) =>
+        [row.customer_number, row.customer_number_2].some(
+          (value) => normalizePhoneDigits(value).slice(-10) === target.slice(-10),
+        ),
+      )
+      .slice(0, 5)
+      .map((row) => ({
+        id: row.id,
+        customer_name: row.customer_name,
+        customer_number: row.customer_number,
+        customer_number_2: row.customer_number_2,
+        assigned_at: row.assigned_at,
+      }));
+
+    return { duplicate: matches.length > 0, matches };
   });
