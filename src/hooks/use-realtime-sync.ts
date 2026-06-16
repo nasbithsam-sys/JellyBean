@@ -6,7 +6,7 @@ import type { AppRole } from "@/hooks/use-auth";
 // Map each replicated table to the React Query keys that should refresh
 // when any user inserts/updates/deletes a row.
 const TABLE_QUERY_KEYS: Record<string, string[][]> = {
-  qualified_leads: [["cs_leads"], ["cs_sent_today"], ["cs_new_lead_ping"]],
+  qualified_leads: [["cs_leads"], ["cs_sent_today"], ["forwarded-leads"]],
   incogniton_profiles: [["incog_profiles"]],
   shared_state: [["raw-leads-shared-start-row"], ["raw-leads-ai-lock"], ["lead-ai-prompt"]],
   // raw_lead_cache is intentionally NOT auto-synced — Raw Leads only
@@ -18,7 +18,10 @@ const ROLE_TABLES: Record<AppRole, string[]> = {
   sub_admin: ["qualified_leads", "incogniton_profiles", "shared_state"],
   scraping: ["qualified_leads", "incogniton_profiles", "shared_state"],
   processor: ["qualified_leads", "incogniton_profiles", "shared_state"],
-  cs: ["qualified_leads"],
+  // CS pipeline intentionally avoids background list invalidation. A separate
+  // insert listener shows new-lead alerts, while manual refresh keeps active
+  // compose work from jumping when other users forward or update leads.
+  cs: [],
   acc_handler: ["incogniton_profiles", "shared_state"],
   facebook: ["qualified_leads"],
   seo: ["qualified_leads"],
