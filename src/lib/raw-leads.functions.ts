@@ -33,13 +33,17 @@ function normalizeData(value: unknown): Record<string, string> {
   );
 }
 
+const CATEGORY_FILTERS = ["all", "new", "forwarded", "not_found", "wrong"] as const;
+type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
+
 export const fetchRawLeadCache = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
     z
       .object({
-        limit: z.number().int().min(1).max(500).default(200),
+        limit: z.number().int().min(1).max(500).default(100),
         offset: z.number().int().min(0).default(0),
+        category: z.enum(CATEGORY_FILTERS).default("all"),
       })
       .parse(input ?? {}),
   )
@@ -61,41 +65,87 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const columns =
       "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to";
 
-    const buildQuery = () => {
-      let query = supabaseAdmin
-        .from("raw_lead_cache")
-        .select(columns)
-        .order("captured_at", { ascending: false, nullsFirst: false })
-        .range(data.offset, data.offset + data.limit);
-      if (!isAdmin) query = query.or(`assigned_to.is.null,assigned_to.eq.${context.userId}`);
+    const applyCategory = <T extends { is: (...a: never[]) => T; eq: (...a: never[]) => T }>(
+      query: T,
+      category: CategoryFilter,
+    ): T => {
+      if (category === "new") return query.is("category" as never, null as never);
+      if (category === "forwarded" || category === "not_found" || category === "wrong")
+        return query.eq("category" as never, category as never);
       return query;
     };
 
-    const { data: latest, error } = await buildQuery();
+    const applyAssignment = <T extends { or: (...a: never[]) => T }>(query: T): T => {
+      if (isAdmin) return query;
+      return query.or(`assigned_to.is.null,assigned_to.eq.${context.userId}` as never);
+    };
+
+    // Paged data
+    let dataQuery = supabaseAdmin
+      .from("raw_lead_cache")
+      .select(columns)
+      .order("captured_at", { ascending: false, nullsFirst: false })
+      .range(data.offset, data.offset + data.limit - 1);
+    dataQuery = applyCategory(dataQuery as never, data.category) as typeof dataQuery;
+    dataQuery = applyAssignment(dataQuery as never) as typeof dataQuery;
+    const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
 
-    const merged = new Map<string, RawLeadCacheRow>();
-    for (const entry of latest ?? []) {
-      merged.set(entry.row_key, {
-        row_key: entry.row_key,
-        data: normalizeData(entry.data),
-        lead: normalizeLead(entry.lead),
-        phone: entry.phone,
-        category: normalizeCategory(entry.category),
-        captured_at: entry.captured_at,
-        lead_link: entry.lead_link,
-        sheet_row: entry.sheet_row,
-        assigned_to: entry.assigned_to,
-      });
-    }
+    // Counts per category (so the UI can paginate and show tab badges).
+    const countFor = async (category: CategoryFilter) => {
+      let q = supabaseAdmin
+        .from("raw_lead_cache")
+        .select("row_key", { count: "exact", head: true });
+      q = applyCategory(q as never, category) as typeof q;
+      q = applyAssignment(q as never) as typeof q;
+      const { count, error: countError } = await q;
+      if (countError) throw new Error(countError.message);
+      return count ?? 0;
+    };
 
-    const rows = Array.from(merged.values()).sort(
-      (a, b) => new Date(b.captured_at ?? 0).getTime() - new Date(a.captured_at ?? 0).getTime(),
-    );
-    const entries = rows.slice(0, data.limit);
+    const [totalNew, totalForwarded, totalNotFound, totalWrong] = await Promise.all([
+      countFor("new"),
+      countFor("forwarded"),
+      countFor("not_found"),
+      countFor("wrong"),
+    ]);
+
+    const totalForCategory =
+      data.category === "new"
+        ? totalNew
+        : data.category === "forwarded"
+          ? totalForwarded
+          : data.category === "not_found"
+            ? totalNotFound
+            : data.category === "wrong"
+              ? totalWrong
+              : totalNew + totalForwarded + totalNotFound + totalWrong;
+
+    const entries: RawLeadCacheRow[] = (rows ?? []).map((entry) => ({
+      row_key: entry.row_key,
+      data: normalizeData(entry.data),
+      lead: normalizeLead(entry.lead),
+      phone: entry.phone,
+      category: normalizeCategory(entry.category),
+      captured_at: entry.captured_at,
+      lead_link: entry.lead_link,
+      sheet_row: entry.sheet_row,
+      assigned_to: entry.assigned_to,
+    }));
+
     return {
       entries,
-      nextOffset: rows.length > data.limit ? data.offset + data.limit : null,
-      hasMore: rows.length > data.limit,
+      totalCount: totalForCategory,
+      counts: {
+        new: totalNew,
+        forwarded: totalForwarded,
+        not_found: totalNotFound,
+        wrong: totalWrong,
+      },
+      pageSize: data.limit,
+      offset: data.offset,
+      hasMore: data.offset + entries.length < totalForCategory,
+      nextOffset:
+        data.offset + entries.length < totalForCategory ? data.offset + data.limit : null,
     };
   });
