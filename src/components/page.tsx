@@ -16,16 +16,14 @@ export function PageHeader({
     <div
       className={cn(
         "flex items-center justify-between gap-4 px-8 pt-6 pb-5 border-b border-border/70",
-        "bg-background/82 backdrop-blur-xl sticky top-0 z-30",
+        "bg-slate-950 text-white backdrop-blur-xl sticky top-0 z-30 shadow-sm",
         className,
       )}
     >
       <div className="min-w-0">
-        <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.02em] text-foreground">
-          {title}
-        </h1>
+        <h1 className="text-[24px] leading-tight font-semibold text-white">{title}</h1>
         {description && (
-          <p className="text-[14px] text-muted-foreground mt-1.5 max-w-3xl">{description}</p>
+          <p className="text-[14px] text-slate-300 mt-1.5 max-w-3xl">{description}</p>
         )}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}

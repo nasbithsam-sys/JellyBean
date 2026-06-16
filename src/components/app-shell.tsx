@@ -37,9 +37,7 @@ const ADMIN: Item[] = [
   { to: "/app/settings", label: "Settings", icon: Settings, shortcut: "S" },
 ];
 
-const SCRAPING: Item[] = [
-  { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe },
-];
+const SCRAPING: Item[] = [{ to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe }];
 
 const PROCESSOR: Item[] = [
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2 },
@@ -52,10 +50,14 @@ const ACC_HANDLER: Item[] = [
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe, shortcut: "B" },
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2, shortcut: "L" },
+  { to: "/app/forwarded-leads", label: "Forwarded Leads", icon: Headphones },
   { to: "/app/submit-lead", label: "Manual Lead", icon: Send },
 ];
 
-const SUBMITTER: Item[] = [{ to: "/app/submit-lead", label: "Submit Lead", icon: Send }];
+const SUBMITTER: Item[] = [
+  { to: "/app/submit-lead", label: "Submit Lead", icon: Send },
+  { to: "/app/forwarded-leads", label: "Forwarded Leads", icon: Headphones },
+];
 
 const ADMIN_FULL: Item[] = [
   ...ADMIN.slice(0, 3),
@@ -65,8 +67,7 @@ const ADMIN_FULL: Item[] = [
 ];
 
 const SUB_ADMIN: Item[] = ADMIN_FULL.filter(
-  (item) =>
-    item.to !== "/app/cs-leads" && item.to !== "/app/logs" && item.to !== "/app/settings",
+  (item) => item.to !== "/app/cs-leads" && item.to !== "/app/logs" && item.to !== "/app/settings",
 );
 
 function itemsForRole(role: AppRole | null): Item[] {
@@ -106,7 +107,9 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
               <span className="text-[13px] font-semibold">LG</span>
             </div>
             <div className="leading-tight">
-              <div className="text-[15px] font-semibold tracking-tight text-foreground">Leadgrid</div>
+              <div className="text-[15px] font-semibold tracking-tight text-foreground">
+                Leadgrid
+              </div>
               <div className="text-[12px] text-muted-foreground">CRM workspace</div>
             </div>
           </div>
@@ -134,7 +137,9 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                 <Icon
                   className={cn(
                     "h-[17px] w-[17px] transition-colors",
-                    active ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground",
+                    active
+                      ? "text-primary-foreground"
+                      : "text-muted-foreground group-hover:text-foreground",
                   )}
                 />
                 <span className="flex-1 truncate">{item.label}</span>
@@ -156,13 +161,13 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         </nav>
 
         <div className="border-t border-sidebar-border p-4">
-          <div className="flex items-center gap-3 rounded-2xl bg-card border border-border p-3 shadow-sm">
+          <div className="flex items-center gap-3 rounded-xl bg-white/8 border border-white/10 p-3 shadow-sm">
             <div className="h-9 w-9 rounded-full bg-secondary grid place-items-center text-[12px] font-semibold text-secondary-foreground">
               {initials(auth.profile?.full_name, auth.user?.email)}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-semibold truncate text-foreground">{displayName}</div>
-              <div className="text-[11px] text-muted-foreground capitalize flex items-center gap-1.5">
+              <div className="text-[13px] font-semibold truncate text-white">{displayName}</div>
+              <div className="text-[11px] text-slate-300 capitalize flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-success" />
                 {roleLabel(auth.primaryRole)}
               </div>
