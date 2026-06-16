@@ -552,17 +552,28 @@ function Inner() {
 
   const updateAction = useCallback(
     async (k: string, patch: Partial<Action>) => {
-      // Optimistic update
+      // When a user changes the category, remember who/when so reports can show it.
+      const enriched: Record<string, unknown> = { ...patch };
+      if ("category" in patch) {
+        enriched.categorized_by = currentUserId;
+        enriched.categorized_at = new Date().toISOString();
+      }
+      // Optimistic update of fields we render
       updateCachedEntries((e) => (e.row_key === k ? { ...e, ...patch } : e));
       try {
-        await patchEntry(k, patch as Partial<CacheEntry>);
+        await patchEntry(k, enriched as Partial<CacheEntry>);
+        if ("category" in patch) {
+          // Refresh counts / pagination since the row may have moved categories.
+          qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+        }
       } catch (e) {
         toast.error((e as Error).message);
         cacheQuery.refetch();
       }
     },
-    [updateCachedEntries, cacheQuery],
+    [cacheQuery, currentUserId, qc, updateCachedEntries],
   );
+
 
   const isFetching = cacheQuery.isFetching;
   const error = cacheQuery.error as Error | null;
