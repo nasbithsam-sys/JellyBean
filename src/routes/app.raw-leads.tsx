@@ -858,10 +858,15 @@ function Inner() {
                   const slice = keys.slice(i, i + CHUNK);
                   const { error } = await supabase
                     .from(TABLE)
-                    .update({ category: "wrong" })
+                    .update({
+                      category: "wrong",
+                      categorized_by: currentUserId,
+                      categorized_at: new Date().toISOString(),
+                    } as RawLeadCacheUpdate)
                     .in("row_key", slice);
                   if (error) throw error;
                 }
+                qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
                 toast.success(
                   `Moved ${targets.length} "No" lead${targets.length === 1 ? "" : "s"} to Wrong posts`,
                 );
