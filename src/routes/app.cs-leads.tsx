@@ -35,15 +35,8 @@ import {
   CalendarDays,
   LayoutGrid,
   Table2,
+  X,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
@@ -375,6 +368,12 @@ function Inner() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (!incomingLead) return;
+    const t = setTimeout(() => setIncomingLead(null), 5000);
+    return () => clearTimeout(t);
+  }, [incomingLead]);
 
   const enableAlerts = async () => {
     try {
@@ -853,53 +852,65 @@ function Inner() {
         />
       )}
 
-      <Dialog open={!!incomingLead} onOpenChange={(o) => !o && setIncomingLead(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Bell className="h-4 w-4 text-primary" />
-              New lead forwarded to CS
-            </DialogTitle>
-            <DialogDescription>
-              A new qualified lead just landed in your pipeline.
-            </DialogDescription>
-          </DialogHeader>
-          {incomingLead && (
-            <div className="space-y-2 text-sm">
+      {incomingLead && (
+        <div className="fixed bottom-4 right-4 z-50 w-[min(calc(100vw-2rem),360px)] rounded-lg border border-border bg-card shadow-lg animate-fade-in-up">
+          <div className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 font-semibold text-[14px]">
+                  <Bell className="h-4 w-4 text-primary shrink-0" />
+                  <span>New lead forwarded to CS</span>
+                </div>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  A new qualified lead just landed in your pipeline.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIncomingLead(null)}
+                className="text-muted-foreground hover:text-foreground"
+                title="Dismiss"
+              >
+                <span className="sr-only">Dismiss</span>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-3 space-y-1.5 text-[12.5px]">
               <div>
-                <div className="text-muted-foreground text-xs">Customer</div>
-                <div className="font-semibold">{incomingLead.name}</div>
+                <div className="text-muted-foreground text-[11px]">Customer</div>
+                <div className="font-semibold truncate">{incomingLead.name}</div>
               </div>
               {incomingLead.area && (
                 <div>
-                  <div className="text-muted-foreground text-xs">Area</div>
-                  <div>{incomingLead.area}</div>
-                </div>
-              )}
-              {incomingLead.context && (
-                <div>
-                  <div className="text-muted-foreground text-xs">Context</div>
-                  <div className="line-clamp-3">{incomingLead.context}</div>
+                  <div className="text-muted-foreground text-[11px]">Area</div>
+                  <div className="truncate">{incomingLead.area}</div>
                 </div>
               )}
             </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIncomingLead(null)}>
-              Dismiss
-            </Button>
-            <Button
-              onClick={() => {
-                setActiveStatus("new");
-                qc.invalidateQueries({ queryKey: ["cs_leads"] });
-                setIncomingLead(null);
-              }}
-            >
-              View new leads
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => setIncomingLead(null)}
+              >
+                Dismiss
+              </Button>
+              <Button
+                size="sm"
+                className="h-8"
+                onClick={() => {
+                  setActiveStatus("new");
+                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                  setIncomingLead(null);
+                }}
+              >
+                View
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
