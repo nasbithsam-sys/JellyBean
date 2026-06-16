@@ -352,6 +352,8 @@ export type Database = {
         Row: {
           assigned_to: string | null
           captured_at: string | null
+          categorized_at: string | null
+          categorized_by: string | null
           category: string | null
           created_at: string
           data: Json
@@ -366,6 +368,8 @@ export type Database = {
         Insert: {
           assigned_to?: string | null
           captured_at?: string | null
+          categorized_at?: string | null
+          categorized_by?: string | null
           category?: string | null
           created_at?: string
           data: Json
@@ -380,6 +384,8 @@ export type Database = {
         Update: {
           assigned_to?: string | null
           captured_at?: string | null
+          categorized_at?: string | null
+          categorized_by?: string | null
           category?: string | null
           created_at?: string
           data?: Json
@@ -545,6 +551,15 @@ export type Database = {
           processor_email: string
           processor_id: string
           processor_name: string
+        }[]
+      }
+      report_not_found_by_user: {
+        Args: { _from?: string; _to?: string }
+        Returns: {
+          not_found_count: number
+          user_email: string
+          user_id: string
+          user_name: string
         }[]
       }
     }

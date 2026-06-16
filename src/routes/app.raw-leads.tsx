@@ -61,7 +61,8 @@ import { fetchRawLeadCache } from "@/lib/raw-leads.functions";
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
 const TABLE = "raw_lead_cache";
-const RAW_LEADS_PAGE_SIZE = 100;
+const PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
+const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_LEAD_PROMPT = `Home repair lead filter.
 
 Mark only YES, NO, or REVIEW.
@@ -103,8 +104,12 @@ type CacheEntry = {
 };
 type RawLeadPage = {
   entries: CacheEntry[];
-  nextOffset: number | null;
+  totalCount: number;
+  counts: { new: number; forwarded: number; not_found: number; wrong: number };
+  pageSize: number;
+  offset: number;
   hasMore: boolean;
+  nextOffset: number | null;
 };
 const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
 type SortDirection = "asc" | "desc";
@@ -380,6 +385,7 @@ function Inner() {
     direction: "desc",
   });
   const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
   const [aiPrompt, setAiPrompt] = useState(DEFAULT_LEAD_PROMPT);
@@ -464,43 +470,41 @@ function Inner() {
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", pageIndex],
+    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize],
     queryFn: async () =>
       (await fetchRawLeads({
-        data: { limit: RAW_LEADS_PAGE_SIZE, offset: pageIndex * RAW_LEADS_PAGE_SIZE },
+        data: { limit: pageSize, offset: pageIndex * pageSize, category: tab },
       })) as RawLeadPage,
     placeholderData: keepPreviousData,
-    // staleTime: 0 (default) — allows invalidateQueries() from useRealtimeSync
-    // to trigger a background refetch whenever new leads arrive from the extension.
     gcTime: Infinity,
     refetchOnWindowFocus: false,
   });
 
+  const cacheKey = useMemo(
+    () => ["raw-lead-cache", tab, pageIndex, pageSize] as const,
+    [tab, pageIndex, pageSize],
+  );
+
   const updateCachedEntries = useCallback(
     (updater: (entry: CacheEntry) => CacheEntry) => {
-      qc.setQueryData<RawLeadPage>(["raw-lead-cache", pageIndex], (prev) => {
+      qc.setQueryData<RawLeadPage>(cacheKey as unknown as readonly unknown[], (prev) => {
         if (!prev) return prev;
-        return {
-          ...prev,
-          entries: prev.entries.map(updater),
-        };
+        return { ...prev, entries: prev.entries.map(updater) };
       });
     },
-    [pageIndex, qc],
+    [cacheKey, qc],
   );
 
   const removeCachedEntries = useCallback(
     (shouldRemove: (entry: CacheEntry) => boolean) => {
-      qc.setQueryData<RawLeadPage>(["raw-lead-cache", pageIndex], (prev) => {
+      qc.setQueryData<RawLeadPage>(cacheKey as unknown as readonly unknown[], (prev) => {
         if (!prev) return prev;
-        return {
-          ...prev,
-          entries: prev.entries.filter((entry) => !shouldRemove(entry)),
-        };
+        return { ...prev, entries: prev.entries.filter((entry) => !shouldRemove(entry)) };
       });
     },
-    [pageIndex, qc],
+    [cacheKey, qc],
   );
+
 
   const deleteSelected = useCallback(async () => {
     if (!isAdmin || selected.size === 0) return;
@@ -548,38 +552,36 @@ function Inner() {
 
   const updateAction = useCallback(
     async (k: string, patch: Partial<Action>) => {
-      // Optimistic update
+      // When a user changes the category, remember who/when so reports can show it.
+      const enriched: Record<string, unknown> = { ...patch };
+      if ("category" in patch) {
+        enriched.categorized_by = currentUserId;
+        enriched.categorized_at = new Date().toISOString();
+      }
+      // Optimistic update of fields we render
       updateCachedEntries((e) => (e.row_key === k ? { ...e, ...patch } : e));
       try {
-        await patchEntry(k, patch as Partial<CacheEntry>);
+        await patchEntry(k, enriched as Partial<CacheEntry>);
+        if ("category" in patch) {
+          // Refresh counts / pagination since the row may have moved categories.
+          qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+        }
       } catch (e) {
         toast.error((e as Error).message);
         cacheQuery.refetch();
       }
     },
-    [updateCachedEntries, cacheQuery],
+    [cacheQuery, currentUserId, qc, updateCachedEntries],
   );
+
 
   const isFetching = cacheQuery.isFetching;
   const error = cacheQuery.error as Error | null;
 
-  // Bucket entries
-  const buckets = useMemo(() => {
-    const b: Record<"new" | "forwarded" | "not_found" | "wrong", CacheEntry[]> = {
-      new: [],
-      forwarded: [],
-      not_found: [],
-      wrong: [],
-    };
-    for (const e of entries) {
-      const cat = e.category;
-      if (cat === "forwarded") b.forwarded.push(e);
-      else if (cat === "not_found") b.not_found.push(e);
-      else if (cat === "wrong") b.wrong.push(e);
-      else b.new.push(e);
-    }
-    return b;
-  }, [entries]);
+  // Server-side category counts (for tab badges + pagination total)
+  const tabCounts = cacheQuery.data?.counts ?? { new: 0, forwarded: 0, not_found: 0, wrong: 0 };
+  const totalCount = cacheQuery.data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const areaOptions = useMemo(() => {
     const areas = new Set<string>();
@@ -590,8 +592,9 @@ function Inner() {
     return Array.from(areas).sort();
   }, [entries]);
 
+  // Entries are already filtered by category server-side; apply in-page filters/sort.
   const visible = useMemo(() => {
-    let list = buckets[tab];
+    let list = entries;
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((e) =>
@@ -616,7 +619,8 @@ function Inner() {
     return [...list].sort((a, b) =>
       compareRawLeadEntries(a, b, rawLeadSort, actions, currentUserId),
     );
-  }, [actions, areaFilter, buckets, currentUserId, leadFilter, query, rawLeadSort, tab]);
+  }, [actions, areaFilter, currentUserId, entries, leadFilter, query, rawLeadSort]);
+
 
   const shownRows = visible;
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
@@ -752,10 +756,10 @@ function Inner() {
         <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
           {(
             [
-              ["new", "New", buckets.new.length],
-              ["forwarded", "Forwarded", buckets.forwarded.length],
-              ["not_found", "Number not found", buckets.not_found.length],
-              ["wrong", "Wrong posts", buckets.wrong.length],
+              ["new", "New", tabCounts.new],
+              ["forwarded", "Forwarded", tabCounts.forwarded],
+              ["not_found", "Number not found", tabCounts.not_found],
+              ["wrong", "Wrong posts", tabCounts.wrong],
             ] as const
           ).map(([k, label, n]) => (
             <button
@@ -834,8 +838,9 @@ function Inner() {
             variant="outline"
             className="h-9"
             onClick={async () => {
-              const targets = buckets.new.filter(
-                (e) => effectiveLead(e.data, actions[e.row_key]) === "no",
+              const targets = entries.filter(
+                (e: CacheEntry) =>
+                  e.category === null && effectiveLead(e.data, actions[e.row_key]) === "no",
               );
               if (targets.length === 0) {
                 toast.info("No 'No' leads to move.");
@@ -853,10 +858,15 @@ function Inner() {
                   const slice = keys.slice(i, i + CHUNK);
                   const { error } = await supabase
                     .from(TABLE)
-                    .update({ category: "wrong" })
+                    .update({
+                      category: "wrong",
+                      categorized_by: currentUserId,
+                      categorized_at: new Date().toISOString(),
+                    } as RawLeadCacheUpdate)
                     .in("row_key", slice);
                   if (error) throw error;
                 }
+                qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
                 toast.success(
                   `Moved ${targets.length} "No" lead${targets.length === 1 ? "" : "s"} to Wrong posts`,
                 );
@@ -1257,10 +1267,12 @@ function Inner() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2">
         <div className="text-[11.5px] text-muted-foreground">
-          Showing {entries.length ? pageIndex * RAW_LEADS_PAGE_SIZE + 1 : 0}-
-          {pageIndex * RAW_LEADS_PAGE_SIZE + entries.length} from database page {pageIndex + 1}
-          {" - "}
-          {visible.length} {visible.length === 1 ? "row matches" : "rows match"} current filters
+          {totalCount === 0
+            ? "No leads in this category"
+            : `Showing ${pageIndex * pageSize + 1}-${pageIndex * pageSize + entries.length} of ${totalCount.toLocaleString()}`}
+          {visible.length !== entries.length && (
+            <> · {visible.length} match current filters</>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {cacheQuery.isFetching && (
@@ -1269,6 +1281,33 @@ function Inner() {
               Updating
             </span>
           )}
+          <Select
+            value={String(pageSize)}
+            onValueChange={(v) => {
+              setPageSize(Number(v));
+              setPageIndex(0);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[88px] text-[12px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <SelectItem key={size} value={String(size)}>
+                  {size} / page
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => setPageIndex(0)}
+            disabled={pageIndex === 0 || cacheQuery.isFetching}
+          >
+            « First
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1278,20 +1317,30 @@ function Inner() {
           >
             Previous
           </Button>
-          <div className="h-8 min-w-[82px] inline-flex items-center justify-center rounded-md border border-border bg-card px-3 text-[12px] font-medium">
-            Page {pageIndex + 1}
+          <div className="h-8 inline-flex items-center justify-center rounded-md border border-border bg-card px-3 text-[12px] font-medium tabular-nums">
+            Page {pageIndex + 1} / {totalPages}
           </div>
           <Button
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex((page) => page + 1)}
-            disabled={!cacheQuery.data?.hasMore || cacheQuery.isFetching}
+            onClick={() => setPageIndex((page) => Math.min(totalPages - 1, page + 1))}
+            disabled={pageIndex >= totalPages - 1 || cacheQuery.isFetching}
           >
             Next
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => setPageIndex(totalPages - 1)}
+            disabled={pageIndex >= totalPages - 1 || cacheQuery.isFetching}
+          >
+            Last »
+          </Button>
         </div>
       </div>
+
 
       {/* Ingest endpoint info */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
