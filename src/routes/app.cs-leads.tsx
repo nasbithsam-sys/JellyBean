@@ -35,15 +35,8 @@ import {
   CalendarDays,
   LayoutGrid,
   Table2,
+  X,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
@@ -116,6 +109,7 @@ type Lead = {
   id: string;
   customer_name: string;
   customer_number: string;
+  customer_number_2: string | null;
   context: string | null;
   post_text: string | null;
   pass_it_to: string | null;
@@ -266,7 +260,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, service, images, submitted_by_role",
+          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, service, images, submitted_by_role",
         )
         // Pin important / urgent jobs to the top, then most recent first.
         .order("is_important", { ascending: false })
@@ -375,6 +369,12 @@ function Inner() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!incomingLead) return;
+    const t = setTimeout(() => setIncomingLead(null), 5000);
+    return () => clearTimeout(t);
+  }, [incomingLead]);
+
   const enableAlerts = async () => {
     try {
       if (!("Notification" in window)) {
@@ -414,6 +414,7 @@ function Inner() {
         ![
           l.customer_name,
           l.customer_number,
+          l.customer_number_2,
           l.number_name,
           l.main_area,
           l.sub_area,
@@ -464,6 +465,7 @@ function Inner() {
       [
         "Customer",
         "Phone",
+        "Second Phone",
         "Number Name",
         "Requirement 1",
         "Requirement 2",
@@ -476,6 +478,7 @@ function Inner() {
       visibleLeads.map((lead) => [
         lead.customer_name,
         formatPhone(lead.customer_number),
+        formatPhone(lead.customer_number_2),
         lead.number_name ?? "",
         lead.requirement_1 ?? "",
         lead.requirement_2 ?? "",
@@ -849,53 +852,65 @@ function Inner() {
         />
       )}
 
-      <Dialog open={!!incomingLead} onOpenChange={(o) => !o && setIncomingLead(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Bell className="h-4 w-4 text-primary" />
-              New lead forwarded to CS
-            </DialogTitle>
-            <DialogDescription>
-              A new qualified lead just landed in your pipeline.
-            </DialogDescription>
-          </DialogHeader>
-          {incomingLead && (
-            <div className="space-y-2 text-sm">
+      {incomingLead && (
+        <div className="fixed bottom-4 right-4 z-50 w-[min(calc(100vw-2rem),360px)] rounded-lg border border-border bg-card shadow-lg animate-fade-in-up">
+          <div className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 font-semibold text-[14px]">
+                  <Bell className="h-4 w-4 text-primary shrink-0" />
+                  <span>New lead forwarded to CS</span>
+                </div>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  A new qualified lead just landed in your pipeline.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIncomingLead(null)}
+                className="text-muted-foreground hover:text-foreground"
+                title="Dismiss"
+              >
+                <span className="sr-only">Dismiss</span>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-3 space-y-1.5 text-[12.5px]">
               <div>
-                <div className="text-muted-foreground text-xs">Customer</div>
-                <div className="font-semibold">{incomingLead.name}</div>
+                <div className="text-muted-foreground text-[11px]">Customer</div>
+                <div className="font-semibold truncate">{incomingLead.name}</div>
               </div>
               {incomingLead.area && (
                 <div>
-                  <div className="text-muted-foreground text-xs">Area</div>
-                  <div>{incomingLead.area}</div>
-                </div>
-              )}
-              {incomingLead.context && (
-                <div>
-                  <div className="text-muted-foreground text-xs">Context</div>
-                  <div className="line-clamp-3">{incomingLead.context}</div>
+                  <div className="text-muted-foreground text-[11px]">Area</div>
+                  <div className="truncate">{incomingLead.area}</div>
                 </div>
               )}
             </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIncomingLead(null)}>
-              Dismiss
-            </Button>
-            <Button
-              onClick={() => {
-                setActiveStatus("new");
-                qc.invalidateQueries({ queryKey: ["cs_leads"] });
-                setIncomingLead(null);
-              }}
-            >
-              View new leads
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => setIncomingLead(null)}
+              >
+                Dismiss
+              </Button>
+              <Button
+                size="sm"
+                className="h-8"
+                onClick={() => {
+                  setActiveStatus("new");
+                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                  setIncomingLead(null);
+                }}
+              >
+                View
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -916,6 +931,7 @@ function CsLeadsTable({
           <tr>
             <th className="text-left px-3 py-2 font-medium">Customer</th>
             <th className="text-left px-3 py-2 font-medium">Phone</th>
+            <th className="text-left px-3 py-2 font-medium">Second Phone</th>
             <th className="text-left px-3 py-2 font-medium">Number Name</th>
             <th className="text-left px-3 py-2 font-medium">Status</th>
             <th className="text-left px-3 py-2 font-medium">Assigned</th>
@@ -936,6 +952,9 @@ function CsLeadsTable({
                 <td className="px-3 py-2 font-medium">{lead.customer_name}</td>
                 <td className="px-3 py-2 text-muted-foreground">
                   {formatPhone(lead.customer_number)}
+                </td>
+                <td className="px-3 py-2 text-muted-foreground">
+                  {lead.customer_number_2 ? formatPhone(lead.customer_number_2) : "-"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{lead.number_name || "-"}</td>
                 <td className="px-3 py-2">
@@ -1142,6 +1161,15 @@ function LeadCard({
           >
             <Phone className="h-3 w-3" /> {formatPhone(lead.customer_number)}
           </a>
+          {lead.customer_number_2 && (
+            <a
+              href={`tel:${lead.customer_number_2}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-primary transition-colors mt-0.5 ml-2"
+            >
+              <Phone className="h-3 w-3" /> {formatPhone(lead.customer_number_2)}
+            </a>
+          )}
         </div>
       </div>
 
@@ -1530,6 +1558,15 @@ function LeadDrawer({
             <Phone className="h-3.5 w-3.5 mr-1.5" />
             {formatPhone(lead.customer_number)}
           </a>
+          {lead.customer_number_2 && (
+            <a
+              href={`tel:${lead.customer_number_2}`}
+              className="text-sm text-primary inline-flex items-center mt-1.5 ml-3 hover:text-primary-glow transition-colors"
+            >
+              <Phone className="h-3.5 w-3.5 mr-1.5" />
+              {formatPhone(lead.customer_number_2)}
+            </a>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

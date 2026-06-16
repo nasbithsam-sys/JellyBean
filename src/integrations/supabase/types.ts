@@ -266,6 +266,7 @@ export type Database = {
           cs_status: Database["public"]["Enums"]["cs_status"]
           customer_name: string
           customer_number: string
+          customer_number_2: string | null
           followup_at: string | null
           id: string
           images: Json
@@ -296,6 +297,7 @@ export type Database = {
           cs_status?: Database["public"]["Enums"]["cs_status"]
           customer_name: string
           customer_number: string
+          customer_number_2?: string | null
           followup_at?: string | null
           id?: string
           images?: Json
@@ -326,6 +328,7 @@ export type Database = {
           cs_status?: Database["public"]["Enums"]["cs_status"]
           customer_name?: string
           customer_number?: string
+          customer_number_2?: string | null
           followup_at?: string | null
           id?: string
           images?: Json

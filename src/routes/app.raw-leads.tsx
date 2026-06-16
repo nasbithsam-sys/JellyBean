@@ -54,9 +54,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
-import { downloadCsv, formatPhone } from "@/lib/crm-lite";
+import { downloadCsv, formatPhone, normalizePhone } from "@/lib/crm-lite";
 import { analyzeRawLeadsWithAi } from "@/lib/raw-leads-ai.functions";
-import { fetchRawLeadCache } from "@/lib/raw-leads.functions";
+import { checkDuplicatePhone, fetchRawLeadCache } from "@/lib/raw-leads.functions";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
@@ -88,7 +88,7 @@ type Row = Record<string, string> & {
   "Incog Account"?: string;
 };
 
-type Category = "forwarded" | "not_found" | "wrong";
+type Category = "forwarded" | "not_found" | "wrong" | "duplicate";
 type LeadDecision = "yes" | "no" | "review";
 type Action = { category?: Category | null; lead?: LeadDecision | null; phone?: string | null };
 type CacheEntry = {
@@ -105,7 +105,7 @@ type CacheEntry = {
 type RawLeadPage = {
   entries: CacheEntry[];
   totalCount: number;
-  counts: { new: number; forwarded: number; not_found: number; wrong: number };
+  counts: { new: number; forwarded: number; not_found: number; wrong: number; duplicate: number };
   pageSize: number;
   offset: number;
   hasMore: boolean;
@@ -127,6 +127,13 @@ type RawLeadSortKey =
   | "incog_account"
   | "assignment";
 type RawLeadSort = { key: RawLeadSortKey; direction: SortDirection };
+type DuplicatePhoneMatch = {
+  id: string;
+  customer_name: string;
+  customer_number: string;
+  customer_number_2: string | null;
+  assigned_at: string;
+};
 
 const AI_LOCK_KEY = "raw_leads.ai_lock";
 const AI_LOCK_MAX_AGE_MS = 5 * 60 * 1000;
@@ -159,6 +166,13 @@ const RAW_LEAD_SORT_BY_COLUMN: Record<RawLeadColumn, RawLeadSortKey> = {
   "Account Area": "account_area",
   "Incog Account": "incog_account",
 };
+
+function formatPhoneInput(value: string): string {
+  const digits = normalizePhone(value);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+}
 
 // ── Row helpers ───────────────────────────────────────────────────────────────
 function keyFor(r: Row) {
@@ -376,7 +390,9 @@ function Inner() {
   const nextdoorWebhookUrl =
     typeof window === "undefined" ? "" : `${window.location.origin}/api/public/nextdoor-leads`;
 
-  const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong">("new");
+  const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong" | "duplicate">(
+    "new",
+  );
   const [query, setQuery] = useState("");
   const [leadFilter, setLeadFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
@@ -579,7 +595,13 @@ function Inner() {
   const error = cacheQuery.error as Error | null;
 
   // Server-side category counts (for tab badges + pagination total)
-  const tabCounts = cacheQuery.data?.counts ?? { new: 0, forwarded: 0, not_found: 0, wrong: 0 };
+  const tabCounts = cacheQuery.data?.counts ?? {
+    new: 0,
+    forwarded: 0,
+    not_found: 0,
+    wrong: 0,
+    duplicate: 0,
+  };
   const totalCount = cacheQuery.data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -759,6 +781,7 @@ function Inner() {
               ["new", "New", tabCounts.new],
               ["forwarded", "Forwarded", tabCounts.forwarded],
               ["not_found", "Number not found", tabCounts.not_found],
+              ["duplicate", "Duplicate", tabCounts.duplicate],
               ["wrong", "Wrong posts", tabCounts.wrong],
             ] as const
           ).map(([k, label, n]) => (
@@ -1398,6 +1421,11 @@ function Inner() {
             setDetailFor(null);
             toast.success("Marked as wrong post");
           }}
+          onDuplicate={async () => {
+            await updateAction(detailFor.row_key, { category: "duplicate" });
+            setDetailFor(null);
+            toast.success("Moved to Duplicate");
+          }}
           onForward={async (phone) => {
             await updateAction(detailFor.row_key, { phone });
             setQualifyFor({ ...detailFor, phone });
@@ -1455,6 +1483,7 @@ function LeadDetailDialog({
   onClose,
   onNotFound,
   onWrong,
+  onDuplicate,
   onForward,
   onLeadChange,
 }: {
@@ -1462,12 +1491,23 @@ function LeadDetailDialog({
   onClose: () => void;
   onNotFound: () => void | Promise<void>;
   onWrong: () => void | Promise<void>;
+  onDuplicate: () => void | Promise<void>;
   onForward: (phone: string) => void | Promise<void>;
   onLeadChange: (lead: "yes" | "no") => void | Promise<void>;
 }) {
   const r = entry.data;
   const [phone, setPhone] = useState(entry.phone ?? "");
   const [busy, setBusy] = useState(false);
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const phoneDigits = normalizePhone(phone);
+  const duplicateQuery = useQuery({
+    queryKey: ["duplicate-phone", phoneDigits],
+    enabled: phoneDigits.length >= 7,
+    queryFn: () => checkDuplicate({ data: { phone } }),
+    staleTime: 15_000,
+  });
+  const duplicateMatches = (duplicateQuery.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const hasDuplicate = duplicateMatches.length > 0;
 
   async function handleNotFound() {
     setBusy(true);
@@ -1485,10 +1525,22 @@ function LeadDetailDialog({
       setBusy(false);
     }
   }
+  async function handleDuplicate() {
+    setBusy(true);
+    try {
+      await onDuplicate();
+    } finally {
+      setBusy(false);
+    }
+  }
   async function handleForward() {
     const p = phone.trim();
     if (!p) {
       toast.error("Enter a phone number — or click Number not found.");
+      return;
+    }
+    if (hasDuplicate) {
+      toast.error("Duplicate phone number detected in the last 72 hours.");
       return;
     }
     setBusy(true);
@@ -1563,10 +1615,19 @@ function LeadDetailDialog({
               </Label>
               <Input
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
                 placeholder="Phone from post / comments"
                 autoFocus
               />
+              {duplicateQuery.isFetching && (
+                <p className="mt-1 text-[11px] text-muted-foreground">Checking duplicates...</p>
+              )}
+              {hasDuplicate && (
+                <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
+                  Duplicate phone number detected in the last 72 hours
+                  {duplicateMatches[0]?.customer_name ? `: ${duplicateMatches[0].customer_name}` : ""}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1577,6 +1638,10 @@ function LeadDetailDialog({
               <PhoneOff className="h-4 w-4 mr-2" />
               Number not found
             </Button>
+            <Button variant="outline" onClick={handleDuplicate} disabled={busy}>
+              <Copy className="h-4 w-4 mr-2" />
+              Duplicate
+            </Button>
             <Button variant="ghost" onClick={handleWrong} disabled={busy}>
               Wrong post
             </Button>
@@ -1585,7 +1650,7 @@ function LeadDetailDialog({
             <Button variant="outline" onClick={onClose} disabled={busy}>
               Close
             </Button>
-            <Button onClick={handleForward} disabled={busy}>
+            <Button onClick={handleForward} disabled={busy || hasDuplicate}>
               {busy ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
@@ -1627,17 +1692,45 @@ function QualifyDialog({
 }) {
   const row = entry.data;
   const [customerName, setCustomerName] = useState(row["Account Name"] ?? "");
-  const [customerNumber, setCustomerNumber] = useState(entry.phone ?? "");
+  const [customerNumber, setCustomerNumber] = useState(formatPhoneInput(entry.phone ?? ""));
+  const [customerNumber2, setCustomerNumber2] = useState("");
   const [postText, setPostText] = useState(row["Post Text"] ?? "");
   const [context, setContext] = useState("");
   const [passItTo, setPassItTo] = useState("");
   const [subArea, setSubArea] = useState(row["Sub Area / Neighborhood"] ?? "");
   const [isImportant, setIsImportant] = useState(false);
   const [busy, setBusy] = useState(false);
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const customerNumberDigits = normalizePhone(customerNumber);
+  const customerNumber2Digits = normalizePhone(customerNumber2);
+  const duplicatePrimary = useQuery({
+    queryKey: ["duplicate-phone", customerNumberDigits],
+    enabled: customerNumberDigits.length >= 7,
+    queryFn: () => checkDuplicate({ data: { phone: customerNumber } }),
+    staleTime: 15_000,
+  });
+  const duplicateSecondary = useQuery({
+    queryKey: ["duplicate-phone", customerNumber2Digits],
+    enabled: customerNumber2Digits.length >= 7,
+    queryFn: () => checkDuplicate({ data: { phone: customerNumber2 } }),
+    staleTime: 15_000,
+  });
+  const primaryMatches = (duplicatePrimary.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const secondaryMatches = (duplicateSecondary.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const duplicateMessage =
+    primaryMatches.length > 0
+      ? `Duplicate phone number detected in the last 72 hours${primaryMatches[0]?.customer_name ? `: ${primaryMatches[0].customer_name}` : ""}`
+      : secondaryMatches.length > 0
+        ? `Duplicate second phone number detected in the last 72 hours${secondaryMatches[0]?.customer_name ? `: ${secondaryMatches[0].customer_name}` : ""}`
+        : null;
 
   async function send() {
     if (!customerName.trim() || !customerNumber.trim()) {
       toast.error("Customer name and number are required");
+      return;
+    }
+    if (duplicateMessage) {
+      toast.error(duplicateMessage);
       return;
     }
     setBusy(true);
@@ -1645,6 +1738,9 @@ function QualifyDialog({
       const { error } = await supabase.from("qualified_leads").insert({
         customer_name: customerName.trim(),
         customer_number: formatPhone(customerNumber.trim()) || customerNumber.trim(),
+        customer_number_2: customerNumber2.trim()
+          ? formatPhone(customerNumber2.trim()) || customerNumber2.trim()
+          : null,
         post_text: postText.trim() || null,
         context: context.trim() || null,
         pass_it_to: passItTo.trim() || null,
@@ -1678,10 +1774,22 @@ function QualifyDialog({
           <Field label="Customer Number">
             <Input
               value={customerNumber}
-              onChange={(e) => setCustomerNumber(e.target.value)}
-              placeholder="Multiple? separate with comma"
+              onChange={(e) => setCustomerNumber(formatPhoneInput(e.target.value))}
+              placeholder="Primary phone number"
             />
           </Field>
+          <Field label="Second Phone Number">
+            <Input
+              value={customerNumber2}
+              onChange={(e) => setCustomerNumber2(formatPhoneInput(e.target.value))}
+              placeholder="Optional second phone"
+            />
+          </Field>
+          {duplicateMessage && (
+            <div className="col-span-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+              {duplicateMessage}
+            </div>
+          )}
           <Field label="Sub Area">
             <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} />
           </Field>
@@ -1728,7 +1836,7 @@ function QualifyDialog({
           <Button variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={send} disabled={busy}>
+          <Button onClick={send} disabled={busy || !!duplicateMessage}>
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
