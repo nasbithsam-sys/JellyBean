@@ -295,8 +295,8 @@ function Inner() {
                   ["all", "All time"],
                   ["today", "Today"],
                   ["yesterday", "Yesterday"],
-                  ["7d", "Last 7d"],
-                  ["30d", "Last 30d"],
+                  ["7d", "Weekly"],
+                  ["30d", "Monthly"],
                   ["custom", "Custom"],
                 ] as Array<[DatePreset, string]>
               ).map(([key, label]) => (
@@ -406,7 +406,7 @@ function Inner() {
       <Section title="Leads forwarded per processor">
         <div className="bg-card border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b text-xs text-muted-foreground">
-            Uses the same date range as Leads by account above.
+            Uses the same range controls above: Today, Yesterday, Weekly, Monthly, or Custom.
           </div>
           <table className="w-full text-sm">
             <thead className="bg-muted/40">

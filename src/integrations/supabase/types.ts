@@ -277,6 +277,8 @@ export type Database = {
           pass_it_to: string | null
           post_text: string | null
           raw_lead_id: string | null
+          requirement_1: string | null
+          requirement_2: string | null
           service: string | null
           sub_area: string | null
           submitted_by_role: string | null
@@ -305,6 +307,8 @@ export type Database = {
           pass_it_to?: string | null
           post_text?: string | null
           raw_lead_id?: string | null
+          requirement_1?: string | null
+          requirement_2?: string | null
           service?: string | null
           sub_area?: string | null
           submitted_by_role?: string | null
@@ -333,6 +337,8 @@ export type Database = {
           pass_it_to?: string | null
           post_text?: string | null
           raw_lead_id?: string | null
+          requirement_1?: string | null
+          requirement_2?: string | null
           service?: string | null
           sub_area?: string | null
           submitted_by_role?: string | null
