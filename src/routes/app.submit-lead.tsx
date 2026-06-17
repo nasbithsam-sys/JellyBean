@@ -439,6 +439,19 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         cs_status: "new",
       } as never);
       if (error) throw error;
+      await supabase.from("activity_logs").insert({
+        actor_id: auth.user.id,
+        actor_name: auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null,
+        actor_role: auth.primaryRole,
+        action: "lead.submitted_to_cs",
+        entity_type: "qualified_lead",
+        metadata: {
+          customer_name: name.trim(),
+          customer_number: number.trim(),
+          area: area.trim() || null,
+          submitted_by_role: role,
+        },
+      });
       toast.success("Lead sent to CS");
       qc.invalidateQueries({ queryKey: ["my-submitted-leads"] });
       onDone();
