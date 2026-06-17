@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -8,6 +8,8 @@ import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -23,17 +25,46 @@ import {
   Settings as SettingsIcon,
   Users as UsersIcon,
   Trash2,
+  CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { adminCreateUser, adminResetPassword, adminSetActive } from "@/lib/admin-users.functions";
 import { adminDeleteUser } from "@/lib/login-otp.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/settings")({ component: Page });
 
+const ADMIN_UPDATE_CHECKLIST_KEY = "admin_update_checklist";
+
+type AdminUpdateItem = {
+  id: string;
+  text: string;
+  done: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type AdminUpdateValue = {
+  items?: AdminUpdateItem[];
+};
+
+function readAdminUpdateItems(value: Json | null | undefined): AdminUpdateItem[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const items = (value as AdminUpdateValue).items;
+  if (!Array.isArray(items)) return [];
+  return items.filter(
+    (item): item is AdminUpdateItem =>
+      !!item &&
+      typeof item.id === "string" &&
+      typeof item.text === "string" &&
+      typeof item.done === "boolean",
+  );
+}
+
 function Page() {
   const auth = useAuth();
-  const [tab, setTab] = useState<"general" | "users">("general");
+  const [tab, setTab] = useState<"general" | "updates" | "users">("general");
   return (
     <div>
       <PageHeader title="Settings" description="System-wide preferences and team management." />
@@ -48,6 +79,13 @@ function Page() {
               General
             </TabBtn>
             <TabBtn
+              active={tab === "updates"}
+              onClick={() => setTab("updates")}
+              icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+            >
+              Updates
+            </TabBtn>
+            <TabBtn
               active={tab === "users"}
               onClick={() => setTab("users")}
               icon={<UsersIcon className="h-3.5 w-3.5" />}
@@ -55,7 +93,9 @@ function Page() {
               Users
             </TabBtn>
           </div>
-          {tab === "general" ? <GeneralTab /> : <UsersTab />}
+          {tab === "general" && <GeneralTab />}
+          {tab === "updates" && <UpdatesTab />}
+          {tab === "users" && <UsersTab />}
         </RoleGate>
       </PageBody>
     </div>
@@ -97,6 +137,179 @@ function GeneralTab() {
           Login codes and OTP prompts are disabled for every role. Users sign in with their
           provisioned username or email and password only.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function UpdatesTab() {
+  const auth = useAuth();
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const updatesQuery = useQuery({
+    queryKey: ["shared_state", ADMIN_UPDATE_CHECKLIST_KEY],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_state")
+        .select("value")
+        .eq("key", ADMIN_UPDATE_CHECKLIST_KEY)
+        .maybeSingle();
+      if (error) throw error;
+      return readAdminUpdateItems(data?.value);
+    },
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("admin-update-checklist-sync")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "shared_state",
+          filter: `key=eq.${ADMIN_UPDATE_CHECKLIST_KEY}`,
+        },
+        () => qc.invalidateQueries({ queryKey: ["shared_state", ADMIN_UPDATE_CHECKLIST_KEY] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  async function saveItems(items: AdminUpdateItem[]) {
+    const { error } = await supabase.from("shared_state").upsert({
+      key: ADMIN_UPDATE_CHECKLIST_KEY,
+      value: { items },
+      updated_by: auth.user?.id ?? null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+    await qc.invalidateQueries({ queryKey: ["shared_state", ADMIN_UPDATE_CHECKLIST_KEY] });
+  }
+
+  async function addItem() {
+    const text = draft.trim();
+    if (!text) return;
+    setBusy(true);
+    try {
+      const now = new Date().toISOString();
+      const item: AdminUpdateItem = {
+        id: crypto.randomUUID(),
+        text,
+        done: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await saveItems([item, ...(updatesQuery.data ?? [])]);
+      setDraft("");
+      toast.success("Update note added");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleItem(id: string, done: boolean) {
+    setBusy(true);
+    try {
+      const now = new Date().toISOString();
+      await saveItems(
+        (updatesQuery.data ?? []).map((item) =>
+          item.id === id ? { ...item, done, updatedAt: now } : item,
+        ),
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeItem(id: string) {
+    setBusy(true);
+    try {
+      await saveItems((updatesQuery.data ?? []).filter((item) => item.id !== id));
+      toast.success("Update note removed");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const items = updatesQuery.data ?? [];
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      <div className="bg-card border rounded-lg p-5">
+        <h3 className="text-sm font-semibold mb-1">Update checklist</h3>
+        <p className="text-xs text-muted-foreground">
+          Add what needs to be updated, then tick it when the update is confirmed.
+        </p>
+        <div className="mt-4 space-y-3">
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={3}
+            placeholder="Write update note..."
+          />
+          <div className="flex justify-end">
+            <Button onClick={addItem} disabled={busy || !draft.trim()}>
+              Add update note
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-card border rounded-lg overflow-hidden">
+        {updatesQuery.isLoading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading updates...</div>
+        ) : items.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground">No update notes yet.</div>
+        ) : (
+          <div className="divide-y divide-border">
+            {items.map((item) => (
+              <div key={item.id} className="flex items-start gap-3 p-4">
+                <Checkbox
+                  checked={item.done}
+                  onCheckedChange={(checked) => toggleItem(item.id, checked === true)}
+                  className="mt-0.5"
+                  disabled={busy}
+                />
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={cn(
+                      "text-sm whitespace-pre-wrap leading-relaxed",
+                      item.done && "text-muted-foreground line-through",
+                    )}
+                  >
+                    {item.text}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {item.done ? "Updated" : "Pending"}
+                    {" - "}
+                    {new Date(item.updatedAt || item.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                  onClick={() => removeItem(item.id)}
+                  disabled={busy}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="sr-only">Remove update note</span>
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
