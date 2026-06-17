@@ -55,7 +55,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import { downloadCsv, formatPhone, normalizePhone } from "@/lib/crm-lite";
-import { analyzeRawLeadsWithAi } from "@/lib/raw-leads-ai.functions";
+import { analyzeRawLeadsWithAi, FROZEN_LEAD_PROMPT } from "@/lib/raw-leads-ai.functions";
 import { checkDuplicatePhone, fetchRawLeadCache } from "@/lib/raw-leads.functions";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
@@ -63,15 +63,6 @@ export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 const TABLE = "raw_lead_cache";
 const PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
 const DEFAULT_PAGE_SIZE = 100;
-const DEFAULT_LEAD_PROMPT = `Home repair lead filter.
-
-Mark only YES, NO, or REVIEW.
-
-YES = person is asking for any home/property repair, install, maintenance, handyman, cleaning, moving, junk removal, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, hot tub service, or any recommendation for home service.
-
-NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, not asking for home service, someone promoting their own services, cooking, food, meal prep, catering, nails, salon, grooming, nanny, babysitting, baby-sitting, daycare, child care, pet care, pet sitting, dog walking, animal parenting, or animal-related service.
-
-REVIEW = unclear post, maybe home-service related, asking only advice/cost/experience, or not enough information to confidently mark YES or NO.`;
 type RawLeadCacheUpdate = Database["public"]["Tables"]["raw_lead_cache"]["Update"];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -405,7 +396,7 @@ function Inner() {
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
   const [qualifySecondPhone, setQualifySecondPhone] = useState("");
-  const [aiPrompt, setAiPrompt] = useState(DEFAULT_LEAD_PROMPT);
+  const [aiPrompt, setAiPrompt] = useState(FROZEN_LEAD_PROMPT);
   const [promptDirty, setPromptDirty] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
@@ -418,9 +409,9 @@ function Inner() {
         .select("value")
         .eq("key", "lead_ai_prompt")
         .maybeSingle();
-      if (error) return DEFAULT_LEAD_PROMPT;
+      if (error) return FROZEN_LEAD_PROMPT;
       const v = data?.value as { text?: string } | null;
-      return v?.text || DEFAULT_LEAD_PROMPT;
+      return v?.text || FROZEN_LEAD_PROMPT;
     },
     refetchOnWindowFocus: false,
   });
@@ -1121,9 +1112,8 @@ function Inner() {
               {!cacheQuery.isLoading && visible.length === 0 && !error && (
                 <tr>
                   <td colSpan={14} className="text-center py-12 text-muted-foreground">
-                    {tab === "new"
-                      ? "No leads yet. Run your scraper extension to push leads here."
-                      : "Nothing here yet."}
+                    <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
+                    No leads in this category. Try a different tab or refresh.
                   </td>
                 </tr>
               )}

@@ -17,24 +17,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Leadgrid CRM" },
+      { title: "Lead Flow CRM" },
       { name: "description", content: "Internal lead operations dashboard" },
       { name: "robots", content: "noindex, nofollow" },
       { name: "theme-color", content: "#1a1c24" },
-      { property: "og:title", content: "Leadgrid CRM" },
-      { name: "twitter:title", content: "Leadgrid CRM" },
+      { property: "og:title", content: "Lead Flow CRM" },
+      { name: "twitter:title", content: "Lead Flow CRM" },
       { property: "og:description", content: "Internal lead operations dashboard" },
       { name: "twitter:description", content: "Internal lead operations dashboard" },
-      {
-        property: "og:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0124fe2f-025d-4c1a-9b6c-d92b65573183/id-preview-f25bae7c--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1779779798915.png",
-      },
-      {
-        name: "twitter:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0124fe2f-025d-4c1a-9b6c-d92b65573183/id-preview-f25bae7c--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1779779798915.png",
-      },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
       { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/XI93seEGA6eScdxwF1KlwHiSA6d2/social-images/social-1781369293890-leadgrid_crm_logo.webp" },

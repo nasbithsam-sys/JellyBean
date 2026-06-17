@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { useAuth } from "@/hooks/use-auth";
@@ -189,6 +189,7 @@ function Inner() {
       if (error) throw error;
       return (data ?? []) as unknown as Profile[];
     },
+    placeholderData: keepPreviousData,
   });
 
   const groups = useMemo(
@@ -473,7 +474,7 @@ function Inner() {
             </tr>
           </thead>
           <tbody>
-            {profiles.isLoading && (
+            {profiles.isLoading && !profiles.data && (
               <tr>
                 <td colSpan={9} className="text-center py-6 text-muted-foreground">
                   Loading…
@@ -484,9 +485,7 @@ function Inner() {
               <tr>
                 <td colSpan={9} className="text-center py-10 text-muted-foreground">
                   <Globe className="h-5 w-5 inline mr-2 opacity-50" />
-                  {profiles.data?.length
-                    ? "No profiles match the current filters."
-                    : "No profiles yet. Click Add Profile to add your first one."}
+                  No browser profiles added yet.
                 </td>
               </tr>
             )}

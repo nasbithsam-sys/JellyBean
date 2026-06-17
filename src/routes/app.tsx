@@ -3,12 +3,14 @@ import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuthState } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 export const Route = createFileRoute("/app")({
   component: AuthenticatedLayout,
 });
 
 function AuthenticatedLayout() {
+  // useAuthState must only be called here — all children use useAuth() from context
   const auth = useAuthState();
   const { loading, session, signOut } = auth;
   const navigate = useNavigate();
@@ -57,7 +59,9 @@ function AuthenticatedLayout() {
   return (
     <AuthProvider value={auth}>
       <AppShell auth={auth}>
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </AppShell>
     </AuthProvider>
   );

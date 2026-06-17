@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Download, Loader2, Search } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -51,6 +51,7 @@ function Inner() {
       if (error) throw error;
       return data ?? [];
     },
+    placeholderData: keepPreviousData,
   });
 
   const visible = useMemo(() => {
@@ -131,7 +132,7 @@ function Inner() {
             </tr>
           </thead>
           <tbody>
-            {logs.isLoading && (
+            {logs.isLoading && !logs.data && (
               <tr>
                 <td colSpan={6} className="text-center py-8 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
@@ -142,7 +143,8 @@ function Inner() {
             {!logs.isLoading && visible.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No matching activity.
+                  <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
+                  No activity logs found for the selected date range.
                 </td>
               </tr>
             )}

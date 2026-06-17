@@ -95,6 +95,13 @@ export function handleNextdoorLeadsOptions() {
 
 export async function handleNextdoorLeadsPost(request: Request) {
   try {
+    const webhookSecret = process.env.WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.warn("[Nextdoor webhook] WEBHOOK_SECRET is not set; skipping webhook authentication");
+    } else if (request.headers.get("X-Webhook-Secret") !== webhookSecret) {
+      return json({ ok: false, reason: "unauthorized" }, 401);
+    }
+
     let body: Record<string, unknown>;
     try {
       body = await request.json();
