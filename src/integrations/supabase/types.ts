@@ -518,6 +518,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_qualified_lead_phone_duplicates: {
+        Args: { _phone_digits: string; _since: string }
+        Returns: {
+          assigned_at: string
+          customer_name: string
+          customer_number: string
+          customer_number_2: string
+          id: string
+        }[]
+      }
       current_user_has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
@@ -533,7 +543,7 @@ export type Database = {
         Returns: boolean
       }
       raw_lead_cache_category_counts: {
-        Args: { _is_admin: boolean; _user_id: string }
+        Args: { _is_admin?: boolean; _user_id: string }
         Returns: {
           duplicate: number
           forwarded: number
