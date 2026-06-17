@@ -29,10 +29,11 @@ function Page() {
 function Inner() {
   const [query, setQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [limit, setLimit] = useState(100);
 
   const logs = useQuery({
-    queryKey: ["activity_logs", dateFrom, limit],
+    queryKey: ["activity_logs", dateFrom, dateTo, limit],
     queryFn: async () => {
       let request = supabase
         .from("activity_logs")
@@ -40,6 +41,11 @@ function Inner() {
         .order("created_at", { ascending: false });
       if (dateFrom) {
         request = request.gte("created_at", new Date(`${dateFrom}T00:00:00`).toISOString());
+      }
+      if (dateTo) {
+        const end = new Date(`${dateTo}T00:00:00`);
+        end.setDate(end.getDate() + 1);
+        request = request.lt("created_at", end.toISOString());
       }
       const { data, error } = await request.limit(limit);
       if (error) throw error;
@@ -92,6 +98,12 @@ function Inner() {
           type="date"
           value={dateFrom}
           onChange={(event) => setDateFrom(event.target.value)}
+          className="h-9 w-[150px]"
+        />
+        <Input
+          type="date"
+          value={dateTo}
+          onChange={(event) => setDateTo(event.target.value)}
           className="h-9 w-[150px]"
         />
         <Button size="sm" variant="outline" className="h-9" onClick={exportLogs}>

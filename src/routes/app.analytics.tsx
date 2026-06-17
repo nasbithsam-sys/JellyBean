@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { addDays, format, subDays, startOfDay } from "date-fns";
 import {
   ResponsiveContainer,
@@ -15,6 +15,8 @@ import {
 } from "recharts";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -59,13 +61,25 @@ function Page() {
 }
 
 function Inner() {
-  const since = useMemo(() => startOfDay(subDays(new Date(), 29)).toISOString(), []);
+  const today = useMemo(() => format(new Date(), "yyyy-MM-dd"), []);
+  const defaultFrom = useMemo(() => format(startOfDay(subDays(new Date(), 29)), "yyyy-MM-dd"), []);
+  const [fromDate, setFromDate] = useState(defaultFrom);
+  const [toDate, setToDate] = useState(today);
+  const range = useMemo(() => {
+    const start = startOfDay(new Date(`${fromDate}T00:00:00`));
+    const end = addDays(startOfDay(new Date(`${toDate || fromDate}T00:00:00`)), 1);
+    return { start, end, since: start.toISOString(), until: end.toISOString() };
+  }, [fromDate, toDate]);
 
   const analytics = useQuery({
-    queryKey: ["analytics-counts", since],
+    queryKey: ["analytics-counts", range.since, range.until],
     queryFn: async () => {
-      const days = Array.from({ length: 30 }, (_, i) => {
-        const d = startOfDay(subDays(new Date(), 29 - i));
+      const daysCount = Math.max(
+        1,
+        Math.min(120, Math.ceil((range.end.getTime() - range.start.getTime()) / 86_400_000)),
+      );
+      const days = Array.from({ length: daysCount }, (_, i) => {
+        const d = addDays(range.start, i);
         return {
           day: format(d, "MMM d"),
           key: format(d, "yyyy-MM-dd"),
@@ -119,7 +133,8 @@ function Inner() {
             .from("qualified_leads")
             .select("id", { count: "exact", head: true })
             .eq("cs_status", status)
-            .gte("assigned_at", since),
+            .gte("assigned_at", range.since)
+            .lt("assigned_at", range.until),
         ),
       );
       const csBuckets = csResults
@@ -152,8 +167,33 @@ function Inner() {
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          type="date"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value || defaultFrom)}
+          className="h-9 w-[150px]"
+        />
+        <Input
+          type="date"
+          value={toDate}
+          onChange={(e) => setToDate(e.target.value || today)}
+          className="h-9 w-[150px]"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-9"
+          onClick={() => {
+            setFromDate(defaultFrom);
+            setToDate(today);
+          }}
+        >
+          Last 30 days
+        </Button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Metric label="Total captured" value={totals.captured} sub="last 30 days" />
+        <Metric label="Total captured" value={totals.captured} sub="selected range" />
         <Metric
           label="Forwarded"
           value={totals.forwarded}

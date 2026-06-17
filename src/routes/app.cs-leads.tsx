@@ -262,8 +262,6 @@ function Inner() {
         .select(
           "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, service, images, submitted_by_role",
         )
-        // Pin important / urgent jobs to the top, then most recent first.
-        .order("is_important", { ascending: false })
         .order("assigned_at", { ascending: false })
         .limit(500);
       if (error) throw error;
@@ -454,8 +452,14 @@ function Inner() {
   }, [filtered]);
 
   const visibleLeads = useMemo(() => {
-    if (activeStatus === "__all__") return filtered;
-    return filtered.filter((l) => l.cs_status === activeStatus);
+    const leads =
+      activeStatus === "__all__" ? filtered : filtered.filter((l) => l.cs_status === activeStatus);
+    return [...leads].sort((a, b) => {
+      const aPinned = a.is_important && a.cs_status === "new";
+      const bPinned = b.is_important && b.cs_status === "new";
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+      return new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime();
+    });
   }, [filtered, activeStatus]);
   const shownLeads = visibleLeads.slice(0, visibleLimit);
 
@@ -1008,12 +1012,7 @@ function LeadCard({
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
   const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
   const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
-  const initials = (lead.customer_name || "?")
-    .split(/\s+/)
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const initials = "";
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
@@ -1146,7 +1145,7 @@ function LeadCard({
             title="Select for bulk assignment"
           />
         )}
-        <div className="h-10 w-10 shrink-0 rounded-sm bg-surface border border-border-strong grid place-items-center text-[12px] font-mono font-semibold text-primary">
+        <div className="hidden">
           {initials || "·"}
         </div>
         <div className="min-w-0 flex-1">
@@ -1216,7 +1215,7 @@ function LeadCard({
         </div>
       )}
 
-      {Array.isArray(lead.images) && lead.images.length > 0 && (
+      {false && Array.isArray(lead.images) && lead.images.length > 0 && (
         <div className="mt-2 flex gap-1.5 flex-wrap">
           {lead.images.slice(0, 4).map((url) => (
             <a
@@ -1588,7 +1587,7 @@ function LeadDrawer({
         {lead.requirement_1 && <Info label="Requirement 1" value={lead.requirement_1} multiline />}
         {lead.requirement_2 && <Info label="Requirement 2" value={lead.requirement_2} multiline />}
         {lead.context && <Info label="Context" value={lead.context} multiline />}
-        {Array.isArray(lead.images) && lead.images.length > 0 && (
+        {isAdmin && Array.isArray(lead.images) && lead.images.length > 0 && (
           <div>
             <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
               Attachments ({lead.images.length})

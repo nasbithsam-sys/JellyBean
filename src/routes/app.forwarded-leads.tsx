@@ -43,6 +43,7 @@ type Row = {
   pass_it_to: string | null;
   main_area: string | null;
   sub_area: string | null;
+  original_lead_link: string | null;
   cs_status: ForwardedStatus | string;
   assigned_at: string;
   updated_at: string;
@@ -152,7 +153,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, service, context, pass_it_to, main_area, sub_area, cs_status, assigned_at, updated_at, created_by",
+          "id, customer_name, customer_number, service, context, pass_it_to, main_area, sub_area, original_lead_link, cs_status, assigned_at, updated_at, created_by",
         )
         .order("updated_at", { ascending: false })
         .limit(500);
@@ -418,6 +419,7 @@ function ForwardedLeadForm({
   const [mainArea, setMainArea] = useState(lead.main_area ?? "");
   const [subArea, setSubArea] = useState(lead.sub_area ?? "");
   const [context, setContext] = useState(lead.context ?? "");
+  const [postLink, setPostLink] = useState(lead.original_lead_link ?? "");
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -438,6 +440,7 @@ function ForwardedLeadForm({
           main_area: mainArea.trim() || null,
           sub_area: subArea.trim() || null,
           context: context.trim() || null,
+          original_lead_link: postLink.trim() || null,
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
@@ -487,6 +490,14 @@ function ForwardedLeadForm({
       <div>
         <Label className="mb-1.5 block">Context</Label>
         <Textarea value={context} onChange={(e) => setContext(e.target.value)} rows={4} />
+      </div>
+      <div>
+        <Label className="mb-1.5 block">Original post link</Label>
+        <Input
+          value={postLink}
+          onChange={(e) => setPostLink(e.target.value)}
+          placeholder="https://..."
+        />
       </div>
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
         <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
