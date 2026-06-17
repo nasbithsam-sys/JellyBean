@@ -237,10 +237,11 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
       .filter((result) => result.lead === "yes" || result.lead === "no")
       .map(({ row_key, lead }) => ({ row_key, lead }));
 
-    if (leadUpdates.length > 0) {
+    for (const { row_key, lead } of leadUpdates) {
       const { error: updateError } = await supabaseAdmin
         .from("raw_lead_cache")
-        .upsert(leadUpdates as never, { onConflict: "row_key" });
+        .update({ lead } as never)
+        .eq("row_key", row_key);
       if (updateError) throw new Error(updateError.message);
     }
 
