@@ -532,6 +532,16 @@ export type Database = {
         }
         Returns: boolean
       }
+      raw_lead_cache_category_counts: {
+        Args: { _is_admin: boolean; _user_id: string }
+        Returns: {
+          duplicate: number
+          forwarded: number
+          new: number
+          not_found: number
+          wrong: number
+        }[]
+      }
       report_leads_by_account:
         | {
             Args: never
