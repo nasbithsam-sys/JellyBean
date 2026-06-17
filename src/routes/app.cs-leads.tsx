@@ -47,6 +47,11 @@ import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 import type { CsStatus, LeadNote } from "@/lib/crm-types";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
+import {
+  CS_COMPOSE_TEMPLATE_KEY,
+  DEFAULT_CS_COMPOSE_TEMPLATE,
+  renderCsComposeSuggestion,
+} from "@/lib/cs-compose-template";
 
 import { cn } from "@/lib/utils";
 
@@ -143,6 +148,68 @@ const PIPELINE_STATUSES = [
   "need_follow_up",
 ] as const satisfies readonly CsStatus[];
 
+type ComposeTemplateValue = {
+  template?: string;
+};
+
+function readComposeTemplate(value: Json | null | undefined) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const template = (value as ComposeTemplateValue).template;
+    if (typeof template === "string" && template.trim()) return template;
+  }
+  return DEFAULT_CS_COMPOSE_TEMPLATE;
+}
+
+function useCsComposeTemplate(userId: string | undefined) {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ["shared_state", CS_COMPOSE_TEMPLATE_KEY],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_state")
+        .select("value")
+        .eq("key", CS_COMPOSE_TEMPLATE_KEY)
+        .maybeSingle();
+      if (error) throw error;
+      return readComposeTemplate(data?.value);
+    },
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("cs-compose-template-sync")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "shared_state",
+          filter: `key=eq.${CS_COMPOSE_TEMPLATE_KEY}`,
+        },
+        () => qc.invalidateQueries({ queryKey: ["shared_state", CS_COMPOSE_TEMPLATE_KEY] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  const save = async (template: string) => {
+    const next = template.trim();
+    if (!next) throw new Error("Template cannot be empty");
+    const { error } = await supabase.from("shared_state").upsert({
+      key: CS_COMPOSE_TEMPLATE_KEY,
+      value: { template: next },
+      updated_by: userId ?? null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+    await qc.invalidateQueries({ queryKey: ["shared_state", CS_COMPOSE_TEMPLATE_KEY] });
+  };
+
+  return { ...query, template: query.data ?? DEFAULT_CS_COMPOSE_TEMPLATE, save };
+}
+
 function Page() {
   const auth = useAuth();
   const isCs = auth.primaryRole === "cs";
@@ -175,6 +242,7 @@ function Inner() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
   const isCs = auth.primaryRole === "cs";
+  const composeTemplate = useCsComposeTemplate(auth.user?.id);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -699,6 +767,13 @@ function Inner() {
         </div>
       )}
 
+      <ComposeTemplatePanel
+        template={composeTemplate.template}
+        loading={composeTemplate.isLoading}
+        saving={composeTemplate.isFetching}
+        onSave={composeTemplate.save}
+      />
+
       {list.isLoading && !list.data ? (
         <div className="glass-card p-16 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
@@ -793,6 +868,7 @@ function Inner() {
                   team={team.data ?? []}
                   teamById={teamById}
                   onOpen={() => setOpened(l)}
+                  composeTemplate={composeTemplate.template}
                   selected={selectedIds.has(l.id)}
                   onToggleSelect={() => toggleSelect(l.id)}
                   showSelect={isCs || isAdmin}
@@ -818,6 +894,7 @@ function Inner() {
           lead={opened}
           team={team.data ?? []}
           teamById={teamById}
+          composeTemplate={composeTemplate.template}
           onClose={() => setOpened(null)}
           onSaved={() => {
             setOpened(null);
@@ -885,6 +962,70 @@ function Inner() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ComposeTemplatePanel({
+  template,
+  loading,
+  saving,
+  onSave,
+}: {
+  template: string;
+  loading: boolean;
+  saving: boolean;
+  onSave: (template: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(template);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setDraft(template);
+  }, [template]);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await onSave(draft);
+      toast.success("Compose template updated");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Compose template</h2>
+          <p className="text-[12px] text-muted-foreground mt-1">
+            Shared suggestion shown on every CS lead compose box.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          className="h-8"
+          onClick={save}
+          disabled={busy || loading || draft.trim() === template.trim()}
+        >
+          {(busy || saving) && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+          Save template
+        </Button>
+      </div>
+      <Textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={3}
+        className="mt-3 text-[12.5px]"
+        placeholder={DEFAULT_CS_COMPOSE_TEMPLATE}
+      />
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Tokens: (Person first name) and (Service Context) are filled from the lead. (Requirement)
+        stays in the suggestion for CS to write manually.
+      </p>
     </div>
   );
 }
@@ -960,6 +1101,7 @@ function LeadCard({
   team,
   teamById,
   onOpen,
+  composeTemplate,
   selected = false,
   onToggleSelect,
   showSelect = false,
@@ -968,6 +1110,7 @@ function LeadCard({
   team: CsTeamMember[];
   teamById: Map<string, CsTeamMember>;
   onOpen: () => void;
+  composeTemplate: string;
   selected?: boolean;
   onToggleSelect?: () => void;
   showSelect?: boolean;
@@ -987,6 +1130,7 @@ function LeadCard({
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
+  const composeSuggestion = renderCsComposeSuggestion(composeTemplate, lead);
 
   async function saveField(patch: Partial<Lead>) {
     const { error } = await supabase
@@ -1115,9 +1259,7 @@ function LeadCard({
             title="Select for bulk assignment"
           />
         )}
-        <div className="hidden">
-          {initials || "·"}
-        </div>
+        <div className="hidden">{initials || "·"}</div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-[13.5px] font-semibold truncate">{lead.customer_name}</h3>
@@ -1182,28 +1324,6 @@ function LeadCard({
           <p className="text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
             {lead.post_text}
           </p>
-        </div>
-      )}
-
-      {false && Array.isArray(lead.images) && lead.images.length > 0 && (
-        <div className="mt-2 flex gap-1.5 flex-wrap">
-          {lead.images.slice(0, 4).map((url) => (
-            <a
-              key={url}
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="block h-12 w-12 rounded overflow-hidden border border-border bg-muted hover:opacity-80"
-            >
-              <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
-            </a>
-          ))}
-          {lead.images.length > 4 && (
-            <span className="text-[10px] text-muted-foreground self-center">
-              +{lead.images.length - 4}
-            </span>
-          )}
         </div>
       )}
 
@@ -1314,6 +1434,7 @@ function LeadCard({
           className="text-[12px] mt-0.5 resize-none"
           placeholder="Compose a message or note for this lead…"
         />
+        <ComposeSuggestion suggestion={composeSuggestion} compact />
       </div>
 
       {/* Assignment row */}
@@ -1434,12 +1555,14 @@ function LeadDrawer({
   lead,
   team,
   teamById,
+  composeTemplate,
   onClose,
   onSaved,
 }: {
   lead: Lead;
   team: CsTeamMember[];
   teamById: Map<string, CsTeamMember>;
+  composeTemplate: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -1459,6 +1582,7 @@ function LeadDrawer({
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
+  const composeSuggestion = renderCsComposeSuggestion(composeTemplate, lead);
 
   async function save() {
     setBusy(true);
@@ -1622,6 +1746,7 @@ function LeadDrawer({
               maxLength={2000}
               placeholder="Compose a message or note for this lead..."
             />
+            <ComposeSuggestion suggestion={composeSuggestion} />
           </div>
           <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
@@ -1790,6 +1915,26 @@ function LeadDrawer({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ComposeSuggestion({
+  suggestion,
+  compact = false,
+}: {
+  suggestion: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "mt-2 rounded-md border border-dashed border-border bg-surface/60 text-muted-foreground",
+        compact ? "px-2.5 py-2 text-[11.5px]" : "px-3 py-2.5 text-[12px]",
+      )}
+    >
+      <div className="mb-1 text-[10px] uppercase tracking-wide font-semibold">Suggestion</div>
+      <div className="whitespace-pre-wrap leading-relaxed">{suggestion}</div>
     </div>
   );
 }
