@@ -580,6 +580,14 @@ function Inner() {
       try {
         await patchEntry(k, enriched as Partial<CacheEntry>);
         if ("category" in patch) {
+          await supabase.from("activity_logs").insert({
+            actor_id: currentUserId,
+            actor_name: auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null,
+            actor_role: auth.primaryRole,
+            action: `raw.category.${patch.category ?? "new"}`,
+            entity_type: "raw_lead_cache",
+            metadata: { row_key: k, category: patch.category ?? null },
+          });
           // Refresh counts / pagination since the row may have moved categories.
           qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
         }
@@ -588,7 +596,7 @@ function Inner() {
         cacheQuery.refetch();
       }
     },
-    [cacheQuery, currentUserId, qc, updateCachedEntries],
+    [auth.primaryRole, auth.profile, cacheQuery, currentUserId, qc, updateCachedEntries],
   );
 
 
@@ -1440,6 +1448,8 @@ function Inner() {
         <QualifyDialog
           entry={qualifyFor}
           actorId={auth.user?.id ?? null}
+          actorName={auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null}
+          actorRole={auth.primaryRole}
           initialSecondPhone={qualifySecondPhone}
           onClose={() => {
             setQualifyFor(null);
@@ -1719,12 +1729,16 @@ function DetailField({ label, value }: { label: string; value?: string }) {
 function QualifyDialog({
   entry,
   actorId,
+  actorName,
+  actorRole,
   initialSecondPhone,
   onClose,
   onSent,
 }: {
   entry: CacheEntry;
   actorId: string | null;
+  actorName: string | null;
+  actorRole: string | null;
   initialSecondPhone: string;
   onClose: () => void;
   onSent: () => void;
@@ -1792,6 +1806,20 @@ function QualifyDialog({
         is_important: isImportant,
       } as never);
       if (error) throw error;
+      if (actorId) {
+        await supabase.from("activity_logs").insert({
+          actor_id: actorId,
+          actor_name: actorName,
+          actor_role: actorRole,
+          action: "raw.forwarded_to_cs",
+          entity_type: "qualified_lead",
+          metadata: {
+            customer_name: customerName.trim(),
+            customer_number: formatPhone(customerNumber.trim()) || customerNumber.trim(),
+            area: row["Account Area"]?.trim() || row["Sub Area / Neighborhood"]?.trim() || null,
+          },
+        });
+      }
       onSent();
     } catch (e) {
       toast.error((e as Error).message);
