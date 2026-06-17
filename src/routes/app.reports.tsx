@@ -56,7 +56,7 @@ function computeRange(preset: DatePreset, from: string, to: string) {
 
 export const Route = createFileRoute("/app/reports")({ component: Page });
 
-const RAW_STATUSES = ["new", "forwarded", "not_found", "wrong"] as const;
+const RAW_STATUSES = ["new", "forwarded", "not_found", "wrong", "duplicate"] as const;
 const CS_STATUSES = [
   "new",
   "undeliver",
@@ -73,6 +73,7 @@ const RAW_LABELS: Record<string, string> = {
   forwarded: "Forwarded to CS",
   not_found: "Number not found",
   wrong: "Wrong posts",
+  duplicate: "Duplicate",
 };
 
 const CS_LABELS: Record<string, string> = {
@@ -101,14 +102,22 @@ function Page() {
 }
 
 function Inner() {
+  const today = toIsoDay(new Date());
+  const [preset, setPreset] = useState<DatePreset>("all");
+  const [fromDate, setFromDate] = useState<string>(today);
+  const [toDate, setToDate] = useState<string>(today);
+  const range = useMemo(() => computeRange(preset, fromDate, toDate), [preset, fromDate, toDate]);
+
   const raw = useQuery({
-    queryKey: ["report-raw"],
+    queryKey: ["report-raw", range.from, range.to],
     queryFn: async () => {
       const results = await Promise.all(
         RAW_STATUSES.map((status) => {
           let q = supabase
             .from("raw_lead_cache")
             .select("id", { count: "exact", head: true });
+          if (range.from) q = q.gte("captured_at", range.from);
+          if (range.to) q = q.lt("captured_at", range.to);
           if (status === "new") q = q.is("category", null);
           else q = q.eq("category", status);
           return q;
@@ -123,16 +132,19 @@ function Inner() {
     },
   });
   const cs = useQuery({
-    queryKey: ["report-cs"],
+    queryKey: ["report-cs", range.from, range.to],
     queryFn: async () => {
       const c: Record<string, number> = {};
       const results = await Promise.all(
-        CS_STATUSES.map((status) =>
-          supabase
+        CS_STATUSES.map((status) => {
+          let q = supabase
             .from("qualified_leads")
             .select("id", { count: "exact", head: true })
-            .eq("cs_status", status),
-        ),
+            .eq("cs_status", status);
+          if (range.from) q = q.gte("assigned_at", range.from);
+          if (range.to) q = q.lt("assigned_at", range.to);
+          return q;
+        }),
       );
       results.forEach((result, index) => {
         if (result.error) throw result.error;
@@ -142,12 +154,6 @@ function Inner() {
       return c;
     },
   });
-  const today = toIsoDay(new Date());
-  const [preset, setPreset] = useState<DatePreset>("all");
-  const [fromDate, setFromDate] = useState<string>(today);
-  const [toDate, setToDate] = useState<string>(today);
-  const range = useMemo(() => computeRange(preset, fromDate, toDate), [preset, fromDate, toDate]);
-
   const byAccount = useQuery({
     queryKey: ["report-leads-by-account", range.from, range.to],
     queryFn: async () => {
@@ -261,8 +267,44 @@ function Inner() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={exportReport}>
+      <div className="flex flex-wrap items-center gap-2">
+        {(
+          [
+            ["all", "All time"],
+            ["today", "Today"],
+            ["yesterday", "Yesterday"],
+            ["7d", "Weekly"],
+            ["30d", "Monthly"],
+            ["custom", "Custom"],
+          ] as Array<[DatePreset, string]>
+        ).map(([key, label]) => (
+          <Button
+            key={key}
+            size="sm"
+            variant={preset === key ? "default" : "outline"}
+            className="h-8 px-2.5 text-xs"
+            onClick={() => setPreset(key)}
+          >
+            {label}
+          </Button>
+        ))}
+        {preset === "custom" && (
+          <>
+            <Input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="h-8 w-[140px] text-xs"
+            />
+            <Input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="h-8 w-[140px] text-xs"
+            />
+          </>
+        )}
+        <Button size="sm" variant="outline" className="h-8 ml-auto" onClick={exportReport}>
           <Download className="h-3.5 w-3.5 mr-1.5" />
           Export counts
         </Button>
