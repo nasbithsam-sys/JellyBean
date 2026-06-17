@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Database, Loader2, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { supabase } from "@/integrations/supabase/client";
+import { checkOpenAiConfig } from "@/lib/raw-leads-ai.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/health")({ component: Page });
@@ -29,10 +31,11 @@ function Page() {
 }
 
 function Inner() {
+  const checkOpenAi = useServerFn(checkOpenAiConfig);
   const health = useQuery({
     queryKey: ["crm-health"],
     queryFn: async () => {
-      const [cursor, profiles, rawCache, qualified, browserProfiles, activityLogs] =
+      const [cursor, profiles, rawCache, qualified, browserProfiles, activityLogs, openAiConfig] =
         await Promise.all([
           supabase
             .from("shared_state")
@@ -44,6 +47,7 @@ function Inner() {
           supabase.from("qualified_leads").select("id", { count: "exact", head: true }),
           supabase.from("incogniton_profiles").select("id", { count: "exact", head: true }),
           supabase.from("activity_logs").select("id", { count: "exact", head: true }),
+          checkOpenAi(),
         ]);
 
       const checks: Check[] = [
@@ -61,6 +65,13 @@ function Inner() {
           `${browserProfiles.count ?? 0} profiles`,
         ),
         resultCheck("Activity logs", activityLogs.error, `${activityLogs.count ?? 0} logs`),
+        {
+          label: "OpenAI API key",
+          value: openAiConfig.configured
+            ? "Configured"
+            : "Missing — AI classification will fail",
+          status: openAiConfig.configured ? "ok" : "error",
+        },
         {
           label: "Service role key",
           value: "Must be configured only on the server/deployment environment",

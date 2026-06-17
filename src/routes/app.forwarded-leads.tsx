@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
@@ -20,19 +20,11 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhone } from "@/lib/crm-lite";
+import type { ForwardedStatus } from "@/lib/crm-types";
+import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/forwarded-leads")({ component: Page });
-
-type ForwardedStatus =
-  | "new"
-  | "undeliver"
-  | "wrong_number"
-  | "wrong_lead"
-  | "already_got_someone"
-  | "service_provider_himself"
-  | "converted"
-  | "need_follow_up";
 
 type Row = {
   id: string;
@@ -48,28 +40,6 @@ type Row = {
   assigned_at: string;
   updated_at: string;
   created_by: string | null;
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  new: "New to contact",
-  undeliver: "Undeliver",
-  wrong_number: "Wrong number",
-  wrong_lead: "Wrong lead",
-  already_got_someone: "Already got someone",
-  service_provider_himself: "Service provider himself",
-  converted: "Processed",
-  need_follow_up: "Need follow-up",
-};
-
-const STATUS_TONE: Record<string, string> = {
-  new: "bg-primary/15 text-primary border-primary/30",
-  undeliver: "bg-destructive/15 text-destructive border-destructive/30",
-  wrong_number: "bg-destructive/15 text-destructive border-destructive/30",
-  wrong_lead: "bg-destructive/15 text-destructive border-destructive/30",
-  already_got_someone: "bg-destructive/15 text-destructive border-destructive/30",
-  service_provider_himself: "bg-destructive/15 text-destructive border-destructive/30",
-  converted: "bg-success/15 text-success border-success/30",
-  need_follow_up: "bg-warning/15 text-warning border-warning/30",
 };
 
 const OUTCOME_FILTERS = [
@@ -160,6 +130,7 @@ function Inner() {
       if (error) throw error;
       return (data ?? []) as unknown as Row[];
     },
+    placeholderData: keepPreviousData,
   });
 
   const filtered = useMemo(() => {
@@ -255,13 +226,14 @@ function Inner() {
         </div>
       )}
 
-      {list.isLoading ? (
+      {list.isLoading && !list.data ? (
         <div className="glass-card p-16 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...
         </div>
       ) : filtered.length === 0 ? (
         <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">
-          No forwarded leads found.
+          <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
+          No forwarded leads found for the current filter.
         </div>
       ) : (
         <ForwardedTable rows={filtered} onEdit={setEditing} auth={auth} qc={qc} />

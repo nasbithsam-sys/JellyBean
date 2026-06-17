@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { addDays, format, subDays, startOfDay } from "date-fns";
 import {
@@ -150,6 +150,7 @@ function Inner() {
       return { series: days, csBuckets };
     },
     staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
   });
 
   const series = useMemo(() => analytics.data?.series ?? [], [analytics.data?.series]);

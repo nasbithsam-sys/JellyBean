@@ -107,25 +107,29 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
 
-    // Counts per category (so the UI can paginate and show tab badges).
-    const countFor = async (category: CategoryFilter) => {
-      let q = supabaseAdmin
-        .from("raw_lead_cache")
-        .select("row_key", { count: "exact", head: true });
-      q = applyCategory(q as never, category) as typeof q;
-      q = applyAssignment(q as never) as typeof q;
-      const { count, error: countError } = await q;
-      if (countError) throw new Error(countError.message);
-      return count ?? 0;
-    };
-
-    const [totalNew, totalForwarded, totalNotFound, totalWrong, totalDuplicate] = await Promise.all([
-      countFor("new"),
-      countFor("forwarded"),
-      countFor("not_found"),
-      countFor("wrong"),
-      countFor("duplicate"),
-    ]);
+    const { data: countRows, error: countError } = await supabaseAdmin.rpc(
+      "raw_lead_cache_category_counts" as never,
+      { _user_id: context.userId, _is_admin: isAdmin } as never,
+    );
+    if (countError) throw new Error(countError.message);
+    const counts = ((countRows as unknown as Array<{
+      new: number | null;
+      forwarded: number | null;
+      not_found: number | null;
+      wrong: number | null;
+      duplicate: number | null;
+    }> | null)?.[0] ?? {
+      new: 0,
+      forwarded: 0,
+      not_found: 0,
+      wrong: 0,
+      duplicate: 0,
+    });
+    const totalNew = counts.new ?? 0;
+    const totalForwarded = counts.forwarded ?? 0;
+    const totalNotFound = counts.not_found ?? 0;
+    const totalWrong = counts.wrong ?? 0;
+    const totalDuplicate = counts.duplicate ?? 0;
 
     const totalForCategory =
       data.category === "new"
@@ -199,21 +203,19 @@ export const checkDuplicatePhone = createServerFn({ method: "GET" })
     const duplicateSince = new Date(
       Date.now() - DUPLICATE_LOOKBACK_HOURS * 60 * 60 * 1000,
     ).toISOString();
-    const { data: rows, error } = await supabaseAdmin
-      .from("qualified_leads")
-      .select("id, customer_name, customer_number, customer_number_2, assigned_at")
-      .gte("assigned_at", duplicateSince)
-      .limit(5000);
+    const { data: rows, error } = await supabaseAdmin.rpc(
+      "check_qualified_lead_phone_duplicates" as never,
+      { _phone_digits: target, _since: duplicateSince } as never,
+    );
     if (error) throw new Error(error.message);
 
-    const matches = (rows ?? [])
-      .filter((row) =>
-        [row.customer_number, row.customer_number_2].some(
-          (value) => normalizePhoneDigits(value).slice(-10) === target.slice(-10),
-        ),
-      )
-      .slice(0, 5)
-      .map((row) => ({
+    const matches = ((rows as unknown as Array<{
+      id: string;
+      customer_name: string;
+      customer_number: string;
+      customer_number_2: string | null;
+      assigned_at: string;
+    }> | null) ?? []).map((row) => ({
         id: row.id,
         customer_name: row.customer_name,
         customer_number: row.customer_number,

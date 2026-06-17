@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { logActivity } from "@/lib/activity-log";
 
 // FROZEN PROMPT — do not edit. Approved home-repair lead filter.
 export const FROZEN_LEAD_PROMPT = `Home repair lead filter.
@@ -52,6 +53,27 @@ async function ensureRequesterCanAnalyze(userId: string) {
 
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error("Forbidden: Raw Leads access required");
+}
+
+async function loadActor(userId: string) {
+  const [{ data: profile }, { data: roleRow }] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select("full_name, username, email")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  return {
+    name: profile?.full_name || profile?.username || profile?.email || null,
+    role: roleRow?.role ?? null,
+  };
 }
 
 function extractOutputText(response: OpenAiResponse) {
@@ -184,7 +206,8 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
           postText: payload["Post Text"] ?? "",
         };
       })
-      .filter((lead) => lead.postText.trim().length > 0);
+      // Posts under 20 chars are too short for reliable AI classification.
+      .filter((lead) => lead.postText.trim().length >= 20);
 
     if (leads.length === 0) throw new Error("No selected raw leads have post text to analyze");
 
@@ -206,25 +229,55 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
 
     if (results.length === 0) throw new Error("AI returned no usable lead decisions");
 
+    // review decisions are intentionally not persisted to the database — they are returned to the client only.
     // The raw_lead_cache.lead column only accepts 'yes' | 'no' | NULL
     // (per raw_lead_cache_lead_chk). 'review' decisions are returned to
     // the client but not persisted — they stay unclassified in the DB.
-    for (const { row_key, lead } of results) {
-      if (lead !== "yes" && lead !== "no") continue;
+    const leadUpdates = results
+      .filter((result) => result.lead === "yes" || result.lead === "no")
+      .map(({ row_key, lead }) => ({ row_key, lead }));
+
+    if (leadUpdates.length > 0) {
       const { error: updateError } = await supabaseAdmin
         .from("raw_lead_cache")
-        .update({ lead } as never)
-        .eq("row_key", row_key);
+        .upsert(leadUpdates as never, { onConflict: "row_key" });
       if (updateError) throw new Error(updateError.message);
     }
 
+    const yes = results.filter((result) => result.lead === "yes").length;
+    const no = results.filter((result) => result.lead === "no").length;
+    const review = results.filter((result) => result.lead === "review").length;
+    const actor = await loadActor(context.userId);
+    await logActivity({
+      supabaseAdmin,
+      actorId: context.userId,
+      actorName: actor.name,
+      actorRole: actor.role,
+      action: "ai_classify",
+      entityType: "raw_lead_cache",
+      metadata: { analyzed: results.length, yes, no, review },
+    });
 
     return {
       ok: true,
       analyzed: results.length,
-      yes: results.filter((result) => result.lead === "yes").length,
-      no: results.filter((result) => result.lead === "no").length,
-      review: results.filter((result) => result.lead === "review").length,
+      yes,
+      no,
+      review,
       results,
     };
+  });
+
+export const checkOpenAiConfig = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .in("role", ["admin", "sub_admin"]);
+    if (error) throw new Error(error.message);
+    if (!data?.length) throw new Error("Forbidden: admin only");
+
+    return { configured: !!process.env.OPENAI_API_KEY };
   });

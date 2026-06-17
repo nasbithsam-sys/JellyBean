@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -45,14 +45,14 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
+import type { CsStatus, LeadNote } from "@/lib/crm-types";
+import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
 const UNASSIGNED_VALUE = "__unassigned__";
-type CsStatus = Database["public"]["Enums"]["cs_status"];
-type LeadNote = { at: string; by: string; text: string };
 
 function playNotificationBeep() {
   try {
@@ -161,38 +161,6 @@ function Page() {
   );
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  new: "New to contact",
-  undeliver: "Undeliver",
-  wrong_number: "Wrong Number",
-  wrong_lead: "Wrong Lead",
-  already_got_someone: "Already Got Someone",
-  service_provider_himself: "Service Provider Himself",
-  converted: "Processed",
-  need_follow_up: "Need Follow Up",
-  // legacy values (kept so old rows still render)
-  called: "Called",
-  messaged: "Messaged",
-  follow_up: "Follow-up",
-  interested: "Interested",
-  not_interested: "Not interested",
-  already_done: "Already done",
-  no_response: "No response",
-  closed_won: "Closed (done)",
-  closed_lost: "Closed (lost)",
-};
-
-const STATUS_TONE: Record<string, string> = {
-  new: "bg-primary",
-  undeliver: "bg-destructive",
-  wrong_number: "bg-destructive",
-  wrong_lead: "bg-destructive",
-  already_got_someone: "bg-destructive",
-  service_provider_himself: "bg-destructive",
-  converted: "bg-success",
-  need_follow_up: "bg-warning",
-};
-
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
@@ -267,6 +235,7 @@ function Inner() {
       if (error) throw error;
       return (data ?? []) as unknown as Lead[];
     },
+    placeholderData: keepPreviousData,
   });
 
   const todayStart = useMemo(() => {
@@ -730,13 +699,14 @@ function Inner() {
         </div>
       )}
 
-      {list.isLoading ? (
+      {list.isLoading && !list.data ? (
         <div className="glass-card p-16 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
         </div>
       ) : visibleLeads.length === 0 ? (
         <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">
-          No leads in this status.
+          <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
+          No leads yet. New leads will appear here when forwarded from the pipeline.
         </div>
       ) : (
         <>
