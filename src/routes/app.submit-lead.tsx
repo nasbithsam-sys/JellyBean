@@ -99,7 +99,7 @@ function Dashboard() {
     },
   });
 
-  const leads = all.data ?? [];
+  const leads = useMemo(() => all.data ?? [], [all.data]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -441,7 +441,8 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
       if (error) throw error;
       await supabase.from("activity_logs").insert({
         actor_id: auth.user.id,
-        actor_name: auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null,
+        actor_name:
+          auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null,
         actor_role: auth.primaryRole,
         action: "lead.submitted_to_cs",
         entity_type: "qualified_lead",

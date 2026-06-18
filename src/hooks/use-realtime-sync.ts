@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { AppRole } from "@/hooks/use-auth";
@@ -57,4 +57,31 @@ export function useRealtimeSync(role: AppRole | null) {
       supabase.removeChannel(channel);
     };
   }, [role, qc]);
+}
+
+/**
+ * Listens for new qualified_leads inserts and keeps track of count.
+ * Exposes a function to clear the count alert.
+ */
+export function useNewLeadAlert() {
+  const [newLeadCount, setNewLeadCount] = useState(0);
+
+  useEffect(() => {
+    const channel = supabase.channel("cs-new-leads-realtime");
+    (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "qualified_leads" },
+      () => {
+        setNewLeadCount((prev) => prev + 1);
+      },
+    );
+    channel.subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const clearAlert = () => setNewLeadCount(0);
+
+  return { newLeadCount, clearAlert };
 }

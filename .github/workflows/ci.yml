@@ -1,0 +1,32 @@
+# Badge: ![CI](https://github.com/nasbithsam-sys/lead-flow-crm-by-accboost/actions/workflows/ci.yml/badge.svg)
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: TypeScript check
+        run: bunx tsc --noEmit
+
+      - name: Lint check
+        run: bunx eslint . --max-warnings 0

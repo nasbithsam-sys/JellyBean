@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/error-messages";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -381,9 +382,9 @@ function Inner() {
   const nextdoorWebhookUrl =
     typeof window === "undefined" ? "" : `${window.location.origin}/api/public/nextdoor-leads`;
 
-  const [tab, setTab] = useState<"new" | "forwarded" | "not_found" | "wrong" | "duplicate">(
-    "new",
-  );
+  const [tab, setTab] = useState<
+    "new" | "review" | "forwarded" | "not_found" | "wrong" | "duplicate"
+  >("new");
   const [query, setQuery] = useState("");
   const [leadFilter, setLeadFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
@@ -441,7 +442,7 @@ function Inner() {
       toast.success("Prompt saved for all users");
       qc.invalidateQueries({ queryKey: ["lead-ai-prompt"] });
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setSavingPrompt(false);
     }
@@ -478,10 +479,14 @@ function Inner() {
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize],
+    queryKey: ["raw-lead-cache", tab === "review" ? "new" : tab, pageIndex, pageSize],
     queryFn: async () =>
       (await fetchRawLeads({
-        data: { limit: pageSize, offset: pageIndex * pageSize, category: tab },
+        data: {
+          limit: pageSize,
+          offset: pageIndex * pageSize,
+          category: tab === "review" ? "new" : tab,
+        },
       })) as RawLeadPage,
     placeholderData: keepPreviousData,
     gcTime: Infinity,
@@ -489,7 +494,7 @@ function Inner() {
   });
 
   const cacheKey = useMemo(
-    () => ["raw-lead-cache", tab, pageIndex, pageSize] as const,
+    () => ["raw-lead-cache", tab === "review" ? "new" : tab, pageIndex, pageSize] as const,
     [tab, pageIndex, pageSize],
   );
 
@@ -513,7 +518,6 @@ function Inner() {
     [cacheKey, qc],
   );
 
-
   const deleteSelected = useCallback(async () => {
     if (!isAdmin || selected.size === 0) return;
     const keys = Array.from(selected);
@@ -530,7 +534,7 @@ function Inner() {
       setSelected(new Set());
       setConfirmDelete(false);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
       cacheQuery.refetch();
     } finally {
       setDeleting(false);
@@ -573,7 +577,8 @@ function Inner() {
         if ("category" in patch) {
           await supabase.from("activity_logs").insert({
             actor_id: currentUserId,
-            actor_name: auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null,
+            actor_name:
+              auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null,
             actor_role: auth.primaryRole,
             action: `raw.category.${patch.category ?? "new"}`,
             entity_type: "raw_lead_cache",
@@ -583,13 +588,12 @@ function Inner() {
           qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
         }
       } catch (e) {
-        toast.error((e as Error).message);
+        toast.error(friendlyError(e));
         cacheQuery.refetch();
       }
     },
     [auth.primaryRole, auth.profile, cacheQuery, currentUserId, qc, updateCachedEntries],
   );
-
 
   const isFetching = cacheQuery.isFetching;
   const error = cacheQuery.error as Error | null;
@@ -602,6 +606,9 @@ function Inner() {
     wrong: 0,
     duplicate: 0,
   };
+  const reviewCount = useMemo(() => {
+    return entries.filter((e) => effectiveLead(e.data, actions[e.row_key]) === "review").length;
+  }, [entries, actions]);
   const totalCount = cacheQuery.data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -617,6 +624,10 @@ function Inner() {
   // Entries are already filtered by category server-side; apply in-page filters/sort.
   const visible = useMemo(() => {
     let list = entries;
+    // "AI Review" tab filters client-side — review is a lead value, not a category
+    if (tab === "review") {
+      list = list.filter((e) => effectiveLead(e.data, actions[e.row_key]) === "review");
+    }
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((e) =>
@@ -641,8 +652,7 @@ function Inner() {
     return [...list].sort((a, b) =>
       compareRawLeadEntries(a, b, rawLeadSort, actions, currentUserId),
     );
-  }, [actions, areaFilter, currentUserId, entries, leadFilter, query, rawLeadSort]);
-
+  }, [actions, areaFilter, currentUserId, entries, leadFilter, query, rawLeadSort, tab]);
 
   const shownRows = visible;
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
@@ -699,7 +709,7 @@ function Inner() {
         .eq("row_key", entry.row_key)
         .is("assigned_to", null);
       if (error) {
-        toast.error(error.message);
+        toast.error(friendlyError(error));
         cacheQuery.refetch();
         return;
       }
@@ -759,7 +769,7 @@ function Inner() {
         `AI checked ${result.analyzed}: ${result.yes} Yes, ${result.no} No${reviewCount ? `, ${reviewCount} Review` : ""}`,
       );
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       try {
         await writeAiLock(null, currentUserId);
@@ -779,6 +789,7 @@ function Inner() {
           {(
             [
               ["new", "New", tabCounts.new],
+              ["review", "AI Review", reviewCount],
               ["forwarded", "Forwarded", tabCounts.forwarded],
               ["not_found", "Number not found", tabCounts.not_found],
               ["duplicate", "Duplicate", tabCounts.duplicate],
@@ -894,7 +905,7 @@ function Inner() {
                   `Moved ${targets.length} "No" lead${targets.length === 1 ? "" : "s"} to Wrong posts`,
                 );
               } catch (e) {
-                toast.error((e as Error).message);
+                toast.error(friendlyError(e));
                 cacheQuery.refetch();
               }
             }}
@@ -1292,9 +1303,7 @@ function Inner() {
           {totalCount === 0
             ? "No leads in this category"
             : `Showing ${pageIndex * pageSize + 1}-${pageIndex * pageSize + entries.length} of ${totalCount.toLocaleString()}`}
-          {visible.length !== entries.length && (
-            <> · {visible.length} match current filters</>
-          )}
+          {visible.length !== entries.length && <> · {visible.length} match current filters</>}
         </div>
         <div className="flex items-center gap-2">
           {cacheQuery.isFetching && (
@@ -1362,7 +1371,6 @@ function Inner() {
           </Button>
         </div>
       </div>
-
 
       {/* Ingest endpoint info */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -1438,7 +1446,9 @@ function Inner() {
         <QualifyDialog
           entry={qualifyFor}
           actorId={auth.user?.id ?? null}
-          actorName={auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null}
+          actorName={
+            auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null
+          }
           actorRole={auth.primaryRole}
           initialSecondPhone={qualifySecondPhone}
           onClose={() => {
@@ -1522,7 +1532,8 @@ function LeadDetailDialog({
     staleTime: 15_000,
   });
   const duplicateMatches = (duplicateQuery.data?.matches ?? []) as DuplicatePhoneMatch[];
-  const secondDuplicateMatches = (secondDuplicateQuery.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const secondDuplicateMatches = (secondDuplicateQuery.data?.matches ??
+    []) as DuplicatePhoneMatch[];
   const hasDuplicate = duplicateMatches.length > 0 || secondDuplicateMatches.length > 0;
 
   async function handleNotFound() {
@@ -1641,7 +1652,9 @@ function LeadDetailDialog({
               {hasDuplicate && (
                 <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
                   Duplicate phone number detected in the last 72 hours
-                  {duplicateMatches[0]?.customer_name ? `: ${duplicateMatches[0].customer_name}` : ""}
+                  {duplicateMatches[0]?.customer_name
+                    ? `: ${duplicateMatches[0].customer_name}`
+                    : ""}
                 </div>
               )}
             </div>
@@ -1812,7 +1825,7 @@ function QualifyDialog({
       }
       onSent();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBusy(false);
     }

@@ -3,8 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/error-messages";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
+import { useNewLeadAlert } from "@/hooks/use-realtime-sync";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +19,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Loader2,
   Phone,
@@ -231,6 +243,7 @@ function Page() {
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
+  const { newLeadCount, clearAlert } = useNewLeadAlert();
   const [query, setQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
@@ -275,7 +288,7 @@ function Inner() {
       clearSelection();
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBulkBusy(false);
     }
@@ -336,6 +349,15 @@ function Inner() {
     for (const m of team.data ?? []) map.set(m.user_id, m);
     return map;
   }, [team.data]);
+
+  const dueLeads = useMemo(() => {
+    if (!list.data) return [];
+    const now = new Date();
+    return list.data.filter((lead) => {
+      if (!lead.followup_at) return false;
+      return new Date(lead.followup_at) <= now && lead.cs_status === "need_follow_up";
+    });
+  }, [list.data]);
 
   const areaOptions = useMemo(() => {
     const areas = new Set<string>();
@@ -539,6 +561,22 @@ function Inner() {
 
   return (
     <div className="space-y-4">
+      {newLeadCount > 0 && (
+        <button
+          onClick={() => {
+            qc.invalidateQueries({ queryKey: ["cs_leads"] });
+            clearAlert();
+          }}
+          className="w-full text-[13px] bg-primary/10 border border-primary/20 text-primary py-2.5 px-4 rounded-xl flex items-center justify-between hover:bg-primary/15 transition-all animate-pulse duration-[2000ms]"
+        >
+          <span className="font-semibold text-left">
+            🔔 New lead{newLeadCount === 1 ? "" : "s"} available — click to refresh
+          </span>
+          <span className="text-xs bg-primary/20 px-2 py-0.5 rounded-full shrink-0 ml-2">
+            {newLeadCount} new
+          </span>
+        </button>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[240px] max-w-md">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -859,6 +897,56 @@ function Inner() {
               )}
             </div>
           )}
+          {dueLeads.length > 0 && (
+            <div className="glass-card p-4 border-warning/60 bg-warning/5 rounded-xl space-y-3 mb-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-warning flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
+                  Follow-ups due today
+                </h3>
+                <span className="text-xs font-medium bg-warning/15 text-warning px-2.5 py-0.5 rounded-full border border-warning/30">
+                  {dueLeads.length} lead{dueLeads.length === 1 ? "" : "s"} need follow-up
+                </span>
+              </div>
+              <div className="divide-y divide-border/40 max-h-48 overflow-y-auto pr-1">
+                {dueLeads.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="py-2.5 flex items-center justify-between gap-4 text-xs first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-semibold text-foreground/90">{lead.customer_name}</span>
+                      {lead.customer_number && (
+                        <span className="text-muted-foreground ml-2">
+                          ({formatPhone(lead.customer_number)})
+                        </span>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-3 text-[11px] border-warning/40 hover:bg-warning/10 text-warning"
+                      onClick={() => {
+                        const el = document.getElementById(`lead-${lead.id}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          el.classList.add("ring-2", "ring-warning");
+                          setTimeout(() => {
+                            el.classList.remove("ring-2", "ring-warning");
+                          }, 2000);
+                        } else {
+                          setOpened(lead);
+                        }
+                      }}
+                    >
+                      View
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {viewMode === "cards" ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {shownLeads.map((l) => (
@@ -990,7 +1078,7 @@ function ComposeTemplatePanel({
       await onSave(draft);
       toast.success("Compose template updated");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -1060,6 +1148,7 @@ function CsLeadsTable({
             const assignee = lead.assigned_to ? teamById.get(lead.assigned_to) : null;
             return (
               <tr
+                id={`lead-${lead.id}`}
                 key={lead.id}
                 className="border-t border-border hover:bg-surface/50 cursor-pointer"
                 onClick={() => onOpen(lead)}
@@ -1138,7 +1227,7 @@ function LeadCard({
       .update(patch as never)
       .eq("id", lead.id);
     if (error) {
-      toast.error(error.message);
+      toast.error(friendlyError(error));
       return false;
     }
     return true;
@@ -1167,7 +1256,7 @@ function LeadCard({
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
     } catch (e) {
       setStatus(prev);
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setSaving(false);
     }
@@ -1198,7 +1287,7 @@ function LeadCard({
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
     } catch (e) {
       setAssignedTo(prev);
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setAssigning(false);
     }
@@ -1210,10 +1299,9 @@ function LeadCard({
     await changeAssignee(auth.user.id);
   }
 
-  async function deleteLead(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (!isAdmin) return;
-    if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`)) return;
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  async function performDelete() {
     try {
       const { error } = await supabase.from("qualified_leads").delete().eq("id", lead.id);
       if (error) throw error;
@@ -1229,12 +1317,19 @@ function LeadCard({
       toast.success("Lead deleted");
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error(friendlyError(err));
     }
+  }
+
+  function deleteLead(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!isAdmin) return;
+    setShowDeleteConfirm(true);
   }
 
   return (
     <div
+      id={`lead-${lead.id}`}
       className={cn(
         "glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up",
         selected && "ring-2 ring-primary border-primary",
@@ -1503,15 +1598,47 @@ function LeadCard({
           </span>
         )}
         {isAdmin && (
-          <button
-            type="button"
-            onClick={deleteLead}
-            className="inline-flex items-center gap-1 text-destructive hover:text-destructive/80 transition-colors"
-            title="Delete this lead"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={deleteLead}
+              className="inline-flex items-center gap-1 text-destructive hover:text-destructive/80 transition-colors"
+              title="Delete this lead"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+            <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+              <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete lead</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Delete lead for "{lead.customer_name}"? This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDeleteConfirm(false);
+                    }}
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setShowDeleteConfirm(false);
+                      await performDelete();
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
         )}
         <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-primary" />
       </div>
@@ -1577,6 +1704,7 @@ function LeadDrawer({
   const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
   const [busy, setBusy] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
@@ -1624,7 +1752,7 @@ function LeadDrawer({
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
       onSaved();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -1845,42 +1973,63 @@ function LeadDrawer({
           </div>
           <div className="flex items-center justify-between gap-2">
             {isAdmin ? (
-              <Button
-                variant="ghost"
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                disabled={busy}
-                onClick={async () => {
-                  if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`))
-                    return;
-                  setBusy(true);
-                  try {
-                    const { error } = await supabase
-                      .from("qualified_leads")
-                      .delete()
-                      .eq("id", lead.id);
-                    if (error) throw error;
-                    await supabase.from("activity_logs").insert({
-                      actor_id: auth.user?.id,
-                      actor_name: auth.profile?.full_name,
-                      actor_role: auth.primaryRole,
-                      action: "cs.deleted",
-                      entity_type: "qualified_lead",
-                      entity_id: lead.id,
-                      metadata: { customer_name: lead.customer_name },
-                    });
-                    toast.success("Lead deleted");
-                    qc.invalidateQueries({ queryKey: ["cs_leads"] });
-                    onSaved();
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                <Trash2 className="h-4 w-4 mr-1.5" />
-                Delete lead
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  disabled={busy}
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-1.5" />
+                  Delete lead
+                </Button>
+                <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete lead</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Delete lead for "{lead.customer_name}"? This cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          setShowDeleteConfirm(false);
+                          setBusy(true);
+                          try {
+                            const { error } = await supabase
+                              .from("qualified_leads")
+                              .delete()
+                              .eq("id", lead.id);
+                            if (error) throw error;
+                            await supabase.from("activity_logs").insert({
+                              actor_id: auth.user?.id,
+                              actor_name: auth.profile?.full_name,
+                              actor_role: auth.primaryRole,
+                              action: "cs.deleted",
+                              entity_type: "qualified_lead",
+                              entity_id: lead.id,
+                              metadata: { customer_name: lead.customer_name },
+                            });
+                            toast.success("Lead deleted");
+                            qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                            onSaved();
+                          } catch (err) {
+                            toast.error(friendlyError(err));
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
             ) : (
               <span />
             )}

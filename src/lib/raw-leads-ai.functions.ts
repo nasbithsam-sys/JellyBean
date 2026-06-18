@@ -62,12 +62,7 @@ async function loadActor(userId: string) {
       .select("full_name, username, email")
       .eq("user_id", userId)
       .maybeSingle(),
-    supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle(),
+    supabaseAdmin.from("user_roles").select("role").eq("user_id", userId).limit(1).maybeSingle(),
   ]);
 
   return {
@@ -224,7 +219,12 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
           postText: trimForAi(postText),
         })),
       });
-      results.push(...parseAiResults(outputText, batch.map((lead) => lead.rowKey)));
+      results.push(
+        ...parseAiResults(
+          outputText,
+          batch.map((lead) => lead.rowKey),
+        ),
+      );
     }
 
     if (results.length === 0) throw new Error("AI returned no usable lead decisions");

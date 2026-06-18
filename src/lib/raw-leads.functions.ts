@@ -112,19 +112,21 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       { _user_id: context.userId, _is_admin: isAdmin } as never,
     );
     if (countError) throw new Error(countError.message);
-    const counts = ((countRows as unknown as Array<{
-      new: number | null;
-      forwarded: number | null;
-      not_found: number | null;
-      wrong: number | null;
-      duplicate: number | null;
-    }> | null)?.[0] ?? {
+    const counts = (
+      countRows as unknown as Array<{
+        new: number | null;
+        forwarded: number | null;
+        not_found: number | null;
+        wrong: number | null;
+        duplicate: number | null;
+      }> | null
+    )?.[0] ?? {
       new: 0,
       forwarded: 0,
       not_found: 0,
       wrong: 0,
       duplicate: 0,
-    });
+    };
     const totalNew = counts.new ?? 0;
     const totalForwarded = counts.forwarded ?? 0;
     const totalNotFound = counts.not_found ?? 0;
@@ -169,8 +171,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       pageSize: data.limit,
       offset: data.offset,
       hasMore: data.offset + entries.length < totalForCategory,
-      nextOffset:
-        data.offset + entries.length < totalForCategory ? data.offset + data.limit : null,
+      nextOffset: data.offset + entries.length < totalForCategory ? data.offset + data.limit : null,
     };
   });
 
@@ -209,19 +210,21 @@ export const checkDuplicatePhone = createServerFn({ method: "GET" })
     );
     if (error) throw new Error(error.message);
 
-    const matches = ((rows as unknown as Array<{
-      id: string;
-      customer_name: string;
-      customer_number: string;
-      customer_number_2: string | null;
-      assigned_at: string;
-    }> | null) ?? []).map((row) => ({
-        id: row.id,
-        customer_name: row.customer_name,
-        customer_number: row.customer_number,
-        customer_number_2: row.customer_number_2,
-        assigned_at: row.assigned_at,
-      }));
+    const matches = (
+      (rows as unknown as Array<{
+        id: string;
+        customer_name: string;
+        customer_number: string;
+        customer_number_2: string | null;
+        assigned_at: string;
+      }> | null) ?? []
+    ).map((row) => ({
+      id: row.id,
+      customer_name: row.customer_name,
+      customer_number: row.customer_number,
+      customer_number_2: row.customer_number_2,
+      assigned_at: row.assigned_at,
+    }));
 
     return { duplicate: matches.length > 0, matches };
   });

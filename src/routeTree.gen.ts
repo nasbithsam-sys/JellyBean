@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SetupRouteImport } from './routes/setup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -26,6 +27,11 @@ import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-pro
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
 import { Route as ApiPublicNextdoorLeadsRouteImport } from './routes/api.public.nextdoor-leads'
 
+const SetupRoute = SetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/setup': typeof SetupRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/setup': typeof SetupRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/setup': typeof SetupRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
+    | '/setup'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -184,6 +194,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/setup'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -202,6 +213,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
+    | '/setup'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -221,11 +233,19 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  SetupRoute: typeof SetupRoute
   ApiPublicNextdoorLeadsRoute: typeof ApiPublicNextdoorLeadsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/setup': {
+      id: '/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -377,8 +397,19 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  SetupRoute: SetupRoute,
   ApiPublicNextdoorLeadsRoute: ApiPublicNextdoorLeadsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

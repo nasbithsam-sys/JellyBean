@@ -153,13 +153,7 @@ export function useAuthState(): AuthState {
   return { loading, session, user, profile, roles, primaryRole, refresh, signOut };
 }
 
-export function AuthProvider({
-  value,
-  children,
-}: {
-  value: AuthState;
-  children: ReactNode;
-}) {
+export function AuthProvider({ value, children }: { value: AuthState; children: ReactNode }) {
   return createElement(AuthContext.Provider, { value }, children);
 }
 

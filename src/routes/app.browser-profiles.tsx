@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { downloadCsv } from "@/lib/crm-lite";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -786,24 +787,29 @@ function validateSheetRows(rawRows: Record<string, unknown>[]) {
   });
 }
 
-function downloadProfiles(filenameBase: string, format: FileFormat, rows: ProfileSheetRow[]) {
-  const worksheet = XLSX.utils.json_to_sheet(rows, { header: [...PROFILE_SHEET_HEADERS] });
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Browser Profiles");
-
+async function downloadProfiles(filenameBase: string, format: FileFormat, rows: ProfileSheetRow[]) {
   if (format === "csv") {
-    const csv = XLSX.utils.sheet_to_csv(worksheet);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${filenameBase}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const headers = [...PROFILE_SHEET_HEADERS];
+    const dataRows = rows.map((row) => headers.map((h) => row[h] ?? ""));
+    downloadCsv(`${filenameBase}.csv`, headers, dataRows);
     return;
   }
 
-  XLSX.writeFile(workbook, `${filenameBase}.xlsx`, { bookType: "xlsx" });
+  // Export xlsx
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Browser Profiles");
+  worksheet.columns = PROFILE_SHEET_HEADERS.map((h) => ({ header: h, key: h }));
+  rows.forEach((row) => worksheet.addRow(row));
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${filenameBase}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function withTimeout<T>(promise: PromiseLike<T>, ms: number, message: string): Promise<T> {
@@ -993,15 +999,37 @@ function ImportDialog({
     if (!file) throw new Error("Choose a file to import.");
     if (format === "csv") return parseCsv(await file.text());
 
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) throw new Error("The workbook does not contain any sheets.");
-    return normalizeSheetRows(
-      XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheetName], {
-        defval: "",
-        raw: false,
-      }),
-    );
+    const buffer = await file.arrayBuffer();
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) throw new Error("The workbook does not contain any sheets.");
+    const rows: Record<string, unknown>[] = [];
+    const headers: string[] = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) {
+        const values = row.values as unknown[];
+        for (let i = 1; i < values.length; i++) {
+          headers.push(String(values[i] ?? "").trim());
+        }
+      } else {
+        const obj: Record<string, unknown> = {};
+        for (let i = 0; i < headers.length; i++) {
+          const cellValue = row.getCell(i + 1).value;
+          let val = cellValue;
+          if (cellValue && typeof cellValue === "object") {
+            if ("result" in cellValue) {
+              val = cellValue.result;
+            } else if ("text" in cellValue) {
+              val = cellValue.text;
+            }
+          }
+          obj[headers[i]] = val ?? "";
+        }
+        rows.push(obj);
+      }
+    });
+    return normalizeSheetRows(rows);
   }
 
   async function importProfiles() {
@@ -1144,7 +1172,7 @@ function ExportDialog({
   const [format, setFormat] = useState<FileFormat>("xlsx");
   const [exporting, setExporting] = useState(false);
 
-  function download() {
+  async function download() {
     setExporting(true);
     try {
       const rows =
@@ -1153,7 +1181,7 @@ function ExportDialog({
         toast.error("No profiles in this group");
         return;
       }
-      downloadProfiles(`incogniton-${group}`, format, rows.map(toSheetRow));
+      await downloadProfiles(`incogniton-${group}`, format, rows.map(toSheetRow));
       toast.success(`Exported ${rows.length} profile${rows.length === 1 ? "" : "s"}`);
       onClose();
     } catch (error) {

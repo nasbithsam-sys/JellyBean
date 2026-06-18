@@ -53,7 +53,6 @@ function computeRange(preset: DatePreset, from: string, to: string) {
   }
 }
 
-
 export const Route = createFileRoute("/app/reports")({ component: Page });
 
 const RAW_STATUSES = ["new", "forwarded", "not_found", "wrong", "duplicate"] as const;
@@ -113,9 +112,7 @@ function Inner() {
     queryFn: async () => {
       const results = await Promise.all(
         RAW_STATUSES.map((status) => {
-          let q = supabase
-            .from("raw_lead_cache")
-            .select("id", { count: "exact", head: true });
+          let q = supabase.from("raw_lead_cache").select("id", { count: "exact", head: true });
           if (range.from) q = q.gte("captured_at", range.from);
           if (range.to) q = q.lt("captured_at", range.to);
           if (status === "new") q = q.is("category", null);
@@ -374,8 +371,8 @@ function Inner() {
               <span>
                 {accountRows.length} accounts · {totals.total} total ·{" "}
                 <span className="text-emerald-600 font-medium">{totals.yes} yes</span> /{" "}
-                <span className="text-red-600 font-medium">{totals.no} no</span> ·{" "}
-                {totals.pending} pending
+                <span className="text-red-600 font-medium">{totals.no} no</span> · {totals.pending}{" "}
+                pending
               </span>
               <Button size="sm" variant="outline" onClick={exportByAccount}>
                 <Download className="h-3.5 w-3.5 mr-1.5" />
@@ -460,16 +457,26 @@ function Inner() {
             </thead>
             <tbody>
               {byProcessor.isLoading && (
-                <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
+                <tr>
+                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                    Loading…
+                  </td>
+                </tr>
               )}
               {!byProcessor.isLoading && (byProcessor.data ?? []).length === 0 && (
-                <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No leads forwarded in this range.</td></tr>
+                <tr>
+                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                    No leads forwarded in this range.
+                  </td>
+                </tr>
               )}
               {(byProcessor.data ?? []).map((r, i) => (
                 <tr key={r.processor_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30">
                   <td className="px-4 py-2 font-medium">{r.processor_name}</td>
                   <td className="px-4 py-2 text-muted-foreground">{r.processor_email ?? "—"}</td>
-                  <td className="px-4 py-2 text-right tabular-nums font-semibold">{r.forwarded_count}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                    {r.forwarded_count}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -480,8 +487,8 @@ function Inner() {
       <Section title="Number-not-found checks per user">
         <div className="bg-card border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b text-xs text-muted-foreground">
-            Counts raw leads marked as “Number not found”. Uses the same date range as above.
-            Only marks made after this report was added are attributed to a user.
+            Counts raw leads marked as “Number not found”. Uses the same date range as above. Only
+            marks made after this report was added are attributed to a user.
           </div>
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
@@ -493,16 +500,26 @@ function Inner() {
             </thead>
             <tbody>
               {notFoundByUser.isLoading && (
-                <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
+                <tr>
+                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                    Loading…
+                  </td>
+                </tr>
               )}
               {!notFoundByUser.isLoading && (notFoundByUser.data ?? []).length === 0 && (
-                <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No “Number not found” marks in this range.</td></tr>
+                <tr>
+                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                    No “Number not found” marks in this range.
+                  </td>
+                </tr>
               )}
               {(notFoundByUser.data ?? []).map((r, i) => (
                 <tr key={r.user_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30">
                   <td className="px-4 py-2 font-medium">{r.user_name}</td>
                   <td className="px-4 py-2 text-muted-foreground">{r.user_email ?? "—"}</td>
-                  <td className="px-4 py-2 text-right tabular-nums font-semibold">{r.not_found_count}</td>
+                  <td className="px-4 py-2 text-right tabular-nums font-semibold">
+                    {r.not_found_count}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -512,7 +529,6 @@ function Inner() {
     </div>
   );
 }
-
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

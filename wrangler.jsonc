@@ -1,6 +1,11 @@
+// Cloudflare Workers deployment config.
+// This app is currently deployed via Lovable (https://lovable.dev).
+// This wrangler config is kept for potential future self-hosted Cloudflare deployment.
+// To deploy via Cloudflare: run `wrangler deploy` after setting up your Cloudflare account.
+// For Lovable deployment: push to main branch and Lovable handles the rest.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "tanstack-start-app",
+  "name": "lead-flow-crm",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",

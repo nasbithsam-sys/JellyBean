@@ -4,6 +4,7 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/error-messages";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -419,7 +420,7 @@ function ForwardedLeadForm({
       toast.success("Forwarded lead updated");
       onSaved();
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error(friendlyError(err));
     } finally {
       setSaving(false);
     }
@@ -506,6 +507,6 @@ async function deleteForwardedLead(
     qc.invalidateQueries({ queryKey: ["forwarded-leads"] });
     qc.invalidateQueries({ queryKey: ["forwarded-sent-today"] });
   } catch (err) {
-    toast.error((err as Error).message);
+    toast.error(friendlyError(err));
   }
 }

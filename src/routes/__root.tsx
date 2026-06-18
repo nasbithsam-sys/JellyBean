@@ -27,8 +27,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:description", content: "Internal lead operations dashboard" },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/XI93seEGA6eScdxwF1KlwHiSA6d2/social-images/social-1781369293890-leadgrid_crm_logo.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/XI93seEGA6eScdxwF1KlwHiSA6d2/social-images/social-1781369293890-leadgrid_crm_logo.webp" },
+      {
+        property: "og:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/XI93seEGA6eScdxwF1KlwHiSA6d2/social-images/social-1781369293890-leadgrid_crm_logo.webp",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/XI93seEGA6eScdxwF1KlwHiSA6d2/social-images/social-1781369293890-leadgrid_crm_logo.webp",
+      },
     ],
     links: [
       { rel: "preconnect", href: "https://rsms.me/" },

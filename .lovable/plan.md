@@ -1,4 +1,3 @@
-
 ## Scope
 
 A coordinated set of changes across CS pipeline, lead card, map, AI prompt, timezone, and reports. Will be delivered in this single plan but staged across migrations and code changes.
@@ -14,6 +13,7 @@ A coordinated set of changes across CS pipeline, lead card, map, AI prompt, time
 ## 2. Lead card enhancements (`app.cs-leads.tsx`)
 
 On the lead detail/card view:
+
 - New editable fields filled manually by the CS user:
   - **Customer name**
   - **Customer phone**

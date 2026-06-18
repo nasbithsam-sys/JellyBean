@@ -76,7 +76,6 @@ export default function LeafletMap({ placed, visuals, radiusMode, tempPin, onMap
       );
     }
 
-
     items.push(
       <Marker key={`m-${account.id}`} position={[account.latitude, account.longitude]}>
         <Popup>

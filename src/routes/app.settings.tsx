@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/error-messages";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Loader2,
   Plus,
@@ -208,7 +219,7 @@ function UpdatesTab() {
       setDraft("");
       toast.success("Update note added");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -224,7 +235,7 @@ function UpdatesTab() {
         ),
       );
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -236,7 +247,7 @@ function UpdatesTab() {
       await saveItems((updatesQuery.data ?? []).filter((item) => item.id !== id));
       toast.success("Update note removed");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -421,6 +432,7 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
   const resetPw = useServerFn(adminResetPassword);
   const deleteUser = useServerFn(adminDeleteUser);
   const [busy, setBusy] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   async function toggleActive() {
     setBusy(true);
@@ -429,7 +441,7 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
       toast.success(user.is_active ? "Deactivated" : "Activated");
       onChange();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -446,24 +458,20 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
       await resetPw({ data: { userId: user.user_id, newPassword: pw } });
       toast.success("Password updated");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
-    if (
-      !window.confirm(`Permanently delete ${user.full_name || user.email}? This cannot be undone.`)
-    )
-      return;
     setBusy(true);
     try {
       await deleteUser({ data: { userId: user.user_id } });
       toast.success("User deleted");
       onChange();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -495,12 +503,36 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
         <Button
           size="sm"
           variant="outline"
-          onClick={remove}
+          onClick={() => setShowDeleteConfirm(true)}
           disabled={busy}
           className="text-destructive hover:text-destructive"
         >
           <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
         </Button>
+
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete user</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete {user.full_name || user.email}. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowDeleteConfirm(false);
+                  remove();
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </td>
     </tr>
   );
@@ -533,7 +565,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
       toast.success("User created");
       onCreated();
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(friendlyError(e));
     } finally {
       setSubmitting(false);
     }

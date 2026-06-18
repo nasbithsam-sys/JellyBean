@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
@@ -20,8 +20,21 @@ function LoginPage() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [profilesExist, setProfilesExist] = useState(true);
 
   useEffect(() => {
+    async function checkProfiles() {
+      try {
+        const { count } = await supabase
+          .from("profiles")
+          .select("id", { count: "exact", head: true });
+        setProfilesExist((count ?? 0) > 0);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    checkProfiles();
+
     void (async () => {
       const { data: sess } = await supabase.auth.getSession();
       if (!sess.session) return;
@@ -104,8 +117,8 @@ function LoginPage() {
                 Manage every lead from one calm workspace.
               </h1>
               <p className="mt-4 text-sm leading-6 text-white/72">
-                Review raw leads, forward qualified jobs, and keep CS follow-up moving without
-                extra login codes.
+                Review raw leads, forward qualified jobs, and keep CS follow-up moving without extra
+                login codes.
               </p>
             </div>
           </div>
@@ -145,51 +158,52 @@ function LoginPage() {
 
             <form onSubmit={handleSignIn} className="space-y-5">
               <div>
-            <Label
-              htmlFor="id"
-                  className="text-[13px] font-medium text-foreground"
-            >
-              Email or username
-            </Label>
-            <Input
-              id="id"
-              autoComplete="username"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              required
+                <Label htmlFor="id" className="text-[13px] font-medium text-foreground">
+                  Email or username
+                </Label>
+                <Input
+                  id="id"
+                  autoComplete="username"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  required
                   className="mt-2 h-12 rounded-xl bg-white"
-            />
-          </div>
-          <div>
-            <Label
-              htmlFor="pw"
-                  className="text-[13px] font-medium text-foreground"
-            >
-              Password
-            </Label>
-            <Input
-              id="pw"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
+                />
+              </div>
+              <div>
+                <Label htmlFor="pw" className="text-[13px] font-medium text-foreground">
+                  Password
+                </Label>
+                <Input
+                  id="pw"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
                   className="mt-2 h-12 rounded-xl bg-white"
-            />
-          </div>
-          <Button
-            type="submit"
+                />
+              </div>
+              <Button
+                type="submit"
                 className="w-full h-12 rounded-xl text-[15px] shadow-[0_12px_28px_-16px_rgba(37,99,235,0.8)]"
-            disabled={submitting}
-          >
-            {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            Sign in
+                disabled={submitting}
+              >
+                {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Sign in
                 {!submitting && <ArrowRight className="h-4 w-4" />}
-          </Button>
+              </Button>
               <p className="text-[12.5px] text-muted-foreground text-center pt-2">
-            Accounts are provisioned by your administrator.
-          </p>
-        </form>
+                Accounts are provisioned by your administrator.
+              </p>
+              {!profilesExist && (
+                <div className="text-center pt-4 border-t border-border mt-4">
+                  <Link to="/setup" className="text-xs text-primary hover:underline font-medium">
+                    First time? Set up your admin account
+                  </Link>
+                </div>
+              )}
+            </form>
           </div>
         </section>
       </div>

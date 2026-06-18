@@ -273,7 +273,8 @@ function Inner() {
           >
             {coverage.map(([area, counts]) => {
               const covered = counts.covered > 0;
-              const percent = counts.total > 0 ? Math.round((counts.covered / counts.total) * 100) : 0;
+              const percent =
+                counts.total > 0 ? Math.round((counts.covered / counts.total) * 100) : 0;
               return (
                 <div
                   key={area}
@@ -281,7 +282,10 @@ function Inner() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-foreground" title={area}>
+                      <div
+                        className="truncate text-[13px] font-semibold text-foreground"
+                        title={area}
+                      >
                         {area}
                       </div>
                       <div className="mt-1 text-[11.5px] text-muted-foreground">
@@ -291,9 +295,7 @@ function Inner() {
                     <span
                       className={cn(
                         "shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold",
-                        covered
-                          ? "bg-primary/10 text-primary"
-                          : "bg-muted text-muted-foreground",
+                        covered ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
                       )}
                     >
                       {percent}%
@@ -309,7 +311,9 @@ function Inner() {
                     />
                   </div>
                   <div className="mt-3 flex items-center justify-between text-[11.5px] text-muted-foreground">
-                    <span>{counts.launches} {counts.launches === 1 ? "launch" : "launches"}</span>
+                    <span>
+                      {counts.launches} {counts.launches === 1 ? "launch" : "launches"}
+                    </span>
                     <span>{counts.total - counts.covered} missing</span>
                   </div>
                 </div>

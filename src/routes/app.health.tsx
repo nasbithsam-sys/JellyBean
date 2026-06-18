@@ -67,9 +67,7 @@ function Inner() {
         resultCheck("Activity logs", activityLogs.error, `${activityLogs.count ?? 0} logs`),
         {
           label: "OpenAI API key",
-          value: openAiConfig.configured
-            ? "Configured"
-            : "Missing — AI classification will fail",
+          value: openAiConfig.configured ? "Configured" : "Missing — AI classification will fail",
           status: openAiConfig.configured ? "ok" : "error",
         },
         {
