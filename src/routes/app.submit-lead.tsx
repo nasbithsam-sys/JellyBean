@@ -421,6 +421,10 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
       toast.error("Name and number are required");
       return;
     }
+    if (!context.trim()) {
+      toast.error("Context is required");
+      return;
+    }
     setSubmitting(true);
     try {
       const imageUrls = await uploadImages();
@@ -557,7 +561,9 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         </div>
       )}
       <div>
-        <Label className="mb-1.5 block">Context</Label>
+        <Label className="mb-1.5 block">
+          Context <span className="text-destructive">*</span>
+        </Label>
         <Textarea
           value={context}
           onChange={(e) => setContext(e.target.value)}

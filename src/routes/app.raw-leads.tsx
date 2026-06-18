@@ -1785,6 +1785,10 @@ function QualifyDialog({
       toast.error("Customer name and number are required");
       return;
     }
+    if (!context.trim()) {
+      toast.error("Context is required");
+      return;
+    }
     if (duplicateMessage) {
       toast.error(duplicateMessage);
       return;
@@ -1876,7 +1880,7 @@ function QualifyDialog({
             </Field>
           </div>
           <div className="col-span-2">
-            <Field label="Context (your notes for CS)">
+            <Field label="Context (required notes for CS) *">
               <Textarea
                 rows={3}
                 value={context}

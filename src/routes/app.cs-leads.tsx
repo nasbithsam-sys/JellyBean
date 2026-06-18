@@ -62,6 +62,7 @@ import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import {
   CS_COMPOSE_TEMPLATE_KEY,
   DEFAULT_CS_COMPOSE_TEMPLATE,
+  COMPOSE_TEMPLATES,
   renderCsComposeSuggestion,
 } from "@/lib/cs-compose-template";
 
@@ -222,6 +223,92 @@ function useCsComposeTemplate(userId: string | undefined) {
   return { ...query, template: query.data ?? DEFAULT_CS_COMPOSE_TEMPLATE, save };
 }
 
+type ComposeTemplateItem = {
+  id: string;
+  name: string;
+  template: string;
+};
+
+const CS_COMPOSE_TEMPLATES_LIST_KEY = "cs_compose_templates_list";
+
+const DEFAULT_COMPOSE_TEMPLATES: ComposeTemplateItem[] = [
+  {
+    id: "schedule_visit",
+    name: "Schedule Visit",
+    template:
+      "Hi (Person first name), this is Alex. Saw that you are looking for (Service Context). Can you tell me more about what you need so I can check our schedule for a visit?",
+  },
+  {
+    id: "price_estimate",
+    name: "Request Estimate Details",
+    template:
+      "Hello (Person first name), I saw your post looking for (Service Context). We can definitely help you with that! Could you share a few details so we can get you a price estimate?",
+  },
+  {
+    id: "call_request",
+    name: "Call Request",
+    template:
+      "Hi (Person first name), saw your request for (Service Context). What is the best number or time to call you to discuss details and schedule?",
+  },
+  {
+    id: "follow_up",
+    name: "Quick Follow-up",
+    template:
+      "Hi (Person first name), checking in regarding your request for (Service Context). Are you still looking to get this scheduled?",
+  },
+];
+
+function useCsComposeTemplatesList(userId: string | undefined) {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ["shared_state", CS_COMPOSE_TEMPLATES_LIST_KEY],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_state")
+        .select("value")
+        .eq("key", CS_COMPOSE_TEMPLATES_LIST_KEY)
+        .maybeSingle();
+      if (error) throw error;
+      if (data?.value && typeof data.value === "object" && "templates" in data.value) {
+        return (data.value.templates as ComposeTemplateItem[]) || [];
+      }
+      return [];
+    },
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("cs-compose-templates-list-sync")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "shared_state",
+          filter: `key=eq.${CS_COMPOSE_TEMPLATES_LIST_KEY}`,
+        },
+        () => qc.invalidateQueries({ queryKey: ["shared_state", CS_COMPOSE_TEMPLATES_LIST_KEY] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  const save = async (templates: ComposeTemplateItem[]) => {
+    const { error } = await supabase.from("shared_state").upsert({
+      key: CS_COMPOSE_TEMPLATES_LIST_KEY,
+      value: { templates },
+      updated_by: userId ?? null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+    await qc.invalidateQueries({ queryKey: ["shared_state", CS_COMPOSE_TEMPLATES_LIST_KEY] });
+  };
+
+  return { ...query, templates: query.data ?? [], save };
+}
+
 function Page() {
   const auth = useAuth();
   const isCs = auth.primaryRole === "cs";
@@ -256,6 +343,7 @@ function Inner() {
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
   const isCs = auth.primaryRole === "cs";
   const composeTemplate = useCsComposeTemplate(auth.user?.id);
+  const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -455,7 +543,7 @@ function Inner() {
   };
 
   const isAdmin = auth.primaryRole === "admin";
-  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__">("__all__");
+  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__" | "templates">("__all__");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -768,6 +856,18 @@ function Inner() {
               </span>
             </button>
           ))}
+          <button
+            onClick={() => setActiveStatus("templates")}
+            className={cn(
+              "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+              activeStatus === "templates"
+                ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" />
+            Templates
+          </button>
         </div>
         <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
           <button
@@ -805,14 +905,9 @@ function Inner() {
         </div>
       )}
 
-      <ComposeTemplatePanel
-        template={composeTemplate.template}
-        loading={composeTemplate.isLoading}
-        saving={composeTemplate.isFetching}
-        onSave={composeTemplate.save}
-      />
-
-      {list.isLoading && !list.data ? (
+      {activeStatus === "templates" ? (
+        <ComposeTemplatesManager userId={auth.user?.id} />
+      ) : list.isLoading && !list.data ? (
         <div className="glass-card p-16 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
         </div>
@@ -956,7 +1051,7 @@ function Inner() {
                   team={team.data ?? []}
                   teamById={teamById}
                   onOpen={() => setOpened(l)}
-                  composeTemplate={composeTemplate.template}
+                  templates={composeTemplatesList.templates}
                   selected={selectedIds.has(l.id)}
                   onToggleSelect={() => toggleSelect(l.id)}
                   showSelect={isCs || isAdmin}
@@ -982,7 +1077,7 @@ function Inner() {
           lead={opened}
           team={team.data ?? []}
           teamById={teamById}
-          composeTemplate={composeTemplate.template}
+          templates={composeTemplatesList.templates}
           onClose={() => setOpened(null)}
           onSaved={() => {
             setOpened(null);
@@ -1190,7 +1285,7 @@ function LeadCard({
   team,
   teamById,
   onOpen,
-  composeTemplate,
+  templates = [],
   selected = false,
   onToggleSelect,
   showSelect = false,
@@ -1199,7 +1294,7 @@ function LeadCard({
   team: CsTeamMember[];
   teamById: Map<string, CsTeamMember>;
   onOpen: () => void;
-  composeTemplate: string;
+  templates?: ComposeTemplateItem[];
   selected?: boolean;
   onToggleSelect?: () => void;
   showSelect?: boolean;
@@ -1219,7 +1314,11 @@ function LeadCard({
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
-  const composeSuggestion = renderCsComposeSuggestion(composeTemplate, lead);
+
+  const finalTemplates = templates.length > 0 ? templates : DEFAULT_COMPOSE_TEMPLATES;
+  const composeSuggestion = finalTemplates[0]
+    ? renderCsComposeSuggestion(finalTemplates[0].template, lead)
+    : "";
 
   async function saveField(patch: Partial<Lead>) {
     const { error } = await supabase
@@ -1514,7 +1613,33 @@ function LeadCard({
         />
       </div>
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Compose</Label>
+        <div className="flex justify-between items-center mb-1">
+          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Compose
+          </Label>
+          <Select
+            onValueChange={async (val) => {
+              const selectedTpl = finalTemplates.find((t) => t.id === val);
+              if (selectedTpl) {
+                const generated = renderCsComposeSuggestion(selectedTpl.template, lead);
+                setCompose(generated);
+                await saveField({ marketing_notes: generated } as Partial<Lead>);
+                qc.invalidateQueries({ queryKey: ["cs_leads"] });
+              }
+            }}
+          >
+            <SelectTrigger className="h-6 w-[120px] text-[10px] py-0 px-2 bg-muted/40 border-dashed">
+              <SelectValue placeholder="Use template..." />
+            </SelectTrigger>
+            <SelectContent>
+              {finalTemplates.map((t) => (
+                <SelectItem key={t.id} value={t.id} className="text-[11px]">
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Textarea
           value={compose}
           rows={2}
@@ -1529,7 +1654,17 @@ function LeadCard({
           className="text-[12px] mt-0.5 resize-none"
           placeholder="Compose a message or note for this lead…"
         />
-        <ComposeSuggestion suggestion={composeSuggestion} compact />
+        {composeSuggestion && (
+          <ComposeSuggestion
+            suggestion={composeSuggestion}
+            compact
+            onClick={async () => {
+              setCompose(composeSuggestion);
+              await saveField({ marketing_notes: composeSuggestion } as Partial<Lead>);
+              qc.invalidateQueries({ queryKey: ["cs_leads"] });
+            }}
+          />
+        )}
       </div>
 
       {/* Assignment row */}
@@ -1682,14 +1817,14 @@ function LeadDrawer({
   lead,
   team,
   teamById,
-  composeTemplate,
+  templates = [],
   onClose,
   onSaved,
 }: {
   lead: Lead;
   team: CsTeamMember[];
   teamById: Map<string, CsTeamMember>;
-  composeTemplate: string;
+  templates?: ComposeTemplateItem[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -1710,7 +1845,11 @@ function LeadDrawer({
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
-  const composeSuggestion = renderCsComposeSuggestion(composeTemplate, lead);
+
+  const finalTemplates = templates.length > 0 ? templates : DEFAULT_COMPOSE_TEMPLATES;
+  const composeSuggestion = finalTemplates[0]
+    ? renderCsComposeSuggestion(finalTemplates[0].template, lead)
+    : "";
 
   async function save() {
     setBusy(true);
@@ -1864,9 +2003,31 @@ function LeadDrawer({
             />
           </div>
           <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Compose
-            </Label>
+            <div className="flex justify-between items-center mb-1.5">
+              <Label className="block text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                Compose
+              </Label>
+              <Select
+                onValueChange={(val) => {
+                  const selectedTpl = finalTemplates.find((t) => t.id === val);
+                  if (selectedTpl) {
+                    const generated = renderCsComposeSuggestion(selectedTpl.template, lead);
+                    setCompose(generated);
+                  }
+                }}
+              >
+                <SelectTrigger className="h-7 w-[160px] text-[11px] py-0 px-2 bg-muted/40 border-dashed">
+                  <SelectValue placeholder="Use template..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {finalTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id} className="text-[11.5px]">
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Textarea
               value={compose}
               onChange={(e) => setCompose(e.target.value)}
@@ -1874,7 +2035,14 @@ function LeadDrawer({
               maxLength={2000}
               placeholder="Compose a message or note for this lead..."
             />
-            <ComposeSuggestion suggestion={composeSuggestion} />
+            {composeSuggestion && (
+              <ComposeSuggestion
+                suggestion={composeSuggestion}
+                onClick={() => {
+                  setCompose(composeSuggestion);
+                }}
+              />
+            )}
           </div>
           <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
@@ -2071,18 +2239,28 @@ function LeadDrawer({
 function ComposeSuggestion({
   suggestion,
   compact = false,
+  onClick,
 }: {
   suggestion: string;
   compact?: boolean;
+  onClick?: () => void;
 }) {
+  if (!suggestion) return null;
   return (
     <div
+      onClick={onClick}
       className={cn(
-        "mt-2 rounded-md border border-dashed border-border bg-surface/60 text-muted-foreground",
+        "mt-2 rounded-md border border-dashed border-border bg-surface/60 text-muted-foreground transition-colors",
+        onClick &&
+          "cursor-pointer hover:bg-surface-strong hover:text-foreground hover:border-primary/60",
         compact ? "px-2.5 py-2 text-[11.5px]" : "px-3 py-2.5 text-[12px]",
       )}
+      title={onClick ? "Click to insert into compose box" : undefined}
     >
-      <div className="mb-1 text-[10px] uppercase tracking-wide font-semibold">Suggestion</div>
+      <div className="mb-1 text-[10px] uppercase tracking-wide font-semibold flex items-center justify-between">
+        <span>Suggestion</span>
+        {onClick && <span className="text-[9px] text-primary/80 lowercase">Click to apply</span>}
+      </div>
       <div className="whitespace-pre-wrap leading-relaxed">{suggestion}</div>
     </div>
   );
@@ -2098,6 +2276,265 @@ function Info({ label, value, multiline }: { label: string; value: string; multi
         className={cn("text-[13px] mt-1 leading-relaxed", multiline ? "whitespace-pre-wrap" : "")}
       >
         {value}
+      </div>
+    </div>
+  );
+}
+
+function ComposeTemplatesManager({ userId }: { userId: string | undefined }) {
+  const { templates, save, isLoading } = useCsComposeTemplatesList(userId);
+  const [items, setItems] = useState<ComposeTemplateItem[]>([]);
+  const [newName, setNewName] = useState("");
+  const [newTemplate, setNewTemplate] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (templates.length > 0) {
+      setItems(templates);
+    } else {
+      setItems(DEFAULT_COMPOSE_TEMPLATES);
+    }
+  }, [templates]);
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newName.trim() || !newTemplate.trim()) {
+      toast.error("Name and template content are required");
+      return;
+    }
+    const newItem: ComposeTemplateItem = {
+      id: `tpl_${Date.now()}`,
+      name: newName.trim(),
+      template: newTemplate.trim(),
+    };
+    const next = [...items, newItem];
+    setItems(next);
+    setNewName("");
+    setNewTemplate("");
+    setBusy(true);
+    try {
+      await save(next);
+      toast.success("Template added successfully");
+    } catch (err) {
+      toast.error(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    const next = items.filter((item) => item.id !== id);
+    setItems(next);
+    setBusy(true);
+    try {
+      await save(next);
+      toast.success("Template deleted");
+    } catch (err) {
+      toast.error(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpdate(id: string, name: string, templateText: string) {
+    const next = items.map((item) =>
+      item.id === id ? { ...item, name: name.trim(), template: templateText.trim() } : item,
+    );
+    setItems(next);
+    setBusy(true);
+    try {
+      await save(next);
+      toast.success("Template updated");
+    } catch (err) {
+      toast.error(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Add form */}
+      <div className="glass-card p-5 space-y-4">
+        <div className="flex items-center gap-2 border-b border-border pb-3">
+          <MessageSquarePlus className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Create Compose Template</h3>
+        </div>
+        <form onSubmit={handleAdd} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-1">
+              <Label
+                htmlFor="tpl-name"
+                className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium block mb-1.5"
+              >
+                Template Name
+              </Label>
+              <Input
+                id="tpl-name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. Schedule Visit"
+                maxLength={60}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Label
+                htmlFor="tpl-text"
+                className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium block mb-1.5"
+              >
+                Template Content
+              </Label>
+              <Textarea
+                id="tpl-text"
+                value={newTemplate}
+                onChange={(e) => setNewTemplate(e.target.value)}
+                placeholder="Hi (Person first name), saw that you are looking for (Service Context)..."
+                rows={2}
+                maxLength={1000}
+              />
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-[11.5px] text-muted-foreground bg-muted/20 border border-border px-3 py-2.5 rounded-md">
+            <div>
+              💡 Placeholders:{" "}
+              <code className="font-semibold text-foreground font-mono bg-muted/60 px-1 py-0.5 rounded">
+                (Person first name)
+              </code>
+              ,{" "}
+              <code className="font-semibold text-foreground font-mono bg-muted/60 px-1 py-0.5 rounded">
+                (Service Context)
+              </code>
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              className="w-full sm:w-auto"
+              disabled={busy || isLoading}
+            >
+              Add Template
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      {/* Templates list */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold">Active Templates</h3>
+        {isLoading ? (
+          <div className="text-center py-6 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" /> Loading templates...
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-6 text-muted-foreground bg-muted/10 rounded-md">
+            No templates configured yet. Click above to create one.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3">
+            {items.map((item) => (
+              <TemplateRow
+                key={item.id}
+                item={item}
+                busy={busy}
+                onUpdate={handleUpdate}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TemplateRow({
+  item,
+  busy,
+  onUpdate,
+  onDelete,
+}: {
+  item: ComposeTemplateItem;
+  busy: boolean;
+  onUpdate: (id: string, name: string, template: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(item.name);
+  const [template, setTemplate] = useState(item.template);
+
+  if (editing) {
+    return (
+      <div className="glass-card p-4 space-y-3 border border-primary/40 bg-primary/5">
+        <div className="space-y-3">
+          <div>
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 block">
+              Template Name
+            </Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Template Name"
+              maxLength={60}
+            />
+          </div>
+          <div>
+            <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 block">
+              Template Content
+            </Label>
+            <Textarea
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+              placeholder="Template Content"
+              rows={3}
+              maxLength={1000}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              await onUpdate(item.id, name, template);
+              setEditing(false);
+            }}
+            disabled={busy}
+          >
+            Save Changes
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-card p-4 flex items-start justify-between gap-4 hover:border-border-strong transition-colors">
+      <div className="space-y-2 min-w-0 flex-1">
+        <h4 className="text-sm font-semibold text-foreground/90">{item.name}</h4>
+        <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+          {item.template}
+        </p>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => setEditing(true)}
+          disabled={busy}
+        >
+          Edit
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => onDelete(item.id)}
+          disabled={busy}
+        >
+          Delete
+        </Button>
       </div>
     </div>
   );
