@@ -49,6 +49,8 @@ import {
   Table2,
   X,
   Sparkles,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -89,6 +91,17 @@ Instructions:
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
 const UNASSIGNED_VALUE = "__unassigned__";
+
+async function copyToClipboard(value: string, label = "Copied") {
+  const next = value.trim();
+  if (!next) return;
+  try {
+    await navigator.clipboard.writeText(next);
+    toast.success(label);
+  } catch {
+    toast.error("Could not copy");
+  }
+}
 
 function playNotificationBeep() {
   try {
@@ -1091,6 +1104,7 @@ function Inner() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-surface border border-border">
           <button
+            type="button"
             onClick={() => setActiveStatus("__all__")}
             className={cn(
               "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
@@ -1108,6 +1122,7 @@ function Inner() {
           {PIPELINE_STATUSES.map((s) => (
             <button
               key={s}
+              type="button"
               onClick={() => setActiveStatus(s)}
               className={cn(
                 "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
@@ -1126,6 +1141,7 @@ function Inner() {
             </button>
           ))}
           <button
+            type="button"
             onClick={() => setActiveStatus("templates")}
             className={cn(
               "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
@@ -1519,10 +1535,14 @@ function CsLeadsTable({
               >
                 <td className="px-3 py-2 font-medium">{lead.customer_name}</td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  {formatPhone(lead.customer_number)}
+                  <PhoneCopyLink phone={lead.customer_number} compact />
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  {lead.customer_number_2 ? formatPhone(lead.customer_number_2) : "-"}
+                  {lead.customer_number_2 ? (
+                    <PhoneCopyLink phone={lead.customer_number_2} compact />
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{lead.number_name || "-"}</td>
                 <td className="px-3 py-2">
@@ -1761,21 +1781,13 @@ function LeadCard({
             <h3 className="text-[13.5px] font-semibold truncate">{lead.customer_name}</h3>
             <StatusBadge status={status} />
           </div>
-          <a
-            href={`tel:${lead.customer_number}`}
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-primary transition-colors mt-0.5"
-          >
-            <Phone className="h-3 w-3" /> {formatPhone(lead.customer_number)}
-          </a>
+          <div className="mt-1 flex flex-wrap gap-2">
+            <PhoneCopyLink phone={lead.customer_number} compact />
+          </div>
           {lead.customer_number_2 && (
-            <a
-              href={`tel:${lead.customer_number_2}`}
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-primary transition-colors mt-0.5 ml-2"
-            >
-              <Phone className="h-3 w-3" /> {formatPhone(lead.customer_number_2)}
-            </a>
+            <div className="mt-1 flex flex-wrap gap-2">
+              <PhoneCopyLink phone={lead.customer_number_2} compact />
+            </div>
           )}
         </div>
       </div>
@@ -1838,22 +1850,12 @@ function LeadCard({
       )}
 
       <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-        <Select
+        <StatusPicker
           value={status}
-          onValueChange={(next) => changeStatus(next as CsStatus)}
+          onChange={changeStatus}
           disabled={saving || !assignedTo || (!isAdmin && auth.user?.id !== assignedTo)}
-        >
-          <SelectTrigger className="h-8 text-[12px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PIPELINE_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {STATUS_LABEL[s] ?? s.replace(/_/g, " ")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          saving={saving}
+        />
       </div>
 
       {/* Manual field filled by CS */}
@@ -2134,6 +2136,93 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function PhoneCopyLink({
+  phone,
+  compact = false,
+}: {
+  phone: string | null | undefined;
+  compact?: boolean;
+}) {
+  if (!phone) return null;
+  return (
+    <div className={cn("inline-flex items-center gap-1.5", compact ? "text-[12px]" : "text-sm")}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          void copyToClipboard(phone, "Phone number copied");
+        }}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface/70 text-muted-foreground transition-colors hover:text-foreground hover:border-primary/50"
+        title="Copy phone number"
+        aria-label="Copy phone number"
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+      <a
+        href={`tel:${phone}`}
+        onClick={(e) => e.stopPropagation()}
+        className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-primary"
+      >
+        <Phone className="h-3 w-3" />
+        {formatPhone(phone)}
+      </a>
+    </div>
+  );
+}
+
+function StatusPicker({
+  value,
+  disabled,
+  saving,
+  onChange,
+}: {
+  value: CsStatus;
+  disabled?: boolean;
+  saving?: boolean;
+  onChange: (next: CsStatus) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {PIPELINE_STATUSES.map((statusOption) => {
+          const active = value === statusOption;
+          return (
+            <button
+              key={statusOption}
+              type="button"
+              onClick={() => onChange(statusOption)}
+              disabled={disabled}
+              className={cn(
+                "inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                active
+                  ? (STATUS_TONE[statusOption] ?? "bg-muted text-foreground border-border")
+                  : "border-border bg-surface/70 text-muted-foreground hover:text-foreground hover:border-border/80",
+                disabled && "cursor-not-allowed opacity-60",
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-flex h-4 w-4 items-center justify-center rounded-full border text-[9px]",
+                  active ? "border-current/50 bg-current/10" : "border-border bg-background",
+                )}
+              >
+                {active ? <Check className="h-3 w-3" /> : null}
+              </span>
+              <span>{STATUS_LABEL[statusOption] ?? statusOption}</span>
+            </button>
+          );
+        })}
+      </div>
+      {saving && (
+        <div className="inline-flex items-center text-[11px] text-muted-foreground">
+          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          Updating status
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LeadDrawer({
   lead,
   team,
@@ -2264,21 +2353,13 @@ function LeadDrawer({
             Customer
           </div>
           <h2 className="text-[22px] font-semibold tracking-tight mt-1">{lead.customer_name}</h2>
-          <a
-            href={`tel:${lead.customer_number}`}
-            className="text-sm text-primary inline-flex items-center mt-1.5 hover:text-primary-glow transition-colors"
-          >
-            <Phone className="h-3.5 w-3.5 mr-1.5" />
-            {formatPhone(lead.customer_number)}
-          </a>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <PhoneCopyLink phone={lead.customer_number} />
+          </div>
           {lead.customer_number_2 && (
-            <a
-              href={`tel:${lead.customer_number_2}`}
-              className="text-sm text-primary inline-flex items-center mt-1.5 ml-3 hover:text-primary-glow transition-colors"
-            >
-              <Phone className="h-3.5 w-3.5 mr-1.5" />
-              {formatPhone(lead.customer_number_2)}
-            </a>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <PhoneCopyLink phone={lead.customer_number_2} />
+            </div>
           )}
         </div>
 
@@ -2327,22 +2408,11 @@ function LeadDrawer({
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
               Status
             </Label>
-            <Select
+            <StatusPicker
               value={status}
-              onValueChange={(next) => setStatus(next as CsStatus)}
+              onChange={setStatus}
               disabled={busy || !assignedTo || (!isAdmin && auth.user?.id !== assignedTo)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PIPELINE_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {STATUS_LABEL[s] ?? s.replace(/_/g, " ")}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </div>
           <div>
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
