@@ -1264,7 +1264,7 @@ function CsLeadsTable({
                   {assignee ? assignee.full_name || assignee.email : "Unassigned"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  {[lead.main_area, lead.sub_area].filter(Boolean).join(", ") || "-"}
+                  {lead.sub_area || "-"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground max-w-[260px]">
                   <div className="truncate">{lead.marketing_notes || "-"}</div>
