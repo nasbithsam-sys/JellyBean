@@ -96,9 +96,7 @@ export function NumberNameSelect({
         onClick={(e) => e.stopPropagation()}
       >
         <Command
-          filter={(value, search) =>
-            value.toLowerCase().startsWith(search.toLowerCase()) ? 1 : 0
-          }
+          filter={(value, search) => (value.toLowerCase().startsWith(search.toLowerCase()) ? 1 : 0)}
         >
           <CommandInput placeholder="Search... (matches start)" className="h-9" />
           <CommandList>
@@ -116,10 +114,7 @@ export function NumberNameSelect({
                   className="text-[12.5px]"
                 >
                   <Check
-                    className={cn(
-                      "mr-2 h-3.5 w-3.5",
-                      value === opt ? "opacity-100" : "opacity-0",
-                    )}
+                    className={cn("mr-2 h-3.5 w-3.5", value === opt ? "opacity-100" : "opacity-0")}
                   />
                   {opt}
                 </CommandItem>
