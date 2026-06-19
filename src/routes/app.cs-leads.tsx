@@ -1562,18 +1562,18 @@ function LeadCard({
         <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
           Number Name
         </Label>
-        <Input
+        <NumberNameSelect
           value={numberName}
-          onChange={(e) => setNumberName(e.target.value)}
-          onBlur={async () => {
-            if (numberName !== (lead.number_name ?? "")) {
-              if (await saveField({ number_name: numberName } as Partial<Lead>)) {
+          size="sm"
+          className="mt-0.5"
+          onChange={(v) => setNumberName(v)}
+          onCommit={async (v) => {
+            if (v !== (lead.number_name ?? "")) {
+              if (await saveField({ number_name: v } as Partial<Lead>)) {
                 qc.invalidateQueries({ queryKey: ["cs_leads"] });
               }
             }
           }}
-          className="h-8 text-[12px] mt-0.5"
-          placeholder="Number name"
         />
       </div>
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
