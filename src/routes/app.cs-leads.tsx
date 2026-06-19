@@ -221,7 +221,7 @@ function useCsComposeTemplate(userId: string | undefined) {
 
   useEffect(() => {
     const channel = supabase
-      .channel("cs-compose-template-sync")
+      .channel(`cs-compose-template-sync-${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         {
@@ -325,7 +325,7 @@ function useCsComposeTemplatesList(userId: string | undefined) {
 
   useEffect(() => {
     const channel = supabase
-      .channel("cs-compose-templates-list-sync")
+      .channel(`cs-compose-templates-list-sync-${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         {
@@ -659,7 +659,7 @@ function Inner() {
     const t = setTimeout(() => {
       armedRef.current = true;
     }, 1500);
-    const channel = supabase.channel("cs-leads-new-ping");
+    const channel = supabase.channel(`cs-leads-new-ping-${crypto.randomUUID()}`);
     (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "qualified_leads" },
