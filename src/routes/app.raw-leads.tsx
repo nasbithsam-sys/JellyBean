@@ -1926,7 +1926,7 @@ function QualifyDialog({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
         {label}
       </Label>
