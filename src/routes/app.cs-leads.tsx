@@ -1478,13 +1478,14 @@ function LeadCard({
         </div>
       </div>
 
-      {lead.main_area && (
+      {(lead.main_area || lead.sub_area) && (
         <div className="mt-3 flex items-start gap-1.5 text-[12px]">
           <MapPin className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
           <div className="min-w-0">
-            <span className="text-muted-foreground">Main Area: </span>
-            <span className="text-foreground/90 font-medium">{lead.main_area}</span>
-            {lead.sub_area && <span className="text-muted-foreground"> · {lead.sub_area}</span>}
+            <span className="text-muted-foreground">Area: </span>
+            <span className="text-foreground/90 font-medium">
+              {[lead.main_area, lead.sub_area].filter(Boolean).join(", ")}
+            </span>
           </div>
         </div>
       )}
