@@ -1930,12 +1930,7 @@ function LeadDrawer({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {(lead.main_area || lead.sub_area) && (
-            <Info
-              label="Area"
-              value={[lead.main_area, lead.sub_area].filter(Boolean).join(", ")}
-            />
-          )}
+          {lead.sub_area && <Info label="Area" value={lead.sub_area} />}
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
         </div>
         {lead.service && <Info label="Service" value={lead.service} />}
