@@ -58,6 +58,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 import type { CsStatus, LeadNote } from "@/lib/crm-types";
+import { NumberNameSelect } from "@/components/number-name-select";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import {
   CS_COMPOSE_TEMPLATE_KEY,
@@ -703,7 +704,7 @@ function Inner() {
             ))}
           </SelectContent>
         </Select>
-        {isAdmin && (
+        {(isAdmin || isCs) && (
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="h-9 text-[12px]">
@@ -1263,7 +1264,7 @@ function CsLeadsTable({
                   {assignee ? assignee.full_name || assignee.email : "Unassigned"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  {[lead.main_area, lead.sub_area].filter(Boolean).join(" / ") || "-"}
+                  {[lead.main_area, lead.sub_area].filter(Boolean).join(", ") || "-"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground max-w-[260px]">
                   <div className="truncate">{lead.marketing_notes || "-"}</div>
@@ -1478,13 +1479,14 @@ function LeadCard({
         </div>
       </div>
 
-      {lead.main_area && (
+      {(lead.main_area || lead.sub_area) && (
         <div className="mt-3 flex items-start gap-1.5 text-[12px]">
           <MapPin className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
           <div className="min-w-0">
-            <span className="text-muted-foreground">Main Area: </span>
-            <span className="text-foreground/90 font-medium">{lead.main_area}</span>
-            {lead.sub_area && <span className="text-muted-foreground"> · {lead.sub_area}</span>}
+            <span className="text-muted-foreground">Area: </span>
+            <span className="text-foreground/90 font-medium">
+              {[lead.main_area, lead.sub_area].filter(Boolean).join(", ")}
+            </span>
           </div>
         </div>
       )}
@@ -1560,18 +1562,18 @@ function LeadCard({
         <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
           Number Name
         </Label>
-        <Input
+        <NumberNameSelect
           value={numberName}
-          onChange={(e) => setNumberName(e.target.value)}
-          onBlur={async () => {
-            if (numberName !== (lead.number_name ?? "")) {
-              if (await saveField({ number_name: numberName } as Partial<Lead>)) {
+          size="sm"
+          className="mt-0.5"
+          onChange={(v) => setNumberName(v)}
+          onCommit={async (v) => {
+            if (v !== (lead.number_name ?? "")) {
+              if (await saveField({ number_name: v } as Partial<Lead>)) {
                 qc.invalidateQueries({ queryKey: ["cs_leads"] });
               }
             }
           }}
-          className="h-8 text-[12px] mt-0.5"
-          placeholder="Number name"
         />
       </div>
       <div className="mt-2" onClick={(e) => e.stopPropagation()}>
@@ -1933,7 +1935,7 @@ function LeadDrawer({
           {(lead.main_area || lead.sub_area) && (
             <Info
               label="Area"
-              value={[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")}
+              value={[lead.main_area, lead.sub_area].filter(Boolean).join(", ")}
             />
           )}
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
@@ -1996,11 +1998,7 @@ function LeadDrawer({
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
               Number Name
             </Label>
-            <Input
-              value={numberName}
-              onChange={(e) => setNumberName(e.target.value)}
-              placeholder="Number name"
-            />
+            <NumberNameSelect value={numberName} onChange={(v) => setNumberName(v)} />
           </div>
           <div>
             <div className="flex justify-between items-center mb-1.5">
