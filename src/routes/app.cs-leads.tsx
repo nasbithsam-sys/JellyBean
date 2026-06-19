@@ -1934,7 +1934,7 @@ function LeadDrawer({
           {(lead.main_area || lead.sub_area) && (
             <Info
               label="Area"
-              value={[lead.main_area, lead.sub_area].filter(Boolean).join(" · ")}
+              value={[lead.main_area, lead.sub_area].filter(Boolean).join(", ")}
             />
           )}
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
