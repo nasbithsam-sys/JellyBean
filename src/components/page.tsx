@@ -45,7 +45,7 @@ type Role =
   | "admin"
   | "sub_admin"
   | "scraping"
-  | "processor"
+  | "maturing"
   | "cs"
   | "acc_handler"
   | "facebook"

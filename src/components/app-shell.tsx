@@ -39,7 +39,7 @@ const ADMIN: Item[] = [
 
 const SCRAPING: Item[] = [{ to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe }];
 
-const PROCESSOR: Item[] = [
+const MATURING: Item[] = [
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2 },
   { to: "/app/forwarded-leads", label: "Forwarded Leads", icon: Headphones },
   { to: "/app/submit-lead", label: "Manual Lead", icon: Send },
@@ -74,7 +74,7 @@ function itemsForRole(role: AppRole | null): Item[] {
   if (role === "admin") return ADMIN_FULL;
   if (role === "sub_admin") return SUB_ADMIN;
   if (role === "scraping") return SCRAPING;
-  if (role === "processor") return PROCESSOR;
+  if (role === "maturing") return MATURING;
   if (role === "cs") return CS;
   if (role === "acc_handler") return ACC_HANDLER;
   if (role === "facebook" || role === "seo") return SUBMITTER;

@@ -49,7 +49,7 @@ async function ensureRequesterCanAnalyze(userId: string) {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .in("role", ["admin", "sub_admin", "scraping", "processor"]);
+    .in("role", ["admin", "sub_admin", "scraping", "maturing"]);
 
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error("Forbidden: Raw Leads access required");
@@ -281,4 +281,82 @@ export const checkOpenAiConfig = createServerFn({ method: "GET" })
     if (!data?.length) throw new Error("Forbidden: admin only");
 
     return { configured: !!process.env.OPENAI_API_KEY };
+  });
+
+async function ensureRequesterCanRephrase(userId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["admin", "sub_admin", "cs"]);
+
+  if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("Forbidden: CS access required");
+}
+
+const rephraseInputSchema = z.object({
+  template: z.string(),
+  customerName: z.string(),
+  postText: z.string().nullable().optional(),
+  requirement1: z.string().nullable().optional(),
+  requirement2: z.string().nullable().optional(),
+  systemPrompt: z.string().nullable().optional(),
+});
+
+export const rephraseLeadTemplateWithAi = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => rephraseInputSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await ensureRequesterCanRephrase(context.userId);
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret");
+
+    const defaultSystemPrompt = `You are a professional customer service assistant. Your goal is to fill in and rephrase a message template for a home service customer lead to make it sound completely natural, professional, and grammatically correct.
+
+You will be given:
+- Template: A message draft containing placeholders like "(Person first name)", "(Service Context)", "(Requirement)", etc.
+- Customer Name: The name of the customer (should be used to replace the "(Person first name)" placeholder or addressed at the beginning).
+- Post Text: The exact customer request or post. You must read this post and extract the specific service request as the "Service Context" (e.g., if the post says "Looking for someone to fix a broken garage door springs", the Service Context is "repairing your garage door springs").
+- Requirement 1 (optional): A specific detail/question we need to ask or verify.
+- Requirement 2 (optional): Another specific detail/question we need to ask or verify.
+
+Instructions:
+1. Extract the specific service requested (Service Context) from the Post Text. Make it flow naturally in the sentence.
+2. Replace "(Person first name)" with the customer's name.
+3. Integrate Requirement 1 and Requirement 2 into the template. Do not just blindly insert them; rewrite the sentence around them so it is elegant, polite, flows beautifully, and is grammatically correct.
+4. Output ONLY the rephrased message. Do not include any brackets, placeholders, quotes, introductory or concluding text.`;
+
+    const systemPrompt = data.systemPrompt || defaultSystemPrompt;
+
+    const userContent = JSON.stringify({
+      template: data.template,
+      customerName: data.customerName,
+      postText: data.postText || "",
+      requirement1: data.requirement1 || "",
+      requirement2: data.requirement2 || "",
+    });
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-5-nano",
+        input: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+      }),
+    });
+
+    const responseBody = (await response.json()) as OpenAiResponse;
+    if (!response.ok) {
+      throw new Error(responseBody.error?.message ?? `OpenAI request failed (${response.status})`);
+    }
+
+    const rephrased = extractOutputText(responseBody);
+    return { rephrased: rephrased.trim() };
   });

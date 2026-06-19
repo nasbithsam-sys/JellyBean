@@ -52,7 +52,7 @@ function DashboardHome() {
   useEffect(() => {
     if (auth.loading) return;
     if (role === "cs") navigate({ to: "/app/cs-leads", replace: true });
-    else if (role === "scraping" || role === "processor")
+    else if (role === "scraping" || role === "maturing")
       navigate({ to: "/app/raw-leads", replace: true });
     else if (role === "acc_handler") navigate({ to: "/app/map", replace: true });
     else if (role === "facebook" || role === "seo")
@@ -184,7 +184,7 @@ function AdminDashboard() {
     <div>
       <PageHeader
         title={`${greeting}${firstName ? `, ${firstName}` : ""}`}
-        description="Overview of lead operations across scraping, processor, and CS."
+        description="Overview of lead operations across scraping, maturing, and CS."
       />
       <PageBody className="space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">

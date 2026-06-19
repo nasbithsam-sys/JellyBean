@@ -17,7 +17,7 @@ const ROLE_TABLES: Record<AppRole, string[]> = {
   admin: ["qualified_leads", "incogniton_profiles", "shared_state"],
   sub_admin: ["qualified_leads", "incogniton_profiles", "shared_state"],
   scraping: ["qualified_leads", "incogniton_profiles", "shared_state"],
-  processor: ["qualified_leads", "incogniton_profiles", "shared_state"],
+  maturing: ["qualified_leads", "incogniton_profiles", "shared_state"],
   // CS pipeline intentionally avoids background list invalidation. A separate
   // insert listener shows new-lead alerts, while manual refresh keeps active
   // compose work from jumping when other users forward or update leads.

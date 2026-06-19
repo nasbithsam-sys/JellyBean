@@ -561,13 +561,13 @@ export type Database = {
               yes_count: number;
             }[];
           };
-      report_leads_forwarded_by_processor: {
+      report_leads_forwarded_by_maturing: {
         Args: { _from?: string; _to?: string };
         Returns: {
           forwarded_count: number;
-          processor_email: string;
-          processor_id: string;
-          processor_name: string;
+          maturing_email: string;
+          maturing_id: string;
+          maturing_name: string;
         }[];
       };
       report_not_found_by_user: {
@@ -585,7 +585,7 @@ export type Database = {
         | "admin"
         | "scraping"
         | "cs"
-        | "processor"
+        | "maturing"
         | "acc_handler"
         | "facebook"
         | "seo"
@@ -745,7 +745,7 @@ export const Constants = {
         "admin",
         "scraping",
         "cs",
-        "processor",
+        "maturing",
         "acc_handler",
         "facebook",
         "seo",

@@ -362,7 +362,7 @@ function Page() {
       />
       <PageBody className="!pt-5">
         <RoleGate
-          allow={["admin", "sub_admin", "processor", "acc_handler"]}
+          allow={["admin", "sub_admin", "maturing", "acc_handler"]}
           current={auth.primaryRole}
         >
           <Inner />
@@ -475,7 +475,7 @@ function Inner() {
   const canRunAi =
     auth.primaryRole === "admin" ||
     auth.primaryRole === "sub_admin" ||
-    auth.primaryRole === "processor";
+    auth.primaryRole === "maturing";
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({

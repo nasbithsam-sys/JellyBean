@@ -48,6 +48,7 @@ import {
   LayoutGrid,
   Table2,
   X,
+  Sparkles,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -65,8 +66,24 @@ import {
   COMPOSE_TEMPLATES,
   renderCsComposeSuggestion,
 } from "@/lib/cs-compose-template";
+import { rephraseLeadTemplateWithAi } from "@/lib/raw-leads-ai.functions";
 
 import { cn } from "@/lib/utils";
+
+export const DEFAULT_REPHRASE_PROMPT = `You are a professional customer service assistant. Your goal is to fill in and rephrase a message template for a home service customer lead to make it sound completely natural, professional, and grammatically correct.
+
+You will be given:
+- Template: A message draft containing placeholders like "(Person first name)", "(Service Context)", "(Requirement)", etc.
+- Customer Name: The name of the customer (should be used to replace the "(Person first name)" placeholder or addressed at the beginning).
+- Post Text: The exact customer request or post. You must read this post and extract the specific service request as the "Service Context" (e.g., if the post says "Looking for someone to fix a broken garage door springs", the Service Context is "repairing your garage door springs").
+- Requirement 1 (optional): A specific detail/question we need to ask or verify.
+- Requirement 2 (optional): Another specific detail/question we need to ask or verify.
+
+Instructions:
+1. Extract the specific service requested (Service Context) from the Post Text. Make it flow naturally in the sentence.
+2. Replace "(Person first name)" with the customer's name.
+3. Integrate Requirement 1 and Requirement 2 into the template. Do not just blindly insert them; rewrite the sentence around them so it is elegant, polite, flows beautifully, and is grammatically correct.
+4. Output ONLY the rephrased message. Do not include any brackets, placeholders, quotes, introductory or concluding text.`;
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 
@@ -269,8 +286,24 @@ function useCsComposeTemplatesList(userId: string | undefined) {
         .eq("key", CS_COMPOSE_TEMPLATES_LIST_KEY)
         .maybeSingle();
       if (error) throw error;
-      if (data?.value && typeof data.value === "object" && "templates" in data.value) {
-        return (data.value.templates as ComposeTemplateItem[]) || [];
+      if (
+        data?.value &&
+        typeof data.value === "object" &&
+        !Array.isArray(data.value) &&
+        "templates" in data.value
+      ) {
+        const rawTemplates = data.value.templates;
+        if (Array.isArray(rawTemplates)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return (rawTemplates as any[]).filter(
+            (t) =>
+              t &&
+              typeof t === "object" &&
+              typeof t.id === "string" &&
+              typeof t.name === "string" &&
+              typeof t.template === "string",
+          ) as ComposeTemplateItem[];
+        }
       }
       return [];
     },
@@ -306,7 +339,8 @@ function useCsComposeTemplatesList(userId: string | undefined) {
     await qc.invalidateQueries({ queryKey: ["shared_state", CS_COMPOSE_TEMPLATES_LIST_KEY] });
   };
 
-  return { ...query, templates: query.data ?? [], save };
+  const templates = Array.isArray(query.data) ? query.data : [];
+  return { ...query, templates, save };
 }
 
 function Page() {
@@ -344,6 +378,136 @@ function Inner() {
   const isCs = auth.primaryRole === "cs";
   const composeTemplate = useCsComposeTemplate(auth.user?.id);
   const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
+
+  const [bulkTemplateId, setBulkTemplateId] = useState<string>("");
+  const [bulkRephrasing, setBulkRephrasing] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState(DEFAULT_REPHRASE_PROMPT);
+  const [promptDirty, setPromptDirty] = useState(false);
+  const [savingPrompt, setSavingPrompt] = useState(false);
+
+  const canManagePrompt = auth.primaryRole === "admin" || auth.primaryRole === "cs";
+
+  const promptQuery = useQuery({
+    queryKey: ["cs-rephrase-prompt"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_state")
+        .select("value")
+        .eq("key", "cs_rephrase_prompt")
+        .maybeSingle();
+      if (error) return DEFAULT_REPHRASE_PROMPT;
+      const v = data?.value as { text?: string } | null;
+      return v?.text || DEFAULT_REPHRASE_PROMPT;
+    },
+    refetchOnWindowFocus: false,
+  });
+
+  const remotePrompt = promptQuery.data;
+  useEffect(() => {
+    if (remotePrompt && !promptDirty) {
+      setAiPrompt(remotePrompt);
+    }
+  }, [remotePrompt, promptDirty]);
+
+  const savePrompt = async () => {
+    setSavingPrompt(true);
+    try {
+      const { error } = await supabase.from("shared_state").upsert(
+        {
+          key: "cs_rephrase_prompt",
+          value: { text: aiPrompt } as never,
+          updated_by: auth.user?.id ?? null,
+          updated_at: new Date().toISOString(),
+        } as never,
+        { onConflict: "key" },
+      );
+      if (error) throw error;
+      setPromptDirty(false);
+      toast.success("Prompt saved for all users");
+      qc.invalidateQueries({ queryKey: ["cs-rephrase-prompt"] });
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setSavingPrompt(false);
+    }
+  };
+
+  const rephraseFn = useServerFn(rephraseLeadTemplateWithAi);
+  const finalTemplates =
+    composeTemplatesList.templates.length > 0
+      ? composeTemplatesList.templates
+      : DEFAULT_COMPOSE_TEMPLATES;
+
+  useEffect(() => {
+    if (finalTemplates.length > 0 && !bulkTemplateId) {
+      setBulkTemplateId(finalTemplates[0].id);
+    }
+  }, [finalTemplates, bulkTemplateId]);
+
+  async function runBulkRephrase() {
+    if (selectedIds.size === 0) return;
+    const selectedLeads = (list.data ?? []).filter((l) => selectedIds.has(l.id));
+    const targets = selectedLeads.filter(
+      (lead) =>
+        lead.post_text?.trim() && (lead.requirement_1?.trim() || lead.requirement_2?.trim()),
+    );
+
+    if (targets.length === 0) {
+      toast.error("None of the selected leads have both post text and requirements added.");
+      return;
+    }
+
+    const templateObj = finalTemplates.find((t) => t.id === bulkTemplateId) || finalTemplates[0];
+    if (!templateObj) {
+      toast.error("No template selected.");
+      return;
+    }
+
+    setBulkRephrasing(true);
+    let successCount = 0;
+    try {
+      for (const lead of targets) {
+        try {
+          const result = await rephraseFn({
+            data: {
+              template: templateObj.template,
+              customerName: lead.customer_name || "there",
+              postText: lead.post_text,
+              requirement1: lead.requirement_1 || "",
+              requirement2: lead.requirement_2 || "",
+              systemPrompt: aiPrompt,
+            },
+          });
+
+          if (result?.rephrased) {
+            const { error: dbError } = await supabase
+              .from("qualified_leads")
+              .update({ marketing_notes: result.rephrased } as never)
+              .eq("id", lead.id);
+
+            if (dbError) throw dbError;
+            successCount++;
+          }
+        } catch (err) {
+          console.error(`Failed to rephrase lead ${lead.id}:`, err);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(
+          `Successfully rephrased ${successCount} of ${targets.length} eligible lead(s)`,
+        );
+        qc.invalidateQueries({ queryKey: ["cs_leads"] });
+        setSelectedIds(new Set());
+      } else {
+        toast.error("AI rephrasing failed for all selected leads.");
+      }
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setBulkRephrasing(false);
+    }
+  }
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -817,6 +981,110 @@ function Inner() {
           </Button>
         </div>
       </div>
+
+      {canManagePrompt && (
+        <div className="glass-card p-5 space-y-4">
+          <div className="flex items-center gap-2 border-b border-border pb-3 justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">AI Rephrase Assistant</h3>
+            </div>
+            {selectedIds.size > 0 && (
+              <span className="text-xs bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-full font-medium">
+                {selectedIds.size} lead(s) selected
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Prompt section */}
+            <div className="lg:col-span-2 space-y-2">
+              <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium block">
+                System Prompt / Instructions
+              </Label>
+              <Textarea
+                value={aiPrompt}
+                onChange={(e) => {
+                  setAiPrompt(e.target.value);
+                  setPromptDirty(true);
+                }}
+                rows={5}
+                className="text-[12.5px] min-h-[120px]"
+                placeholder="Instructions for rephrasing customer templates..."
+              />
+              <div className="flex justify-between items-center text-[11px] text-muted-foreground">
+                <span>Saved prompt syncs to all CS agents and admins in real time.</span>
+                <Button
+                  size="sm"
+                  variant={promptDirty ? "default" : "outline"}
+                  className="h-7"
+                  onClick={savePrompt}
+                  disabled={!promptDirty || savingPrompt}
+                >
+                  {savingPrompt && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                  {promptDirty ? "Save prompt" : "Saved"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Bulk Rephrase controls */}
+            <div className="lg:col-span-1 border border-border rounded-lg p-4 bg-muted/10 flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <h4 className="text-[12px] font-semibold text-foreground/90 uppercase tracking-wide">
+                  Bulk AI Rephrase
+                </h4>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Select Base Template
+                  </Label>
+                  <Select value={bulkTemplateId} onValueChange={setBulkTemplateId}>
+                    <SelectTrigger className="h-8 text-[12px]">
+                      <SelectValue placeholder="Select template..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {finalTemplates.map((t) => (
+                        <SelectItem key={t.id} value={t.id} className="text-[11.5px]">
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Button
+                  className="w-full h-10"
+                  onClick={runBulkRephrase}
+                  disabled={selectedIds.size === 0 || bulkRephrasing}
+                >
+                  {bulkRephrasing ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 mr-2" />
+                  )}
+                  Rephrase {selectedIds.size > 0 ? selectedIds.size : ""} Selected
+                </Button>
+                {selectedIds.size > 0 && (
+                  <div className="text-[11px] text-muted-foreground text-center">
+                    Eligible:{" "}
+                    {
+                      (list.data ?? []).filter(
+                        (l) =>
+                          selectedIds.has(l.id) &&
+                          l.post_text?.trim() &&
+                          (l.requirement_1?.trim() || l.requirement_2?.trim()),
+                      ).length
+                    }{" "}
+                    of {selectedIds.size} selected (requires exact post text and at least one
+                    requirement).
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1315,7 +1583,42 @@ function LeadCard({
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
-  const finalTemplates = templates.length > 0 ? templates : DEFAULT_COMPOSE_TEMPLATES;
+  const [rephrasing, setRephrasing] = useState(false);
+  const [selectedTemplateText, setSelectedTemplateText] = useState("");
+  const rephraseFn = useServerFn(rephraseLeadTemplateWithAi);
+
+  async function handleRephrase(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!lead.post_text) return;
+    setRephrasing(true);
+    try {
+      const templateToUse = selectedTemplateText || compose || finalTemplates[0]?.template || "";
+      const result = await rephraseFn({
+        data: {
+          template: templateToUse,
+          customerName: lead.customer_name || "there",
+          postText: lead.post_text,
+          requirement1: requirement1,
+          requirement2: requirement2,
+        },
+      });
+      if (result?.rephrased) {
+        setCompose(result.rephrased);
+        await saveField({ marketing_notes: result.rephrased } as Partial<Lead>);
+        qc.invalidateQueries({ queryKey: ["cs_leads"] });
+        toast.success("Rephrased template with AI");
+      } else {
+        toast.error("AI did not return a rephrased message");
+      }
+    } catch (err) {
+      toast.error(friendlyError(err));
+    } finally {
+      setRephrasing(false);
+    }
+  }
+
+  const finalTemplates =
+    Array.isArray(templates) && templates.length > 0 ? templates : DEFAULT_COMPOSE_TEMPLATES;
   const composeSuggestion = finalTemplates[0]
     ? renderCsComposeSuggestion(finalTemplates[0].template, lead)
     : "";
@@ -1540,7 +1843,7 @@ function LeadCard({
         <Select
           value={status}
           onValueChange={(next) => changeStatus(next as CsStatus)}
-          disabled={saving}
+          disabled={saving || !assignedTo || (!isAdmin && auth.user?.id !== assignedTo)}
         >
           <SelectTrigger className="h-8 text-[12px]">
             <SelectValue />
@@ -1617,28 +1920,48 @@ function LeadCard({
           <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
             Compose
           </Label>
-          <Select
-            onValueChange={async (val) => {
-              const selectedTpl = finalTemplates.find((t) => t.id === val);
-              if (selectedTpl) {
-                const generated = renderCsComposeSuggestion(selectedTpl.template, lead);
-                setCompose(generated);
-                await saveField({ marketing_notes: generated } as Partial<Lead>);
-                qc.invalidateQueries({ queryKey: ["cs_leads"] });
-              }
-            }}
-          >
-            <SelectTrigger className="h-6 w-[120px] text-[10px] py-0 px-2 bg-muted/40 border-dashed">
-              <SelectValue placeholder="Use template..." />
-            </SelectTrigger>
-            <SelectContent>
-              {finalTemplates.map((t) => (
-                <SelectItem key={t.id} value={t.id} className="text-[11px]">
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-1.5">
+            <Select
+              onValueChange={async (val) => {
+                const selectedTpl = finalTemplates.find((t) => t.id === val);
+                if (selectedTpl) {
+                  const generated = renderCsComposeSuggestion(selectedTpl.template, lead);
+                  setCompose(generated);
+                  setSelectedTemplateText(selectedTpl.template);
+                  await saveField({ marketing_notes: generated } as Partial<Lead>);
+                  qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                }
+              }}
+            >
+              <SelectTrigger className="h-6 w-[120px] text-[10px] py-0 px-2 bg-muted/40 border-dashed">
+                <SelectValue placeholder="Use template..." />
+              </SelectTrigger>
+              <SelectContent>
+                {finalTemplates.map((t) => (
+                  <SelectItem key={t.id} value={t.id} className="text-[11px]">
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {lead.post_text && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRephrase}
+                disabled={rephrasing}
+                className="h-6 px-2 text-[10px] border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center"
+              >
+                {rephrasing ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : (
+                  <Sparkles className="h-3 w-3 mr-1 text-primary" />
+                )}
+                Rephrase
+              </Button>
+            )}
+          </div>
         </div>
         <Textarea
           value={compose}
@@ -1846,7 +2169,39 @@ function LeadDrawer({
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
-  const finalTemplates = templates.length > 0 ? templates : DEFAULT_COMPOSE_TEMPLATES;
+  const [rephrasing, setRephrasing] = useState(false);
+  const [selectedTemplateText, setSelectedTemplateText] = useState("");
+  const rephraseFn = useServerFn(rephraseLeadTemplateWithAi);
+
+  async function handleRephrase() {
+    if (!lead.post_text) return;
+    setRephrasing(true);
+    try {
+      const templateToUse = selectedTemplateText || compose || finalTemplates[0]?.template || "";
+      const result = await rephraseFn({
+        data: {
+          template: templateToUse,
+          customerName: lead.customer_name || "there",
+          postText: lead.post_text,
+          requirement1: requirement1,
+          requirement2: requirement2,
+        },
+      });
+      if (result?.rephrased) {
+        setCompose(result.rephrased);
+        toast.success("Rephrased template with AI");
+      } else {
+        toast.error("AI did not return a rephrased message");
+      }
+    } catch (err) {
+      toast.error(friendlyError(err));
+    } finally {
+      setRephrasing(false);
+    }
+  }
+
+  const finalTemplates =
+    Array.isArray(templates) && templates.length > 0 ? templates : DEFAULT_COMPOSE_TEMPLATES;
   const composeSuggestion = finalTemplates[0]
     ? renderCsComposeSuggestion(finalTemplates[0].template, lead)
     : "";
@@ -1979,7 +2334,11 @@ function LeadDrawer({
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
               Status
             </Label>
-            <Select value={status} onValueChange={(next) => setStatus(next as CsStatus)}>
+            <Select
+              value={status}
+              onValueChange={(next) => setStatus(next as CsStatus)}
+              disabled={busy || !assignedTo || (!isAdmin && auth.user?.id !== assignedTo)}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -2007,26 +2366,46 @@ function LeadDrawer({
               <Label className="block text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
                 Compose
               </Label>
-              <Select
-                onValueChange={(val) => {
-                  const selectedTpl = finalTemplates.find((t) => t.id === val);
-                  if (selectedTpl) {
-                    const generated = renderCsComposeSuggestion(selectedTpl.template, lead);
-                    setCompose(generated);
-                  }
-                }}
-              >
-                <SelectTrigger className="h-7 w-[160px] text-[11px] py-0 px-2 bg-muted/40 border-dashed">
-                  <SelectValue placeholder="Use template..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {finalTemplates.map((t) => (
-                    <SelectItem key={t.id} value={t.id} className="text-[11.5px]">
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select
+                  onValueChange={(val) => {
+                    const selectedTpl = finalTemplates.find((t) => t.id === val);
+                    if (selectedTpl) {
+                      const generated = renderCsComposeSuggestion(selectedTpl.template, lead);
+                      setCompose(generated);
+                      setSelectedTemplateText(selectedTpl.template);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-7 w-[160px] text-[11px] py-0 px-2 bg-muted/40 border-dashed">
+                    <SelectValue placeholder="Use template..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {finalTemplates.map((t) => (
+                      <SelectItem key={t.id} value={t.id} className="text-[11.5px]">
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {lead.post_text && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRephrase}
+                    disabled={rephrasing}
+                    className="h-7 px-2 text-[11px] border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center"
+                  >
+                    {rephrasing ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5 mr-1 text-primary" />
+                    )}
+                    Rephrase
+                  </Button>
+                )}
+              </div>
             </div>
             <Textarea
               value={compose}
@@ -2289,7 +2668,7 @@ function ComposeTemplatesManager({ userId }: { userId: string | undefined }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (templates.length > 0) {
+    if (Array.isArray(templates) && templates.length > 0) {
       setItems(templates);
     } else {
       setItems(DEFAULT_COMPOSE_TEMPLATES);
@@ -2307,7 +2686,7 @@ function ComposeTemplatesManager({ userId }: { userId: string | undefined }) {
       name: newName.trim(),
       template: newTemplate.trim(),
     };
-    const next = [...items, newItem];
+    const next = [...(Array.isArray(items) ? items : []), newItem];
     setItems(next);
     setNewName("");
     setNewTemplate("");
@@ -2323,7 +2702,8 @@ function ComposeTemplatesManager({ userId }: { userId: string | undefined }) {
   }
 
   async function handleDelete(id: string) {
-    const next = items.filter((item) => item.id !== id);
+    if (!Array.isArray(items)) return;
+    const next = items.filter((item) => item && item.id !== id);
     setItems(next);
     setBusy(true);
     try {
@@ -2337,8 +2717,9 @@ function ComposeTemplatesManager({ userId }: { userId: string | undefined }) {
   }
 
   async function handleUpdate(id: string, name: string, templateText: string) {
+    if (!Array.isArray(items)) return;
     const next = items.map((item) =>
-      item.id === id ? { ...item, name: name.trim(), template: templateText.trim() } : item,
+      item && item.id === id ? { ...item, name: name.trim(), template: templateText.trim() } : item,
     );
     setItems(next);
     setBusy(true);
@@ -2424,21 +2805,23 @@ function ComposeTemplatesManager({ userId }: { userId: string | undefined }) {
           <div className="text-center py-6 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" /> Loading templates...
           </div>
-        ) : items.length === 0 ? (
+        ) : !Array.isArray(items) || items.length === 0 ? (
           <div className="text-center py-6 text-muted-foreground bg-muted/10 rounded-md">
             No templates configured yet. Click above to create one.
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3">
-            {items.map((item) => (
-              <TemplateRow
-                key={item.id}
-                item={item}
-                busy={busy}
-                onUpdate={handleUpdate}
-                onDelete={handleDelete}
-              />
-            ))}
+            {items
+              .filter((item) => item && item.id && item.name && item.template)
+              .map((item) => (
+                <TemplateRow
+                  key={item.id}
+                  item={item}
+                  busy={busy}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                />
+              ))}
           </div>
         )}
       </div>
@@ -2458,8 +2841,10 @@ function TemplateRow({
   onDelete: (id: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(item.name);
-  const [template, setTemplate] = useState(item.template);
+  const [name, setName] = useState(item?.name || "");
+  const [template, setTemplate] = useState(item?.template || "");
+
+  if (!item) return null;
 
   if (editing) {
     return (

@@ -180,18 +180,18 @@ function Inner() {
     },
   });
 
-  const byProcessor = useQuery({
-    queryKey: ["report-forwarded-by-processor", range.from, range.to],
+  const byMaturing = useQuery({
+    queryKey: ["report-forwarded-by-maturing", range.from, range.to],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("report_leads_forwarded_by_processor", {
+      const { data, error } = await supabase.rpc("report_leads_forwarded_by_maturing", {
         _from: range.from ?? undefined,
         _to: range.to ?? undefined,
       });
       if (error) throw error;
       return (data ?? []) as Array<{
-        processor_id: string | null;
-        processor_name: string;
-        processor_email: string | null;
+        maturing_id: string | null;
+        maturing_name: string;
+        maturing_email: string | null;
         forwarded_count: number;
       }>;
     },
@@ -442,7 +442,7 @@ function Inner() {
         </div>
       </Section>
 
-      <Section title="Leads forwarded per processor">
+      <Section title="Leads forwarded per maturing">
         <div className="bg-card border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b text-xs text-muted-foreground">
             Uses the same range controls above: Today, Yesterday, Weekly, Monthly, or Custom.
@@ -450,30 +450,30 @@ function Inner() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2 font-medium">Processor</th>
+                <th className="px-4 py-2 font-medium">Maturing</th>
                 <th className="px-4 py-2 font-medium">Email</th>
                 <th className="px-4 py-2 font-medium text-right">Forwarded</th>
               </tr>
             </thead>
             <tbody>
-              {byProcessor.isLoading && (
+              {byMaturing.isLoading && (
                 <tr>
                   <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               )}
-              {!byProcessor.isLoading && (byProcessor.data ?? []).length === 0 && (
+              {!byMaturing.isLoading && (byMaturing.data ?? []).length === 0 && (
                 <tr>
                   <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
                     No leads forwarded in this range.
                   </td>
                 </tr>
               )}
-              {(byProcessor.data ?? []).map((r, i) => (
-                <tr key={r.processor_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30">
-                  <td className="px-4 py-2 font-medium">{r.processor_name}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{r.processor_email ?? "—"}</td>
+              {(byMaturing.data ?? []).map((r, i) => (
+                <tr key={r.maturing_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30">
+                  <td className="px-4 py-2 font-medium">{r.maturing_name}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{r.maturing_email ?? "—"}</td>
                   <td className="px-4 py-2 text-right tabular-nums font-semibold">
                     {r.forwarded_count}
                   </td>

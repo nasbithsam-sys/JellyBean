@@ -15,7 +15,7 @@ export type AppRole =
   | "admin"
   | "sub_admin"
   | "scraping"
-  | "processor"
+  | "maturing"
   | "cs"
   | "acc_handler"
   | "facebook"
@@ -138,8 +138,8 @@ export function useAuthState(): AuthState {
       ? "sub_admin"
       : roles.includes("scraping")
         ? "scraping"
-        : roles.includes("processor")
-          ? "processor"
+        : roles.includes("maturing")
+          ? "maturing"
           : roles.includes("cs")
             ? "cs"
             : roles.includes("acc_handler")
