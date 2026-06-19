@@ -1717,7 +1717,7 @@ function LeadDetailDialog({
 
 function DetailField({ label, value }: { label: string; value?: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
         {label}
       </Label>
