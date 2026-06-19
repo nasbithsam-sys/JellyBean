@@ -1585,8 +1585,8 @@ function LeadDetailDialog({
           <DialogTitle>Lead Details</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3 text-[12.5px]">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-3 text-[12.5px] min-w-0">
+          <div className="grid grid-cols-2 gap-3 min-w-0">
             <DetailField label="Account Name" value={r["Account Name"]} />
             <DetailField label="Sub Area" value={r["Sub Area / Neighborhood"]} />
             <DetailField label="Account Area" value={r["Account Area"]} />
