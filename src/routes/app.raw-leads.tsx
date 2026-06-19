@@ -1837,11 +1837,11 @@ function QualifyDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Forward to CS</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 min-w-0">
           <Field label="Customer Name">
             <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
           </Field>
