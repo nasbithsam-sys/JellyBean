@@ -1618,7 +1618,7 @@ function LeadDetailDialog({
             </a>
           )}
 
-          <div className="pt-2 border-t grid grid-cols-2 gap-3">
+          <div className="pt-2 border-t grid grid-cols-2 gap-3 min-w-0">
             <div>
               <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
                 Lead Status
