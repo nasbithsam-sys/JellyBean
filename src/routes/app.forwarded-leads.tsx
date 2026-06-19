@@ -313,10 +313,10 @@ function ForwardedTable({
                 </a>
               </td>
               <td className="px-3 py-2 text-muted-foreground">
-                {(r.main_area || r.sub_area) && (
+                {r.sub_area && (
                   <span className="inline-flex items-center gap-1">
                     <MapPin className="h-3 w-3" />
-                    {[r.main_area, r.sub_area].filter(Boolean).join(" / ")}
+                    {r.sub_area}
                   </span>
                 )}
               </td>

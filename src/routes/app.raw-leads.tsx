@@ -1580,13 +1580,13 @@ function LeadDetailDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Lead Details</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3 text-[12.5px]">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-3 text-[12.5px] min-w-0">
+          <div className="grid grid-cols-2 gap-3 min-w-0">
             <DetailField label="Account Name" value={r["Account Name"]} />
             <DetailField label="Sub Area" value={r["Sub Area / Neighborhood"]} />
             <DetailField label="Account Area" value={r["Account Area"]} />
@@ -1618,7 +1618,7 @@ function LeadDetailDialog({
             </a>
           )}
 
-          <div className="pt-2 border-t grid grid-cols-2 gap-3">
+          <div className="pt-2 border-t grid grid-cols-2 gap-3 min-w-0">
             <div>
               <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
                 Lead Status
@@ -1717,7 +1717,7 @@ function LeadDetailDialog({
 
 function DetailField({ label, value }: { label: string; value?: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
         {label}
       </Label>
@@ -1805,7 +1805,7 @@ function QualifyDialog({
         context: context.trim() || null,
         pass_it_to: passItTo.trim() || null,
         sub_area: subArea.trim() || null,
-        main_area: row["Account Area"]?.trim() || null,
+        main_area: null,
         original_lead_link: row["Lead Link"] || null,
         assigned_by: actorId,
         created_by: actorId,
@@ -1837,11 +1837,11 @@ function QualifyDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Forward to CS</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 min-w-0">
           <Field label="Customer Name">
             <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
           </Field>
@@ -1926,7 +1926,7 @@ function QualifyDialog({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
         {label}
       </Label>
