@@ -1262,13 +1262,13 @@ function Inner() {
             </div>
           )}
           {dueLeads.length > 0 && (
-            <div className="glass-card p-4 border-warning/60 bg-warning/5 rounded-xl space-y-3 mb-4">
+            <div className="glass-card p-4 border-sky-500/40 bg-sky-500/5 rounded-xl space-y-3 mb-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-warning flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
+                <h3 className="text-sm font-semibold text-sky-600 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
                   Follow-ups due today
                 </h3>
-                <span className="text-xs font-medium bg-warning/15 text-warning px-2.5 py-0.5 rounded-full border border-warning/30">
+                <span className="text-xs font-medium bg-sky-500/15 text-sky-600 px-2.5 py-0.5 rounded-full border border-sky-500/20">
                   {dueLeads.length} lead{dueLeads.length === 1 ? "" : "s"} need follow-up
                 </span>
               </div>
@@ -1289,14 +1289,14 @@ function Inner() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 px-3 text-[11px] border-warning/40 hover:bg-warning/10 text-warning"
+                      className="h-7 px-3 text-[11px] border-sky-500/30 hover:bg-sky-500/10 text-sky-600"
                       onClick={() => {
                         const el = document.getElementById(`lead-${lead.id}`);
                         if (el) {
                           el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          el.classList.add("ring-2", "ring-warning");
+                          el.classList.add("ring-2", "ring-sky-500");
                           setTimeout(() => {
-                            el.classList.remove("ring-2", "ring-warning");
+                            el.classList.remove("ring-2", "ring-sky-500");
                           }, 2000);
                         } else {
                           setOpened(lead);
@@ -2116,11 +2116,11 @@ function StatusBadge({ status }: { status: string }) {
           status === "already_done"
         ? "bg-destructive/15 text-destructive border-destructive/30"
         : status === "need_follow_up" || status === "follow_up"
-          ? "bg-warning/15 text-warning border-warning/30"
+          ? "bg-sky-500/15 text-sky-600 border-sky-500/30"
           : status === "interested"
             ? "bg-primary/15 text-primary border-primary/30"
             : status === "called" || status === "messaged"
-              ? "bg-warning/15 text-warning border-warning/30"
+              ? "bg-sky-500/15 text-sky-600 border-sky-500/30"
               : "bg-muted text-muted-foreground border-border";
   return (
     <span
