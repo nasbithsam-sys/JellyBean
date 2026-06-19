@@ -703,7 +703,7 @@ function Inner() {
             ))}
           </SelectContent>
         </Select>
-        {isAdmin && (
+        {(isAdmin || isCs) && (
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="h-9 text-[12px]">
