@@ -51,6 +51,9 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Plus,
+  X,
+  UserMinus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -718,6 +721,32 @@ function Inner() {
     [cacheQuery, currentUserId, updateCachedEntries],
   );
 
+  const unassignFromSelf = useCallback(
+    async (entry: CacheEntry) => {
+      if (!currentUserId) {
+        toast.error("Sign in first.");
+        return;
+      }
+      if (entry.assigned_to !== currentUserId) {
+        toast.error("Only your own claimed leads can be unassigned.");
+        return;
+      }
+      updateCachedEntries((e) => (e.row_key === entry.row_key ? { ...e, assigned_to: null } : e));
+      const { error } = await supabase
+        .from(TABLE)
+        .update({ assigned_to: null } as RawLeadCacheUpdate)
+        .eq("row_key", entry.row_key)
+        .eq("assigned_to", currentUserId);
+      if (error) {
+        toast.error(friendlyError(error));
+        cacheQuery.refetch();
+        return;
+      }
+      toast.success("Lead unassigned");
+    },
+    [cacheQuery, currentUserId, updateCachedEntries],
+  );
+
   async function runAiLeadCheck() {
     if (!canRunAi) {
       toast.error("You don't have permission to run AI lead checks.");
@@ -1257,9 +1286,20 @@ function Inner() {
                       onClick={(ev) => ev.stopPropagation()}
                     >
                       {mine ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/15 text-primary text-[10.5px] font-medium border border-primary/30">
-                          Assigned to you
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/15 text-primary text-[10.5px] font-medium border border-primary/30">
+                            Assigned to you
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                            onClick={() => unassignFromSelf(e)}
+                          >
+                            <UserMinus className="mr-1 h-3.5 w-3.5" />
+                            Unassign
+                          </Button>
+                        </div>
                       ) : claimedByOther ? (
                         <span className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-muted-foreground text-[10.5px] font-medium border border-border">
                           Claimed
@@ -1515,6 +1555,7 @@ function LeadDetailDialog({
   const r = entry.data;
   const [phone, setPhone] = useState(entry.phone ?? "");
   const [secondPhone, setSecondPhone] = useState("");
+  const [showSecondPhone, setShowSecondPhone] = useState(false);
   const [busy, setBusy] = useState(false);
   const checkDuplicate = useServerFn(checkDuplicatePhone);
   const phoneDigits = normalizePhone(phone);
@@ -1660,24 +1701,54 @@ function LeadDetailDialog({
             </div>
           </div>
           <div>
-            <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-              Second Phone Number
-            </Label>
-            <Input
-              value={secondPhone}
-              onChange={(e) => setSecondPhone(formatPhoneInput(e.target.value))}
-              placeholder="Optional second phone"
-            />
-            {secondDuplicateQuery.isFetching && (
-              <p className="mt-1 text-[11px] text-muted-foreground">Checking duplicates...</p>
-            )}
-            {secondDuplicateMatches.length > 0 && (
-              <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
-                Duplicate second phone number detected in the last 72 hours
-                {secondDuplicateMatches[0]?.customer_name
-                  ? `: ${secondDuplicateMatches[0].customer_name}`
-                  : ""}
-              </div>
+            {showSecondPhone ? (
+              <>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                    Another Number
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => {
+                      setSecondPhone("");
+                      setShowSecondPhone(false);
+                    }}
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" />
+                    Remove
+                  </Button>
+                </div>
+                <Input
+                  value={secondPhone}
+                  onChange={(e) => setSecondPhone(formatPhoneInput(e.target.value))}
+                  placeholder="Optional extra phone"
+                />
+                {secondDuplicateQuery.isFetching && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">Checking duplicates...</p>
+                )}
+                {secondDuplicateMatches.length > 0 && (
+                  <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
+                    Duplicate second phone number detected in the last 72 hours
+                    {secondDuplicateMatches[0]?.customer_name
+                      ? `: ${secondDuplicateMatches[0].customer_name}`
+                      : ""}
+                  </div>
+                )}
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setShowSecondPhone(true)}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add another number
+              </Button>
             )}
           </div>
         </div>
@@ -1750,6 +1821,7 @@ function QualifyDialog({
   const [customerName, setCustomerName] = useState(row["Account Name"] ?? "");
   const [customerNumber, setCustomerNumber] = useState(formatPhoneInput(entry.phone ?? ""));
   const [customerNumber2, setCustomerNumber2] = useState(formatPhoneInput(initialSecondPhone));
+  const [showSecondPhone, setShowSecondPhone] = useState(Boolean(initialSecondPhone.trim()));
   const [postText, setPostText] = useState(row["Post Text"] ?? "");
   const [context, setContext] = useState("");
   const [passItTo, setPassItTo] = useState("");
@@ -1852,13 +1924,45 @@ function QualifyDialog({
               placeholder="Primary phone number"
             />
           </Field>
-          <Field label="Second Phone Number">
-            <Input
-              value={customerNumber2}
-              onChange={(e) => setCustomerNumber2(formatPhoneInput(e.target.value))}
-              placeholder="Optional second phone"
-            />
-          </Field>
+          <div className="space-y-2">
+            {showSecondPhone ? (
+              <Field label="Another Number">
+                <div className="space-y-2">
+                  <Input
+                    value={customerNumber2}
+                    onChange={(e) => setCustomerNumber2(formatPhoneInput(e.target.value))}
+                    placeholder="Optional extra phone"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => {
+                      setCustomerNumber2("");
+                      setShowSecondPhone(false);
+                    }}
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" />
+                    Remove extra number
+                  </Button>
+                </div>
+              </Field>
+            ) : (
+              <Field label="Another Number">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => setShowSecondPhone(true)}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add another number
+                </Button>
+              </Field>
+            )}
+          </div>
           {duplicateMessage && (
             <div className="col-span-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
               {duplicateMessage}
