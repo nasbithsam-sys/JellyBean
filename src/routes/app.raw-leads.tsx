@@ -1805,7 +1805,7 @@ function QualifyDialog({
         context: context.trim() || null,
         pass_it_to: passItTo.trim() || null,
         sub_area: subArea.trim() || null,
-        main_area: row["Account Area"]?.trim() || null,
+        main_area: null,
         original_lead_link: row["Lead Link"] || null,
         assigned_by: actorId,
         created_by: actorId,

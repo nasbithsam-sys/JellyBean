@@ -1264,7 +1264,7 @@ function CsLeadsTable({
                   {assignee ? assignee.full_name || assignee.email : "Unassigned"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">
-                  {[lead.main_area, lead.sub_area].filter(Boolean).join(", ") || "-"}
+                  {lead.sub_area || "-"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground max-w-[260px]">
                   <div className="truncate">{lead.marketing_notes || "-"}</div>
@@ -1479,14 +1479,12 @@ function LeadCard({
         </div>
       </div>
 
-      {(lead.main_area || lead.sub_area) && (
+      {lead.sub_area && (
         <div className="mt-3 flex items-start gap-1.5 text-[12px]">
           <MapPin className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
           <div className="min-w-0">
             <span className="text-muted-foreground">Area: </span>
-            <span className="text-foreground/90 font-medium">
-              {[lead.main_area, lead.sub_area].filter(Boolean).join(", ")}
-            </span>
+            <span className="text-foreground/90 font-medium">{lead.sub_area}</span>
           </div>
         </div>
       )}
@@ -1932,12 +1930,7 @@ function LeadDrawer({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {(lead.main_area || lead.sub_area) && (
-            <Info
-              label="Area"
-              value={[lead.main_area, lead.sub_area].filter(Boolean).join(", ")}
-            />
-          )}
+          {lead.sub_area && <Info label="Area" value={lead.sub_area} />}
           {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
         </div>
         {lead.service && <Info label="Service" value={lead.service} />}
