@@ -316,7 +316,7 @@ function ForwardedTable({
                 {(r.main_area || r.sub_area) && (
                   <span className="inline-flex items-center gap-1">
                     <MapPin className="h-3 w-3" />
-                    {[r.main_area, r.sub_area].filter(Boolean).join(" / ")}
+                    {[r.main_area, r.sub_area].filter(Boolean).join(", ")}
                   </span>
                 )}
               </td>
