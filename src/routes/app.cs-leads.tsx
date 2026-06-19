@@ -1998,11 +1998,7 @@ function LeadDrawer({
             <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
               Number Name
             </Label>
-            <Input
-              value={numberName}
-              onChange={(e) => setNumberName(e.target.value)}
-              placeholder="Number name"
-            />
+            <NumberNameSelect value={numberName} onChange={(v) => setNumberName(v)} />
           </div>
           <div>
             <div className="flex justify-between items-center mb-1.5">
