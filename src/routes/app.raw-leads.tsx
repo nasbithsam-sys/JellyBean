@@ -399,7 +399,7 @@ function Inner() {
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
-  const [qualifySecondPhone, setQualifySecondPhone] = useState("");
+  const [qualifyExtraPhones, setQualifyExtraPhones] = useState<string[]>([]);
   const [aiPrompt, setAiPrompt] = useState(FROZEN_LEAD_PROMPT);
   const [promptDirty, setPromptDirty] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
