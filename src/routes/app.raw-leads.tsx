@@ -1697,58 +1697,42 @@ function LeadDetailDialog({
               )}
             </div>
           </div>
-          <div>
-            {showSecondPhone ? (
-              <>
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-                    Another Number
-                  </Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={() => {
-                      setSecondPhone("");
-                      setShowSecondPhone(false);
-                    }}
-                  >
-                    <X className="mr-1 h-3.5 w-3.5" />
-                    Remove
-                  </Button>
-                </div>
-                <Input
-                  value={secondPhone}
-                  onChange={(e) => setSecondPhone(formatPhoneInput(e.target.value))}
-                  placeholder="Optional extra phone"
-                />
-                {secondDuplicateQuery.isFetching && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">Checking duplicates...</p>
-                )}
-                {secondDuplicateMatches.length > 0 && (
-                  <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
-                    Duplicate second phone number detected in the last 72 hours
-                    {secondDuplicateMatches[0]?.customer_name
-                      ? `: ${secondDuplicateMatches[0].customer_name}`
-                      : ""}
-                  </div>
-                )}
-              </>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9"
-                onClick={() => setShowSecondPhone(true)}
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add another number
-              </Button>
-            )}
+          <div className="space-y-2">
+            {extraPhones.map((val, idx) => (
+              <ExtraPhoneRow
+                key={idx}
+                index={idx}
+                value={val}
+                onChange={(next) =>
+                  setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
+                }
+                onRemove={() => {
+                  setExtraPhones((prev) => prev.filter((_, i) => i !== idx));
+                  setExtraDuplicates((prev) => prev.filter((_, i) => i !== idx));
+                }}
+                onDuplicateChange={(dup) =>
+                  setExtraDuplicates((prev) => {
+                    const next = [...prev];
+                    while (next.length <= idx) next.push(false);
+                    next[idx] = dup;
+                    return next;
+                  })
+                }
+              />
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => setExtraPhones((prev) => [...prev, ""])}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add another number
+            </Button>
           </div>
         </div>
+
 
         <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between gap-2">
           <div className="flex gap-2">
