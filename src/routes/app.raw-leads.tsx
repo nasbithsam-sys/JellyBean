@@ -1473,10 +1473,10 @@ function Inner() {
             setDetailFor(null);
             toast.success("Moved to Duplicate");
           }}
-          onForward={async (phone, secondPhone) => {
+          onForward={async (phone, extraPhones) => {
             await updateAction(detailFor.row_key, { phone });
             setQualifyFor({ ...detailFor, phone });
-            setQualifySecondPhone(secondPhone);
+            setQualifyExtraPhones(extraPhones);
             setDetailFor(null);
           }}
         />
@@ -1490,19 +1490,20 @@ function Inner() {
             auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null
           }
           actorRole={auth.primaryRole}
-          initialSecondPhone={qualifySecondPhone}
+          initialExtraPhones={qualifyExtraPhones}
           onClose={() => {
             setQualifyFor(null);
-            setQualifySecondPhone("");
+            setQualifyExtraPhones([]);
           }}
           onSent={async () => {
             await updateAction(qualifyFor.row_key, { category: "forwarded" });
             setQualifyFor(null);
-            setQualifySecondPhone("");
+            setQualifyExtraPhones([]);
             toast.success("Forwarded to CS");
           }}
         />
       )}
+
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
