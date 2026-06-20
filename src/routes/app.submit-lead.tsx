@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -13,23 +13,16 @@ import {
 } from "date-fns";
 import {
   Loader2,
-  Upload,
-  X,
   ImagePlus,
   CheckCircle2,
   Plus,
   TrendingUp,
   CalendarDays,
   Send,
-  Star,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -39,15 +32,17 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  LeadForm,
+  uploadLeadImages,
+  type LeadFormValues,
+  type LeadReferenceMode,
+} from "@/components/lead-form";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { DateRange } from "react-day-picker";
 
 export const Route = createFileRoute("/app/submit-lead")({ component: Page });
-
-const BUCKET = "lead-attachments";
-const MAX_IMAGES = 5;
-const MAX_BYTES = 10 * 1024 * 1024;
 
 function Page() {
   const auth = useAuth();
@@ -117,8 +112,8 @@ function Dashboard() {
     const rFrom = range?.from ? startOfDay(range.from) : null;
     const rTo = range?.to ? endOfDay(range.to) : range?.from ? endOfDay(range.from) : null;
 
-    for (const l of leads) {
-      const d = new Date(l.created_at);
+    for (const lead of leads) {
+      const d = new Date(lead.created_at);
       if (d >= todayStart) today++;
       if (d >= weekStart) week++;
       if (d >= monthStart) month++;
@@ -126,11 +121,10 @@ function Dashboard() {
         ranged++;
         const key = format(d, "yyyy-MM-dd");
         byDay[key] = (byDay[key] ?? 0) + 1;
-        byStatus[l.cs_status] = (byStatus[l.cs_status] ?? 0) + 1;
+        byStatus[lead.cs_status] = (byStatus[lead.cs_status] ?? 0) + 1;
       }
     }
 
-    // build day series for the range
     const series: { date: string; label: string; count: number }[] = [];
     if (rFrom && rTo) {
       const days = Math.min(
@@ -149,7 +143,7 @@ function Dashboard() {
 
   const rangeLabel = range?.from
     ? range.to
-      ? `${format(range.from, "MMM d")} – ${format(range.to, "MMM d, yyyy")}`
+      ? `${format(range.from, "MMM d")} - ${format(range.to, "MMM d, yyyy")}`
       : format(range.from, "MMM d, yyyy")
     : "Pick a date range";
 
@@ -245,17 +239,17 @@ function Dashboard() {
                 Pick a date range to see daily trend.
               </div>
             ) : (
-              stats.series.map((s) => {
-                const h = stats.max > 0 ? (s.count / stats.max) * 100 : 0;
+              stats.series.map((seriesItem) => {
+                const h = stats.max > 0 ? (seriesItem.count / stats.max) * 100 : 0;
                 return (
                   <div
-                    key={s.date}
+                    key={seriesItem.date}
                     className="flex-1 group relative flex flex-col items-center justify-end h-full"
                   >
                     <div
                       className="w-full bg-primary/80 hover:bg-primary rounded-t transition-colors min-h-[2px]"
                       style={{ height: `${h}%` }}
-                      title={`${s.label}: ${s.count}`}
+                      title={`${seriesItem.label}: ${seriesItem.count}`}
                     />
                   </div>
                 );
@@ -271,13 +265,15 @@ function Dashboard() {
 
           {Object.keys(stats.byStatus).length > 0 && (
             <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-              {Object.entries(stats.byStatus).map(([k, v]) => (
+              {Object.entries(stats.byStatus).map(([key, value]) => (
                 <div
-                  key={k}
+                  key={key}
                   className="text-[11px] px-2.5 py-1 rounded-full bg-muted border border-border"
                 >
-                  <span className="uppercase tracking-wide text-muted-foreground mr-1.5">{k}</span>
-                  <span className="font-semibold tabular-nums">{v}</span>
+                  <span className="uppercase tracking-wide text-muted-foreground mr-1.5">
+                    {key}
+                  </span>
+                  <span className="font-semibold tabular-nums">{value}</span>
                 </div>
               ))}
             </div>
@@ -287,18 +283,18 @@ function Dashboard() {
         <div>
           <h2 className="text-sm font-semibold mb-3">Recent submissions</h2>
           {all.isLoading ? (
-            <div className="text-sm text-muted-foreground">Loading…</div>
+            <div className="text-sm text-muted-foreground">Loading...</div>
           ) : leads.length === 0 ? (
             <div className="text-sm text-muted-foreground glass-card p-6 text-center">
               No leads submitted yet. Click <strong>New lead</strong> to send your first one.
             </div>
           ) : (
             <div className="space-y-2">
-              {leads.slice(0, 30).map((l) => (
-                <div key={l.id} className="glass-card p-3 flex items-start gap-3">
-                  {Array.isArray(l.images) && l.images.length > 0 ? (
+              {leads.slice(0, 30).map((lead) => (
+                <div key={lead.id} className="glass-card p-3 flex items-start gap-3">
+                  {Array.isArray(lead.images) && lead.images.length > 0 ? (
                     <img
-                      src={l.images[0]}
+                      src={lead.images[0]}
                       alt=""
                       className="h-12 w-12 rounded object-cover border border-border shrink-0"
                     />
@@ -309,18 +305,18 @@ function Dashboard() {
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="font-semibold text-sm truncate">{l.customer_name}</div>
+                      <div className="font-semibold text-sm truncate">{lead.customer_name}</div>
                       <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-muted border border-border text-muted-foreground">
-                        {l.cs_status}
+                        {lead.cs_status}
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {l.customer_number}
-                      {l.service && ` · ${l.service}`}
-                      {l.main_area && ` · ${l.main_area}`}
+                      {lead.customer_number}
+                      {lead.service && ` - ${lead.service}`}
+                      {lead.main_area && ` - ${lead.main_area}`}
                     </div>
                     <div className="text-[10.5px] text-muted-foreground/70 mt-0.5">
-                      {formatDistanceToNow(new Date(l.created_at), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(lead.created_at), { addSuffix: true })}
                     </div>
                   </div>
                 </div>
@@ -356,88 +352,32 @@ function QuickRange({ label, onClick }: { label: string; onClick: () => void }) 
 function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   const auth = useAuth();
   const qc = useQueryClient();
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const isSubmitterRole = role === "facebook" || role === "seo";
-  const [name, setName] = useState("");
-  const [service, setService] = useState("");
-  const [area, setArea] = useState("");
-  const [number, setNumber] = useState("");
-  const [passItTo, setPassItTo] = useState("");
-  const [context, setContext] = useState("");
-  const [important, setImportant] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const referenceMode: LeadReferenceMode =
+    role === "facebook" ? "auto-fb" : role === "seo" ? "manual-text" : "manual-dropdown";
+  const forwardedBy =
+    auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? "Current user";
 
-  function addFiles(picked: FileList | null) {
-    if (!picked) return;
-    const incoming = Array.from(picked);
-    const valid: File[] = [];
-    for (const f of incoming) {
-      if (!f.type.startsWith("image/")) {
-        toast.error(`${f.name} is not an image`);
-        continue;
-      }
-      if (f.size > MAX_BYTES) {
-        toast.error(`${f.name} is larger than 10 MB`);
-        continue;
-      }
-      valid.push(f);
-    }
-    setFiles((prev) => {
-      const merged = [...prev, ...valid];
-      if (merged.length > MAX_IMAGES) {
-        toast.error(`Maximum ${MAX_IMAGES} images`);
-        return merged.slice(0, MAX_IMAGES);
-      }
-      return merged;
-    });
-    if (fileRef.current) fileRef.current.value = "";
-  }
-
-  function removeFile(idx: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== idx));
-  }
-
-  async function uploadImages(): Promise<string[]> {
-    if (files.length === 0 || !auth.user?.id) return [];
-    const urls: string[] = [];
-    for (const f of files) {
-      const ext = f.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${auth.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, f, { cacheControl: "3600", upsert: false, contentType: f.type });
-      if (error) throw new Error(`Upload failed: ${error.message}`);
-      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      urls.push(pub.publicUrl);
-    }
-    return urls;
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(values: LeadFormValues) {
     if (!auth.user?.id) return;
-    if (!name.trim() || !number.trim()) {
-      toast.error("Name and number are required");
-      return;
-    }
-    if (!context.trim()) {
-      toast.error("Context is required");
-      return;
-    }
     setSubmitting(true);
     try {
-      const imageUrls = await uploadImages();
+      const imageUrls =
+        values.files.length > 0
+          ? await uploadLeadImages({ files: values.files, userId: auth.user.id, supabase })
+          : [];
       const { error } = await supabase.from("qualified_leads").insert({
-        customer_name: name.trim(),
-        customer_number: number.trim(),
-        service: isSubmitterRole ? service.trim() || null : null,
-        main_area: area.trim() || null,
-        pass_it_to: isSubmitterRole ? null : passItTo.trim() || null,
-        context: context.trim() || null,
+        customer_name: values.customerName,
+        customer_number: values.customerNumber,
+        service: values.service,
+        main_area: values.area || null,
+        sub_area: values.area || null,
+        context: values.context,
+        post_text: values.exactCustomerText,
+        reference: values.reference,
         images: imageUrls,
         submitted_by_role: role,
-        is_important: important,
+        is_important: values.isImportant,
         created_by: auth.user.id,
         assigned_by: auth.user.id,
         cs_status: "new",
@@ -451,9 +391,10 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         action: "lead.submitted_to_cs",
         entity_type: "qualified_lead",
         metadata: {
-          customer_name: name.trim(),
-          customer_number: number.trim(),
-          area: area.trim() || null,
+          customer_name: values.customerName,
+          customer_number: values.customerNumber,
+          area: values.area || null,
+          reference: values.reference,
           submitted_by_role: role,
         },
       });
@@ -467,189 +408,17 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
     }
   }
 
-  function handlePaste(e: React.ClipboardEvent) {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const imageFiles: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      if (it.kind === "file" && it.type.startsWith("image/")) {
-        const f = it.getAsFile();
-        if (f) imageFiles.push(f);
-      }
-    }
-    if (imageFiles.length > 0) {
-      e.preventDefault();
-      const dt = new DataTransfer();
-      imageFiles.forEach((f) => dt.items.add(f));
-      addFiles(dt.files);
-      toast.success(`Pasted ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}`);
-    }
-  }
-
   return (
-    <form onSubmit={submit} onPaste={handlePaste} className="space-y-4">
-      {isSubmitterRole ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label className="mb-1.5 block">Name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={120}
-            />
-          </div>
-          <div>
-            <Label className="mb-1.5 block">Service</Label>
-            <Input
-              value={service}
-              onChange={(e) => setService(e.target.value)}
-              placeholder="e.g. Plumbing"
-              maxLength={120}
-            />
-          </div>
-          <div>
-            <Label className="mb-1.5 block">Area</Label>
-            <Input value={area} onChange={(e) => setArea(e.target.value)} maxLength={160} />
-          </div>
-          <div>
-            <Label className="mb-1.5 block">Number</Label>
-            <Input
-              value={number}
-              onChange={(e) => setNumber(e.target.value)}
-              required
-              maxLength={40}
-              inputMode="tel"
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label className="mb-1.5 block">Customer name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={120}
-            />
-          </div>
-          <div>
-            <Label className="mb-1.5 block">Customer number</Label>
-            <Input
-              value={number}
-              onChange={(e) => setNumber(e.target.value)}
-              required
-              maxLength={40}
-              inputMode="tel"
-            />
-          </div>
-          <div>
-            <Label className="mb-1.5 block">Pass it to</Label>
-            <Input
-              value={passItTo}
-              onChange={(e) => setPassItTo(e.target.value)}
-              placeholder="CS rep / team"
-              maxLength={120}
-            />
-          </div>
-          <div>
-            <Label className="mb-1.5 block">Area</Label>
-            <Input value={area} onChange={(e) => setArea(e.target.value)} maxLength={160} />
-          </div>
-        </div>
-      )}
-      <div>
-        <Label className="mb-1.5 block">
-          Context <span className="text-destructive">*</span>
-        </Label>
-        <Textarea
-          value={context}
-          onChange={(e) => setContext(e.target.value)}
-          rows={3}
-          maxLength={2000}
-        />
-      </div>
-      <div className="flex items-center gap-2 p-3 rounded-md border border-warning/40 bg-warning/5">
-        <Checkbox
-          id="important"
-          checked={important}
-          onCheckedChange={(v) => setImportant(v === true)}
-        />
-        <Label htmlFor="important" className="flex items-center gap-1.5 cursor-pointer text-sm">
-          <Star
-            className={cn(
-              "h-3.5 w-3.5",
-              important ? "fill-warning text-warning" : "text-muted-foreground",
-            )}
-          />
-          Mark as important — pin to top of CS pipeline
-        </Label>
-      </div>
-      <div>
-        <Label className="mb-1.5 block">
-          Attachments{" "}
-          <span className="text-xs text-muted-foreground font-normal">
-            (up to {MAX_IMAGES} images, 10 MB each — paste with Ctrl/Cmd+V)
-          </span>
-        </Label>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => addFiles(e.target.files)}
-        />
-        <div className="flex flex-wrap gap-3 items-start">
-          {files.map((f, idx) => (
-            <div
-              key={`${f.name}-${idx}`}
-              className="relative h-20 w-20 rounded-md overflow-hidden border border-border bg-muted"
-            >
-              <img src={URL.createObjectURL(f)} alt="" className="h-full w-full object-cover" />
-              <button
-                type="button"
-                onClick={() => removeFile(idx)}
-                className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
-          {files.length < MAX_IMAGES && (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="h-20 w-20 rounded-md border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors grid place-items-center text-muted-foreground hover:text-primary"
-            >
-              <div className="flex flex-col items-center gap-1 text-[11px]">
-                <ImagePlus className="h-4 w-4" />
-                Add
-              </div>
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="flex justify-end gap-2 pt-2 border-t border-border">
-        <Button type="button" variant="outline" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={submitting}>
-          {submitting ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Sending…
-            </>
-          ) : (
-            <>
-              <Upload className="h-4 w-4 mr-2" />
-              Send to CS
-            </>
-          )}
-        </Button>
-      </div>
-    </form>
+    <LeadForm
+      title="Send a new lead to CS"
+      submitLabel="Send to CS"
+      forwardedBy={forwardedBy}
+      showAttachments
+      areaRequired={role !== "seo"}
+      referenceMode={referenceMode}
+      submitting={submitting}
+      onCancel={onDone}
+      onSubmit={submit}
+    />
   );
 }

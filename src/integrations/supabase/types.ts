@@ -272,6 +272,7 @@ export type Database = {
           pass_it_to: string | null;
           post_text: string | null;
           raw_lead_id: string | null;
+          reference: string | null;
           requirement_1: string | null;
           requirement_2: string | null;
           service: string | null;
@@ -303,6 +304,7 @@ export type Database = {
           pass_it_to?: string | null;
           post_text?: string | null;
           raw_lead_id?: string | null;
+          reference?: string | null;
           requirement_1?: string | null;
           requirement_2?: string | null;
           service?: string | null;
@@ -334,6 +336,7 @@ export type Database = {
           pass_it_to?: string | null;
           post_text?: string | null;
           raw_lead_id?: string | null;
+          reference?: string | null;
           requirement_1?: string | null;
           requirement_2?: string | null;
           service?: string | null;

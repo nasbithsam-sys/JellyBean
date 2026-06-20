@@ -1203,14 +1203,10 @@ function Inner() {
         </div>
       ) : (
         <>
-          {(isCs || isAdmin) && (
-            <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-surface border border-border text-[12px]">
+          {(isCs || isAdmin) && selectedIds.size > 0 && (
+            <div className="sticky top-3 z-20 flex items-center justify-between gap-3 rounded-md border border-border bg-surface/95 px-3 py-2 text-[12px] shadow-sm backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <div className="flex items-center gap-3">
-                <span className="text-muted-foreground">
-                  {selectedIds.size > 0
-                    ? `${selectedIds.size} selected`
-                    : "Select leads to bulk-assign"}
-                </span>
+                <span className="text-muted-foreground">{selectedIds.size} selected</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1221,15 +1217,13 @@ function Inner() {
                 >
                   Select all visible
                 </button>
-                {selectedIds.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={clearSelection}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    Clear
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
               </div>
               {isAdmin ? (
                 <div className="flex items-center gap-2">
@@ -2341,11 +2335,11 @@ function LeadDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-md animate-fade-in-up"
       onClick={onClose}
     >
       <div
-        className="bg-card w-full max-w-lg h-full overflow-y-auto border-l border-border p-7 space-y-6 shadow-lg"
+        className="bg-card w-full max-w-4xl max-h-[88vh] overflow-y-auto rounded-2xl border border-border p-7 space-y-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div>
