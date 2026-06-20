@@ -1593,6 +1593,10 @@ function LeadDetailDialog({
       setBusy(false);
     }
   }
+  const [extraDuplicates, setExtraDuplicates] = useState<boolean[]>([]);
+  const hasDuplicate = hasPrimaryDuplicate || extraDuplicates.some(Boolean);
+  const cleanedExtras = extraPhones.map((p) => p.trim()).filter((p) => p.length > 0);
+
   async function handleForward() {
     const p = phone.trim();
     if (!p) {
@@ -1605,11 +1609,12 @@ function LeadDetailDialog({
     }
     setBusy(true);
     try {
-      await onForward(p, secondPhone.trim());
+      await onForward(p, cleanedExtras);
     } finally {
       setBusy(false);
     }
   }
+
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
