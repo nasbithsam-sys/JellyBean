@@ -370,6 +370,8 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         customer_name: values.customerName,
         customer_number: values.customerNumber,
         service: values.service,
+        pass_it_to:
+          role === "facebook" || role === "seo" ? null : values.service,
         main_area: values.area || null,
         sub_area: values.area || null,
         context: values.context,

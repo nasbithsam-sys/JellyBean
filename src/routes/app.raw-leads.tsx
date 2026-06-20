@@ -1830,6 +1830,7 @@ function QualifyDialog({
         post_text: values.exactCustomerText,
         context: values.context,
         service: values.service,
+        pass_it_to: values.service,
         reference: values.reference,
         sub_area: values.area || null,
         main_area: values.area || null,
