@@ -387,6 +387,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         images: imageUrls,
         submitted_by_role: role,
         is_important: values.isImportant,
+        pinned_important: values.isImportant,
         created_by: auth.user.id,
         assigned_by: auth.user.id,
         cs_status: "new",

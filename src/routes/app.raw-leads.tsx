@@ -1845,6 +1845,7 @@ function QualifyDialog({
         created_by: actorId,
         cs_status: "new",
         is_important: values.isImportant,
+        pinned_important: values.isImportant,
         submitted_by_role: actorRole,
       } as never);
       if (error) throw error;

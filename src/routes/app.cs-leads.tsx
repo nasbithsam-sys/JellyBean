@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Checkbox } from "@/components/ui/checkbox";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -52,6 +53,7 @@ import {
   Sparkles,
   Copy,
   Check,
+  Pin,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -176,6 +178,7 @@ type Lead = {
   assigned_at: string;
   assigned_to: string | null;
   is_important: boolean;
+  pinned_important: boolean;
   service: string | null;
   images: string[];
   submitted_by_role: string | null;
@@ -580,7 +583,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, service, images, submitted_by_role",
+          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, pinned_important, service, images, submitted_by_role",
         )
         .order("assigned_at", { ascending: false })
         .limit(500);
@@ -804,6 +807,9 @@ function Inner() {
     const leads =
       activeStatus === "__all__" ? filtered : filtered.filter((l) => l.cs_status === activeStatus);
     return [...leads].sort((a, b) => {
+      const aPinned = a.pinned_important && a.cs_status === "new";
+      const bPinned = b.pinned_important && b.cs_status === "new";
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
       return new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime();
     });
   }, [filtered, activeStatus]);
@@ -1550,7 +1556,18 @@ function CsLeadsTable({
                 className="border-t border-border hover:bg-surface/50 cursor-pointer"
                 onClick={() => onOpen(lead)}
               >
-                <td className="px-3 py-2 font-medium">{lead.customer_name}</td>
+                <td className="px-3 py-2 font-medium">
+                  <div className="flex items-center gap-1.5">
+                    {lead.is_important && (
+                      lead.pinned_important && lead.cs_status === "new" ? (
+                        <Pin className="h-3.5 w-3.5 text-warning fill-warning/20 rotate-45 shrink-0" title="Pinned Important" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5 text-warning fill-warning/20 shrink-0" title="Important" />
+                      )
+                    )}
+                    <span>{lead.customer_name}</span>
+                  </div>
+                </td>
                 <td className="px-3 py-2 text-muted-foreground">
                   <PhoneCopyLink phone={lead.customer_number} compact />
                 </td>
@@ -1788,8 +1805,12 @@ function LeadCard({
     >
       {lead.is_important && (
         <div className="-mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/40 text-[10.5px] font-semibold uppercase tracking-wide">
-          <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
-          Important job
+          {lead.pinned_important && lead.cs_status === "new" ? (
+            <Pin className="h-3 w-3 fill-warning/20 rotate-45" />
+          ) : (
+            <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+          )}
+          {lead.pinned_important && lead.cs_status === "new" ? "Pinned Important" : "Important job"}
         </div>
       )}
       <div className="flex items-start gap-3">
@@ -2291,11 +2312,12 @@ function LeadDrawer({
   const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
   const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
-  const [busy, setBusy] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
+  const [isImportant, setIsImportant] = useState(lead.is_important);
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
@@ -2377,6 +2399,8 @@ function LeadDrawer({
           marketing_notes: compose.trim() || null,
           requirement_1: requirement1.trim() || null,
           requirement_2: requirement2.trim() || null,
+          is_important: isImportant,
+          pinned_important: isImportant ? lead.pinned_important : false,
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
@@ -2495,6 +2519,21 @@ function LeadDrawer({
                   onChange={setStatus}
                   disabled={busy || (!isAdmin && (!assignedTo || auth.user?.id !== assignedTo))}
                 />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Checkbox
+                  id="drawer-important"
+                  checked={isImportant}
+                  onCheckedChange={(checked) => setIsImportant(!!checked)}
+                  disabled={busy || !(isCs || isAdmin)}
+                />
+                <Label
+                  htmlFor="drawer-important"
+                  className="text-[13px] font-medium cursor-pointer flex items-center gap-1.5"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-warning fill-warning/20 animate-pulse" />
+                  Mark as Important
+                </Label>
               </div>
               <div>
                 <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">

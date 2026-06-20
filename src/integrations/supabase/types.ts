@@ -266,6 +266,7 @@ export type Database = {
           id: string;
           images: Json;
           is_important: boolean;
+          pinned_important: boolean;
           main_area: string | null;
           marketing_notes: string | null;
           number_name: string | null;
@@ -299,6 +300,7 @@ export type Database = {
           id?: string;
           images?: Json;
           is_important?: boolean;
+          pinned_important?: boolean;
           main_area?: string | null;
           marketing_notes?: string | null;
           number_name?: string | null;
@@ -332,6 +334,7 @@ export type Database = {
           id?: string;
           images?: Json;
           is_important?: boolean;
+          pinned_important?: boolean;
           main_area?: string | null;
           marketing_notes?: string | null;
           number_name?: string | null;
