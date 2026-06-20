@@ -1806,7 +1806,7 @@ function QualifyDialog({
   actorId,
   actorName,
   actorRole,
-  initialSecondPhone: _initialSecondPhone,
+  initialSecondPhone,
   onClose,
   onSent,
 }: {
