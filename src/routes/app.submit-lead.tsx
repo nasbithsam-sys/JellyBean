@@ -46,7 +46,7 @@ import type { DateRange } from "react-day-picker";
 export const Route = createFileRoute("/app/submit-lead")({ component: Page });
 
 const BUCKET = "lead-attachments";
-const MAX_IMAGES = 5;
+const MAX_IMAGES = 20;
 const MAX_BYTES = 10 * 1024 * 1024;
 
 function Page() {
