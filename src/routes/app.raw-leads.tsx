@@ -1780,13 +1780,78 @@ function DetailField({ label, value }: { label: string; value?: string }) {
   );
 }
 
+// ── Extra phone row with per-row duplicate check ─────────────────────────────
+function ExtraPhoneRow({
+  index,
+  value,
+  onChange,
+  onRemove,
+  onDuplicateChange,
+}: {
+  index: number;
+  value: string;
+  onChange: (next: string) => void;
+  onRemove: () => void;
+  onDuplicateChange: (dup: boolean) => void;
+}) {
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const digits = normalizePhone(value);
+  const query = useQuery({
+    queryKey: ["duplicate-phone", digits],
+    enabled: digits.length >= 7,
+    queryFn: () => checkDuplicate({ data: { phone: value } }),
+    staleTime: 15_000,
+  });
+  const matches = (query.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const hasDup = matches.length > 0;
+  useEffect(() => {
+    onDuplicateChange(hasDup);
+    return () => onDuplicateChange(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDup]);
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+          Another Number {index + 1}
+        </Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-[11px]"
+          onClick={onRemove}
+        >
+          <X className="mr-1 h-3.5 w-3.5" />
+          Remove
+        </Button>
+      </div>
+      <Input
+        value={value}
+        onChange={(e) => onChange(formatPhoneInput(e.target.value))}
+        placeholder="Extra phone number"
+      />
+      {query.isFetching && (
+        <p className="mt-1 text-[11px] text-muted-foreground">Checking duplicates...</p>
+      )}
+      {hasDup && (
+        <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
+          Duplicate phone number detected in the last 72 hours
+          {matches[0]?.customer_name ? `: ${matches[0].customer_name}` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Forward to CS dialog ──────────────────────────────────────────────────────
 function QualifyDialog({
   entry,
   actorId,
   actorName,
   actorRole,
-  initialSecondPhone,
+  initialExtraPhones,
   onClose,
   onSent,
 }: {
@@ -1794,15 +1859,17 @@ function QualifyDialog({
   actorId: string | null;
   actorName: string | null;
   actorRole: string | null;
-  initialSecondPhone: string;
+  initialExtraPhones: string[];
   onClose: () => void;
   onSent: () => void;
 }) {
   const row = entry.data;
   const [customerName, setCustomerName] = useState(row["Account Name"] ?? "");
   const [customerNumber, setCustomerNumber] = useState(formatPhoneInput(entry.phone ?? ""));
-  const [customerNumber2, setCustomerNumber2] = useState(formatPhoneInput(initialSecondPhone));
-  const [showSecondPhone, setShowSecondPhone] = useState(Boolean(initialSecondPhone.trim()));
+  const [extraPhones, setExtraPhones] = useState<string[]>(() =>
+    initialExtraPhones.map((p) => formatPhoneInput(p)).filter((p) => p.length > 0),
+  );
+  const [extraDuplicates, setExtraDuplicates] = useState<boolean[]>([]);
   const [postText, setPostText] = useState(row["Post Text"] ?? "");
   const [context, setContext] = useState("");
   const [passItTo, setPassItTo] = useState("");
@@ -1811,27 +1878,25 @@ function QualifyDialog({
   const [busy, setBusy] = useState(false);
   const checkDuplicate = useServerFn(checkDuplicatePhone);
   const customerNumberDigits = normalizePhone(customerNumber);
-  const customerNumber2Digits = normalizePhone(customerNumber2);
   const duplicatePrimary = useQuery({
     queryKey: ["duplicate-phone", customerNumberDigits],
     enabled: customerNumberDigits.length >= 7,
     queryFn: () => checkDuplicate({ data: { phone: customerNumber } }),
     staleTime: 15_000,
   });
-  const duplicateSecondary = useQuery({
-    queryKey: ["duplicate-phone", customerNumber2Digits],
-    enabled: customerNumber2Digits.length >= 7,
-    queryFn: () => checkDuplicate({ data: { phone: customerNumber2 } }),
-    staleTime: 15_000,
-  });
   const primaryMatches = (duplicatePrimary.data?.matches ?? []) as DuplicatePhoneMatch[];
-  const secondaryMatches = (duplicateSecondary.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const hasExtraDup = extraDuplicates.some(Boolean);
   const duplicateMessage =
     primaryMatches.length > 0
       ? `Duplicate phone number detected in the last 72 hours${primaryMatches[0]?.customer_name ? `: ${primaryMatches[0].customer_name}` : ""}`
-      : secondaryMatches.length > 0
-        ? `Duplicate second phone number detected in the last 72 hours${secondaryMatches[0]?.customer_name ? `: ${secondaryMatches[0].customer_name}` : ""}`
+      : hasExtraDup
+        ? `Duplicate phone number detected in extra numbers (last 72 hours)`
         : null;
+
+  const cleanedExtras = extraPhones
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .map((p) => formatPhone(p) || p);
 
   async function send() {
     if (!customerName.trim() || !customerNumber.trim()) {
@@ -1851,9 +1916,8 @@ function QualifyDialog({
       const { error } = await supabase.from("qualified_leads").insert({
         customer_name: customerName.trim(),
         customer_number: formatPhone(customerNumber.trim()) || customerNumber.trim(),
-        customer_number_2: customerNumber2.trim()
-          ? formatPhone(customerNumber2.trim()) || customerNumber2.trim()
-          : null,
+        customer_number_2: cleanedExtras[0] ?? null,
+        extra_numbers: cleanedExtras,
         post_text: postText.trim() || null,
         context: context.trim() || null,
         pass_it_to: passItTo.trim() || null,
@@ -1905,45 +1969,46 @@ function QualifyDialog({
               placeholder="Primary phone number"
             />
           </Field>
-          <div className="space-y-2">
-            {showSecondPhone ? (
-              <Field label="Another Number">
-                <div className="space-y-2">
-                  <Input
-                    value={customerNumber2}
-                    onChange={(e) => setCustomerNumber2(formatPhoneInput(e.target.value))}
-                    placeholder="Optional extra phone"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={() => {
-                      setCustomerNumber2("");
-                      setShowSecondPhone(false);
-                    }}
-                  >
-                    <X className="mr-1 h-3.5 w-3.5" />
-                    Remove extra number
-                  </Button>
-                </div>
-              </Field>
-            ) : (
-              <Field label="Another Number">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9"
-                  onClick={() => setShowSecondPhone(true)}
-                >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Add another number
-                </Button>
-              </Field>
-            )}
+          <div className="col-span-2 space-y-2">
+            {extraPhones.map((val, idx) => (
+              <ExtraPhoneRow
+                key={idx}
+                index={idx}
+                value={val}
+                onChange={(next) =>
+                  setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
+                }
+                onRemove={() => {
+                  setExtraPhones((prev) => prev.filter((_, i) => i !== idx));
+                  setExtraDuplicates((prev) => prev.filter((_, i) => i !== idx));
+                }}
+                onDuplicateChange={(dup) =>
+                  setExtraDuplicates((prev) => {
+                    const next = [...prev];
+                    while (next.length <= idx) next.push(false);
+                    next[idx] = dup;
+                    return next;
+                  })
+                }
+              />
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => setExtraPhones((prev) => [...prev, ""])}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add another number
+            </Button>
           </div>
+          {duplicateMessage && (
+            <div className="col-span-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+              {duplicateMessage}
+            </div>
+          )}
+
           {duplicateMessage && (
             <div className="col-span-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
               {duplicateMessage}
