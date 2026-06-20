@@ -1958,117 +1958,126 @@ function QualifyDialog({
         <DialogHeader>
           <DialogTitle>Forward to CS</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3 min-w-0">
-          <Field label="Customer Name">
-            <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-          </Field>
-          <Field label="Customer Number">
-            <Input
-              value={customerNumber}
-              onChange={(e) => setCustomerNumber(formatPhoneInput(e.target.value))}
-              placeholder="Primary phone number"
-            />
-          </Field>
-          <div className="col-span-2 space-y-2">
-            {extraPhones.map((val, idx) => (
-              <ExtraPhoneRow
-                key={idx}
-                index={idx}
-                value={val}
-                onChange={(next) =>
-                  setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
-                }
-                onRemove={() => {
-                  setExtraPhones((prev) => prev.filter((_, i) => i !== idx));
-                  setExtraDuplicates((prev) => prev.filter((_, i) => i !== idx));
-                }}
-                onDuplicateChange={(dup) =>
-                  setExtraDuplicates((prev) => {
-                    const next = [...prev];
-                    while (next.length <= idx) next.push(false);
-                    next[idx] = dup;
-                    return next;
-                  })
-                }
-              />
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={() => setExtraPhones((prev) => [...prev, ""])}
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add another number
-            </Button>
-          </div>
-          {duplicateMessage && (
-            <div className="col-span-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
-              {duplicateMessage}
-            </div>
-          )}
-
-          {duplicateMessage && (
-            <div className="col-span-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
-              {duplicateMessage}
-            </div>
-          )}
-          <Field label="Sub Area">
-            <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} />
-          </Field>
-          <Field label="Pass it to *">
-            <Input
-              value={passItTo}
-              onChange={(e) => setPassItTo(e.target.value)}
-              placeholder="CS rep / team"
-            />
-          </Field>
-          <div className="col-span-2">
-            <Field label="Post Text (auto-filled from original post)">
-              <Textarea rows={4} value={postText} onChange={(e) => setPostText(e.target.value)} />
-            </Field>
-          </div>
-          <div className="col-span-2">
-            <Field label="Context (required notes for CS) *">
-              <Textarea
-                rows={3}
-                value={context}
-                onChange={(e) => setContext(e.target.value)}
-                placeholder="Add any extra context for CS — e.g. urgency, special instructions…"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+          className="space-y-4"
+        >
+          <div className="grid grid-cols-2 gap-3 min-w-0">
+            <Field label="Customer Name">
+              <Input
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                required
               />
             </Field>
-          </div>
-          <div className="col-span-2">
-            <label className="flex items-start gap-2.5 rounded-md border border-border bg-surface/60 px-3 py-2.5 cursor-pointer hover:border-warning/60 transition-colors">
-              <input
-                type="checkbox"
-                checked={isImportant}
-                onChange={(e) => setIsImportant(e.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-warning cursor-pointer"
+            <Field label="Customer Number">
+              <Input
+                value={customerNumber}
+                onChange={(e) => setCustomerNumber(formatPhoneInput(e.target.value))}
+                placeholder="Primary phone number"
+                required
               />
-              <div className="text-[12.5px]">
-                <div className="font-medium text-foreground">Mark as important / urgent job</div>
-                <div className="text-[11.5px] text-muted-foreground">
-                  Pins this lead to the top of the CS pipeline so it gets called first.
-                </div>
+            </Field>
+            <div className="col-span-2 space-y-2">
+              {extraPhones.map((val, idx) => (
+                <ExtraPhoneRow
+                  key={idx}
+                  index={idx}
+                  value={val}
+                  onChange={(next) =>
+                    setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
+                  }
+                  onRemove={() => {
+                    setExtraPhones((prev) => prev.filter((_, i) => i !== idx));
+                    setExtraDuplicates((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                  onDuplicateChange={(dup) =>
+                    setExtraDuplicates((prev) => {
+                      const next = [...prev];
+                      while (next.length <= idx) next.push(false);
+                      next[idx] = dup;
+                      return next;
+                    })
+                  }
+                />
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setExtraPhones((prev) => [...prev, ""])}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add another number
+              </Button>
+            </div>
+            {duplicateMessage && (
+              <div className="col-span-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                {duplicateMessage}
               </div>
-            </label>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={send} disabled={busy || !!duplicateMessage || !passItTo.trim()}>
-            {busy ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Send className="h-4 w-4 mr-2" />
             )}
-            Send
-          </Button>
-        </DialogFooter>
+            <Field label="Sub Area">
+              <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} />
+            </Field>
+            <Field label="Pass it to *">
+              <Input
+                value={passItTo}
+                onChange={(e) => setPassItTo(e.target.value)}
+                placeholder="CS rep / team"
+                required
+              />
+            </Field>
+            <div className="col-span-2">
+              <Field label="Post Text (auto-filled from original post)">
+                <Textarea rows={4} value={postText} onChange={(e) => setPostText(e.target.value)} />
+              </Field>
+            </div>
+            <div className="col-span-2">
+              <Field label="Context (required notes for CS) *">
+                <Textarea
+                  rows={3}
+                  value={context}
+                  onChange={(e) => setContext(e.target.value)}
+                  placeholder="Add any extra context for CS — e.g. urgency, special instructions…"
+                  required
+                />
+              </Field>
+            </div>
+            <div className="col-span-2">
+              <label className="flex items-start gap-2.5 rounded-md border border-border bg-surface/60 px-3 py-2.5 cursor-pointer hover:border-warning/60 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isImportant}
+                  onChange={(e) => setIsImportant(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-warning cursor-pointer"
+                />
+                <div className="text-[12.5px]">
+                  <div className="font-medium text-foreground">Mark as important / urgent job</div>
+                  <div className="text-[11.5px] text-muted-foreground">
+                    Pins this lead to the top of the CS pipeline so it gets called first.
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy || !!duplicateMessage || !passItTo.trim()}>
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              Send
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

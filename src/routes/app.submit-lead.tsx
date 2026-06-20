@@ -578,6 +578,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
           onChange={(e) => setContext(e.target.value)}
           rows={3}
           maxLength={2000}
+          required
         />
       </div>
       <div className="flex items-center gap-2 p-3 rounded-md border border-warning/40 bg-warning/5">
