@@ -357,7 +357,11 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   const auth = useAuth();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const isSubmitterRole = role === "facebook" || role === "seo";
+  
+  const isFacebookRole = role === "facebook";
+  const isSeoRole = role === "seo";
+  const isSubmitterRole = isFacebookRole || isSeoRole;
+
   const [name, setName] = useState("");
   const [service, setService] = useState("");
   const [area, setArea] = useState("");
@@ -367,6 +371,10 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   const [important, setImportant] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // New fields specifically for SEO role
+  const [email, setEmail] = useState("");
+  const [reference, setReference] = useState("");
 
   function addFiles(picked: FileList | null) {
     if (!picked) return;
@@ -421,24 +429,51 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
       toast.error("Name and number are required");
       return;
     }
+    if (isSeoRole) {
+      if (!email.trim() || !service.trim() || !context.trim() || !reference.trim()) {
+        toast.error("All fields except Address are required");
+        return;
+      }
+    }
     if (!isSubmitterRole && !passItTo.trim()) {
       toast.error("Pass it to is required");
       return;
     }
-    if (!context.trim()) {
+    if (!isSeoRole && !context.trim()) {
       toast.error("Context is required");
       return;
     }
     setSubmitting(true);
     try {
       const imageUrls = await uploadImages();
+
+      let finalContext = context.trim();
+      let finalMainArea = area.trim() || null;
+      let finalSubArea = area.trim() || null;
+      let finalService = isSubmitterRole ? service.trim() || null : null;
+      let finalPassItTo = isSubmitterRole ? null : passItTo.trim() || null;
+
+      if (isSeoRole) {
+        finalContext = [
+          email.trim() ? `Email: ${email.trim()}` : "",
+          area.trim() ? `Address: ${area.trim()}` : "",
+          reference.trim() ? `Reference: ${reference.trim()}` : "",
+          context.trim() ? `Conversation:\n${context.trim()}` : "",
+        ].filter(Boolean).join("\n\n");
+        finalService = service.trim() || null;
+        finalPassItTo = null;
+      }
+
       const { error } = await supabase.from("qualified_leads").insert({
         customer_name: name.trim(),
         customer_number: number.trim(),
-        service: isSubmitterRole ? service.trim() || null : null,
-        main_area: area.trim() || null,
-        pass_it_to: isSubmitterRole ? null : passItTo.trim() || null,
-        context: context.trim() || null,
+        service: finalService,
+        main_area: finalMainArea,
+        sub_area: finalSubArea,
+        pass_it_to: finalPassItTo,
+        context: finalContext,
+        requirement_1: isSeoRole ? email.trim() || null : null,
+        requirement_2: isSeoRole ? reference.trim() || null : null,
         images: imageUrls,
         submitted_by_role: role,
         is_important: important,
@@ -492,10 +527,82 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   }
 
   const passItToMissing = !isSubmitterRole && !passItTo.trim();
+  const seoMissing = isSeoRole && (!name.trim() || !number.trim() || !email.trim() || !service.trim() || !context.trim() || !reference.trim());
 
   return (
     <form onSubmit={submit} onPaste={handlePaste} className="space-y-4">
-      {isSubmitterRole ? (
+      {isSeoRole ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label className="mb-1.5 block">
+              Customer name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              maxLength={120}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Contact <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={number}
+              onChange={(e) => setNumber(e.target.value)}
+              required
+              maxLength={40}
+              inputMode="tel"
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Email <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              maxLength={120}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Service <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={service}
+              onChange={(e) => setService(e.target.value)}
+              placeholder="e.g. Plumbing"
+              required
+              maxLength={120}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">Address</Label>
+            <Input
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              placeholder="e.g. 123 Main St"
+              maxLength={160}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Reference <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="e.g. Google Search"
+              required
+              maxLength={120}
+            />
+          </div>
+        </div>
+      ) : isFacebookRole ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label className="mb-1.5 block">Name</Label>
@@ -569,9 +676,18 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
           </div>
         </div>
       )}
+
       <div>
         <Label className="mb-1.5 block">
-          Context <span className="text-destructive">*</span>
+          {isSeoRole ? (
+            <>
+              Conversation <span className="text-destructive">*</span>
+            </>
+          ) : (
+            <>
+              Context <span className="text-destructive">*</span>
+            </>
+          )}
         </Label>
         <Textarea
           value={context}
@@ -581,6 +697,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
           required
         />
       </div>
+
       <div className="flex items-center gap-2 p-3 rounded-md border border-warning/40 bg-warning/5">
         <Checkbox
           id="important"
@@ -597,6 +714,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
           Mark as important — pin to top of CS pipeline
         </Label>
       </div>
+
       <div>
         <Label className="mb-1.5 block">
           Attachments{" "}
@@ -642,11 +760,12 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
           )}
         </div>
       </div>
+
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
         <Button type="button" variant="outline" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={submitting || passItToMissing}>
+        <Button type="submit" disabled={submitting || passItToMissing || seoMissing}>
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />

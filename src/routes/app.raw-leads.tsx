@@ -1967,11 +1967,7 @@ function QualifyDialog({
         >
           <div className="grid grid-cols-2 gap-3 min-w-0">
             <Field label="Customer Name">
-              <Input
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                required
-              />
+              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
             </Field>
             <Field label="Customer Number">
               <Input
@@ -2023,7 +2019,7 @@ function QualifyDialog({
             <Field label="Sub Area">
               <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} />
             </Field>
-            <Field label="Pass it to *">
+            <Field label={<>Pass it to <span className="text-destructive">*</span></>}>
               <Input
                 value={passItTo}
                 onChange={(e) => setPassItTo(e.target.value)}
@@ -2037,7 +2033,7 @@ function QualifyDialog({
               </Field>
             </div>
             <div className="col-span-2">
-              <Field label="Context (required notes for CS) *">
+              <Field label={<>Context (required notes for CS) <span className="text-destructive">*</span></>}>
                 <Textarea
                   rows={3}
                   value={context}
@@ -2083,7 +2079,7 @@ function QualifyDialog({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
       <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
