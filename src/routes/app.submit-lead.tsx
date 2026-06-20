@@ -41,6 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { DateRange } from "react-day-picker";
+import { formatPhone } from "@/lib/crm-lite";
 
 export const Route = createFileRoute("/app/submit-lead")({ component: Page });
 
@@ -366,9 +367,15 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         values.files.length > 0
           ? await uploadLeadImages({ files: values.files, userId: auth.user.id, supabase })
           : [];
+      const cleanedExtras = (values.extraNumbers || [])
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
+        .map((p) => formatPhone(p) || p);
       const { error } = await supabase.from("qualified_leads").insert({
         customer_name: values.customerName,
         customer_number: values.customerNumber,
+        customer_number_2: cleanedExtras[0] ?? null,
+        extra_numbers: cleanedExtras,
         service: values.service,
         pass_it_to:
           role === "facebook" || role === "seo" ? null : values.service,

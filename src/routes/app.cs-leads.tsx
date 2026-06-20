@@ -543,7 +543,10 @@ function Inner() {
         const slice = ids.slice(i, i + CHUNK);
         const { error } = await supabase
           .from("qualified_leads")
-          .update({ assigned_to: nextAssignee })
+          .update({
+            assigned_to: nextAssignee,
+            assigned_by: nextAssignee ? auth.user?.id : null,
+          } as never)
           .in("id", slice);
         if (error) throw error;
       }
@@ -615,6 +618,26 @@ function Inner() {
     for (const m of team.data ?? []) map.set(m.user_id, m);
     return map;
   }, [team.data]);
+
+  const allProfiles = useQuery({
+    queryKey: ["all_profiles"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const profilesById = useMemo(() => {
+    const map = new Map<string, { full_name: string | null; email: string }>();
+    for (const p of allProfiles.data ?? []) {
+      map.set(p.user_id, { full_name: p.full_name, email: p.email });
+    }
+    return map;
+  }, [allProfiles.data]);
 
   const dueLeads = useMemo(() => {
     if (!list.data) return [];
@@ -780,9 +803,6 @@ function Inner() {
     const leads =
       activeStatus === "__all__" ? filtered : filtered.filter((l) => l.cs_status === activeStatus);
     return [...leads].sort((a, b) => {
-      const aPinned = a.is_important && a.cs_status === "new";
-      const bPinned = b.is_important && b.cs_status === "new";
-      if (aPinned !== bPinned) return aPinned ? -1 : 1;
       return new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime();
     });
   }, [filtered, activeStatus]);
@@ -1204,7 +1224,7 @@ function Inner() {
       ) : (
         <>
           {(isCs || isAdmin) && selectedIds.size > 0 && (
-            <div className="sticky top-3 z-20 flex items-center justify-between gap-3 rounded-md border border-border bg-surface/95 px-3 py-2 text-[12px] shadow-sm backdrop-blur supports-[backdrop-filter]:bg-surface/85">
+            <div className="sticky top-[104px] z-20 flex items-center justify-between gap-3 rounded-md border border-border bg-surface/95 px-3 py-2 text-[12px] shadow-sm backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">{selectedIds.size} selected</span>
                 <button
@@ -1334,6 +1354,7 @@ function Inner() {
                   selected={selectedIds.has(l.id)}
                   onToggleSelect={() => toggleSelect(l.id)}
                   showSelect={isCs || isAdmin}
+                  profilesById={profilesById}
                 />
               ))}
             </div>
@@ -1362,6 +1383,7 @@ function Inner() {
             setOpened(null);
             qc.invalidateQueries({ queryKey: ["cs_leads"] });
           }}
+          profilesById={profilesById}
         />
       )}
 
@@ -1570,6 +1592,7 @@ function LeadCard({
   selected = false,
   onToggleSelect,
   showSelect = false,
+  profilesById,
 }: {
   lead: Lead;
   team: CsTeamMember[];
@@ -1579,6 +1602,7 @@ function LeadCard({
   selected?: boolean;
   onToggleSelect?: () => void;
   showSelect?: boolean;
+  profilesById?: Map<string, { full_name: string | null; email: string }>;
 }) {
   const qc = useQueryClient();
   const auth = useAuth();
@@ -1595,6 +1619,12 @@ function LeadCard({
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
+  const creator = lead.created_by ? profilesById?.get(lead.created_by) : null;
+  const forwardedByText = creator
+    ? (creator.full_name || creator.email)
+    : lead.created_by
+      ? "Unknown user"
+      : null;
 
   const [rephrasing, setRephrasing] = useState(false);
   const [selectedTemplateText, setSelectedTemplateText] = useState("");
@@ -1685,7 +1715,10 @@ function LeadCard({
     try {
       const { error } = await supabase
         .from("qualified_leads")
-        .update({ assigned_to: next })
+        .update({
+          assigned_to: next,
+          assigned_by: next ? (lead.assigned_to === next ? lead.assigned_by : (auth.user?.id || null)) : null,
+        } as never)
         .eq("id", lead.id);
       if (error) throw error;
       const nextName = next ? (teamById.get(next)?.full_name ?? "teammate") : "unassigned";
@@ -1843,11 +1876,18 @@ function LeadCard({
         </div>
       )}
 
+      {isAdmin && forwardedByText && (
+        <div className="mt-2.5 text-[11px] text-muted-foreground flex items-center gap-1.5">
+          <span>Forwarded by:</span>
+          <span className="font-medium text-foreground">{forwardedByText}</span>
+        </div>
+      )}
+
       <div className="mt-3" onClick={(e) => e.stopPropagation()}>
         <StatusPicker
           value={status}
           onChange={changeStatus}
-          disabled={saving || !assignedTo || (!isAdmin && auth.user?.id !== assignedTo)}
+          disabled={saving || (!isAdmin && (!assignedTo || auth.user?.id !== assignedTo))}
           saving={saving}
         />
       </div>
@@ -2224,6 +2264,7 @@ function LeadDrawer({
   templates = [],
   onClose,
   onSaved,
+  profilesById,
 }: {
   lead: Lead;
   team: CsTeamMember[];
@@ -2231,6 +2272,7 @@ function LeadDrawer({
   templates?: ComposeTemplateItem[];
   onClose: () => void;
   onSaved: () => void;
+  profilesById?: Map<string, { full_name: string | null; email: string }>;
 }) {
   const auth = useAuth();
   const qc = useQueryClient();
@@ -2249,6 +2291,13 @@ function LeadDrawer({
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
+
+  const creator = lead.created_by ? profilesById?.get(lead.created_by) : null;
+  const forwardedByText = creator
+    ? (creator.full_name || creator.email)
+    : lead.created_by
+      ? "Unknown user"
+      : null;
 
   const [rephrasing, setRephrasing] = useState(false);
   const [selectedTemplateText, setSelectedTemplateText] = useState("");
@@ -2307,6 +2356,7 @@ function LeadDrawer({
           cs_notes: newNotes as Json,
           followup_at: followup ? new Date(followup).toISOString() : null,
           assigned_to: assignedTo,
+          assigned_by: assignedTo ? (lead.assigned_to === assignedTo ? lead.assigned_by : (auth.user?.id || null)) : null,
           number_name: numberName.trim() || null,
           marketing_notes: compose.trim() || null,
           requirement_1: requirement1.trim() || null,
@@ -2339,330 +2389,357 @@ function LeadDrawer({
       onClick={onClose}
     >
       <div
-        className="bg-card w-full max-w-4xl max-h-[88vh] overflow-y-auto rounded-2xl border border-border p-7 space-y-6 shadow-2xl"
+        className="bg-card w-full max-w-5xl max-h-[90vh] md:h-[85vh] flex flex-col rounded-2xl border border-border p-6 shadow-2xl overflow-y-auto md:overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div>
-          <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">
-            Customer
-          </div>
-          <h2 className="text-[22px] font-semibold tracking-tight mt-1">{lead.customer_name}</h2>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <PhoneCopyLink phone={lead.customer_number} />
-          </div>
-          {lead.customer_number_2 && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <PhoneCopyLink phone={lead.customer_number_2} />
+        {/* Header (Static) */}
+        <div className="pb-4 border-b border-border flex justify-between items-start gap-4">
+          <div>
+            <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">
+              Customer
             </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {lead.sub_area && <Info label="Area" value={lead.sub_area} />}
-          {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
-        </div>
-        {lead.service && <Info label="Service" value={lead.service} />}
-        {lead.submitted_by_role && (
-          <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
-        )}
-        {lead.post_text && (
-          <Info label="Customer exact requirement" value={lead.post_text} multiline />
-        )}
-        {lead.requirement_1 && <Info label="Requirement 1" value={lead.requirement_1} multiline />}
-        {lead.requirement_2 && <Info label="Requirement 2" value={lead.requirement_2} multiline />}
-        {lead.context && <Info label="Context" value={lead.context} multiline />}
-        {isAdmin && Array.isArray(lead.images) && lead.images.length > 0 && (
-          <div>
-            <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Attachments ({lead.images.length})
-            </Label>
-            <div className="grid grid-cols-3 gap-2">
-              {lead.images.map((url) => (
-                <a
-                  key={url}
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block aspect-square rounded-md overflow-hidden border border-border bg-muted hover:opacity-80 transition-opacity"
-                >
-                  <img
-                    src={url}
-                    alt="Lead attachment"
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                </a>
-              ))}
+            <h2 className="text-[22px] font-semibold tracking-tight mt-1">{lead.customer_name}</h2>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <PhoneCopyLink phone={lead.customer_number} />
+              {lead.customer_number_2 && (
+                <PhoneCopyLink phone={lead.customer_number_2} />
+              )}
             </div>
-          </div>
-        )}
-
-        <div className="border-t border-border pt-5 space-y-4">
-          <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Status
-            </Label>
-            <StatusPicker
-              value={status}
-              onChange={setStatus}
-              disabled={busy || !assignedTo || (!isAdmin && auth.user?.id !== assignedTo)}
-            />
-          </div>
-          <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Number Name
-            </Label>
-            <NumberNameSelect value={numberName} onChange={(v) => setNumberName(v)} />
-          </div>
-          <div>
-            <div className="flex justify-between items-center mb-1.5">
-              <Label className="block text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-                Compose
-              </Label>
-              <div className="flex items-center gap-2">
-                <Select
-                  onValueChange={(val) => {
-                    const selectedTpl = finalTemplates.find((t) => t.id === val);
-                    if (selectedTpl) {
-                      const generated = renderCsComposeSuggestion(selectedTpl.template, lead);
-                      setCompose(generated);
-                      setSelectedTemplateText(selectedTpl.template);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-7 w-[160px] text-[11px] py-0 px-2 bg-muted/40 border-dashed">
-                    <SelectValue placeholder="Use template..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {finalTemplates.map((t) => (
-                      <SelectItem key={t.id} value={t.id} className="text-[11.5px]">
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {lead.post_text && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRephrase}
-                    disabled={rephrasing}
-                    className="h-7 px-2 text-[11px] border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center"
-                  >
-                    {rephrasing ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5 mr-1 text-primary" />
-                    )}
-                    Rephrase
-                  </Button>
-                )}
+            {isAdmin && forwardedByText && (
+              <div className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <span>Forwarded by:</span>
+                <span className="font-medium text-foreground">{forwardedByText}</span>
               </div>
-            </div>
-            <Textarea
-              value={compose}
-              onChange={(e) => setCompose(e.target.value)}
-              rows={4}
-              maxLength={2000}
-              placeholder="Compose a message or note for this lead..."
-            />
-            {composeSuggestion && (
-              <ComposeSuggestion
-                suggestion={composeSuggestion}
-                onClick={() => {
-                  setCompose(composeSuggestion);
-                }}
-              />
             )}
           </div>
-          <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Requirement 1
-            </Label>
-            <Textarea
-              value={requirement1}
-              onChange={(e) => setRequirement1(e.target.value)}
-              rows={3}
-              maxLength={2000}
-              placeholder="Requirement 1"
-            />
-          </div>
-          <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Requirement 2
-            </Label>
-            <Textarea
-              value={requirement2}
-              onChange={(e) => setRequirement2(e.target.value)}
-              rows={3}
-              maxLength={2000}
-              placeholder="Requirement 2"
-            />
-          </div>
-          <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Assigned to
-            </Label>
-            {isAdmin ? (
-              <Select
-                value={assignedTo ?? UNASSIGNED_VALUE}
-                onValueChange={(v) => setAssignedTo(v === UNASSIGNED_VALUE ? null : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
-                  {team.map((m) => (
-                    <SelectItem key={m.user_id} value={m.user_id}>
-                      {m.full_name || m.email}
-                    </SelectItem>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* 2-Column Body */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:flex-1 md:min-h-0 mt-4 md:overflow-hidden">
+          
+          {/* Left Column: Lead Details */}
+          <div className="col-span-1 md:col-span-5 space-y-4 md:overflow-y-auto md:pr-4">
+            <div className="grid grid-cols-2 gap-3">
+              {lead.sub_area && <Info label="Area" value={lead.sub_area} />}
+              {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
+            </div>
+            {lead.service && <Info label="Service" value={lead.service} />}
+            {lead.submitted_by_role && (
+              <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
+            )}
+            {lead.post_text && (
+              <Info label="Customer exact requirement" value={lead.post_text} multiline />
+            )}
+            {lead.requirement_1 && <Info label="Requirement 1" value={lead.requirement_1} multiline />}
+            {lead.requirement_2 && <Info label="Requirement 2" value={lead.requirement_2} multiline />}
+            {lead.context && <Info label="Context" value={lead.context} multiline />}
+            {isAdmin && Array.isArray(lead.images) && lead.images.length > 0 && (
+              <div>
+                <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Attachments ({lead.images.length})
+                </Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {lead.images.map((url) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block aspect-square rounded-md overflow-hidden border border-border bg-muted hover:opacity-80 transition-opacity"
+                    >
+                      <img
+                        src={url}
+                        alt="Lead attachment"
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    </a>
                   ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="flex items-center justify-between gap-2 px-3 h-10 rounded-md border border-border bg-surface/60 text-[13px]">
-                <span className="inline-flex items-center gap-2 truncate">
-                  <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
-                  {assignee ? (
-                    <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
-                      {assignedToMe ? "You" : assignee.full_name || assignee.email}
-                    </span>
-                  ) : (
-                    <span className="italic text-muted-foreground/70">Unassigned</span>
-                  )}
-                </span>
-                {isCs && !assignedToMe && (
-                  <Button
-                    size="sm"
-                    variant={assignedTo ? "outline" : "default"}
-                    className="h-7 text-[11.5px] px-2"
-                    onClick={() => auth.user?.id && setAssignedTo(auth.user.id)}
-                  >
-                    <UserPlus className="h-3 w-3 mr-1" />
-                    {assignedTo ? "Take over" : "Assign to me"}
-                  </Button>
-                )}
+                </div>
               </div>
             )}
           </div>
-          <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Follow-up at
-            </Label>
-            <Input
-              type="datetime-local"
-              value={followup}
-              onChange={(e) => setFollowup(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-              Comment
-            </Label>
-            <Textarea
-              rows={3}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Write what happened in your own words — e.g. customer is interested, already done by someone else, asked to message later…"
-            />
-            <p className="text-[11px] text-muted-foreground mt-1.5">
-              Free-text comment. Appended to the history when you save.
-            </p>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            {isAdmin ? (
-              <>
-                <Button
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  disabled={busy}
-                  onClick={() => setShowDeleteConfirm(true)}
-                >
-                  <Trash2 className="h-4 w-4 mr-1.5" />
-                  Delete lead
-                </Button>
-                <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete lead</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Delete lead for "{lead.customer_name}"? This cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          setShowDeleteConfirm(false);
-                          setBusy(true);
-                          try {
-                            const { error } = await supabase
-                              .from("qualified_leads")
-                              .delete()
-                              .eq("id", lead.id);
-                            if (error) throw error;
-                            await supabase.from("activity_logs").insert({
-                              actor_id: auth.user?.id,
-                              actor_name: auth.profile?.full_name,
-                              actor_role: auth.primaryRole,
-                              action: "cs.deleted",
-                              entity_type: "qualified_lead",
-                              entity_id: lead.id,
-                              metadata: { customer_name: lead.customer_name },
-                            });
-                            toast.success("Lead deleted");
-                            qc.invalidateQueries({ queryKey: ["cs_leads"] });
-                            onSaved();
-                          } catch (err) {
-                            toast.error(friendlyError(err));
-                          } finally {
-                            setBusy(false);
-                          }
-                        }}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Delete
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </>
-            ) : (
-              <span />
-            )}
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={onClose} disabled={busy}>
-                Close
-              </Button>
-              <Button onClick={save} disabled={busy}>
-                {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
-              </Button>
-            </div>
-          </div>
-        </div>
 
-        {notes.length > 0 && (
-          <div className="border-t border-border pt-5">
-            <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium mb-3 flex items-center gap-2">
-              <MessageSquarePlus className="h-3 w-3" /> History · {notes.length}
-            </div>
-            <div className="space-y-2.5">
-              {[...notes].reverse().map((n, i) => (
-                <div key={i} className="bg-surface/60 border border-border rounded-md p-3">
-                  <div className="text-[11px] text-muted-foreground tabular-nums">
-                    {n.by} · {new Date(n.at).toLocaleString()}
-                  </div>
-                  <div className="text-[13px] mt-1 whitespace-pre-wrap leading-relaxed">
-                    {n.text}
+          {/* Right Column: Edit Form & History */}
+          <div className="col-span-1 md:col-span-7 flex flex-col gap-5 md:overflow-y-auto md:pl-4 md:border-l md:border-border pr-2">
+            
+            {/* Form Fields */}
+            <div className="space-y-4">
+              <div>
+                <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Status
+                </Label>
+                <StatusPicker
+                  value={status}
+                  onChange={setStatus}
+                  disabled={busy || (!isAdmin && (!assignedTo || auth.user?.id !== assignedTo))}
+                />
+              </div>
+              <div>
+                <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Number Name
+                </Label>
+                <NumberNameSelect value={numberName} onChange={(v) => setNumberName(v)} />
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <Label className="block text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                    Compose
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      onValueChange={(val) => {
+                        const selectedTpl = finalTemplates.find((t) => t.id === val);
+                        if (selectedTpl) {
+                          const generated = renderCsComposeSuggestion(selectedTpl.template, lead);
+                          setCompose(generated);
+                          setSelectedTemplateText(selectedTpl.template);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-7 w-[160px] text-[11px] py-0 px-2 bg-muted/40 border-dashed">
+                        <SelectValue placeholder="Use template..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {finalTemplates.map((t) => (
+                          <SelectItem key={t.id} value={t.id} className="text-[11.5px]">
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {lead.post_text && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRephrase}
+                        disabled={rephrasing}
+                        className="h-7 px-2 text-[11px] border-primary/40 text-primary hover:bg-primary/5 inline-flex items-center"
+                      >
+                        {rephrasing ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                        ) : (
+                          <Sparkles className="h-3.5 w-3.5 mr-1 text-primary" />
+                        )}
+                        Rephrase
+                      </Button>
+                    )}
                   </div>
                 </div>
-              ))}
+                <Textarea
+                  value={compose}
+                  onChange={(e) => setCompose(e.target.value)}
+                  rows={4}
+                  maxLength={2000}
+                  placeholder="Compose a message or note for this lead..."
+                />
+                {composeSuggestion && (
+                  <ComposeSuggestion
+                    suggestion={composeSuggestion}
+                    onClick={() => {
+                      setCompose(composeSuggestion);
+                    }}
+                  />
+                )}
+              </div>
+              <div>
+                <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Requirement 1
+                </Label>
+                <Textarea
+                  value={requirement1}
+                  onChange={(e) => setRequirement1(e.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="Requirement 1"
+                />
+              </div>
+              <div>
+                <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Requirement 2
+                </Label>
+                <Textarea
+                  value={requirement2}
+                  onChange={(e) => setRequirement2(e.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="Requirement 2"
+                />
+              </div>
+              <div>
+                <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Assigned to
+                </Label>
+                {isAdmin ? (
+                  <Select
+                    value={assignedTo ?? UNASSIGNED_VALUE}
+                    onValueChange={(v) => setAssignedTo(v === UNASSIGNED_VALUE ? null : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Unassigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
+                      {team.map((m) => (
+                        <SelectItem key={m.user_id} value={m.user_id}>
+                          {m.full_name || m.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="flex items-center justify-between gap-2 px-3 h-10 rounded-md border border-border bg-surface/60 text-[13px]">
+                    <span className="inline-flex items-center gap-2 truncate">
+                      <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
+                      {assignee ? (
+                        <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
+                          {assignedToMe ? "You" : assignee.full_name || assignee.email}
+                        </span>
+                      ) : (
+                        <span className="italic text-muted-foreground/70">Unassigned</span>
+                      )}
+                    </span>
+                    {isCs && !assignedToMe && (
+                      <Button
+                        size="sm"
+                        variant={assignedTo ? "outline" : "default"}
+                        className="h-7 text-[11.5px] px-2"
+                        onClick={() => auth.user?.id && setAssignedTo(auth.user.id)}
+                      >
+                        <UserPlus className="h-3 w-3 mr-1" />
+                        {assignedTo ? "Take over" : "Assign to me"}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div>
+                <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Follow-up at
+                </Label>
+                <Input
+                  type="datetime-local"
+                  value={followup}
+                  onChange={(e) => setFollowup(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Comment
+                </Label>
+                <Textarea
+                  rows={3}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Write what happened in your own words — e.g. customer is interested, already done by someone else, asked to message later…"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  Free-text comment. Appended to the history when you save.
+                </p>
+              </div>
             </div>
+
+            {/* Save / Delete Buttons */}
+            <div className="border-t border-border pt-4 mt-auto flex items-center justify-between gap-2 bg-card sticky bottom-0 z-10">
+              {isAdmin ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 px-3 text-[13px]"
+                    disabled={busy}
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1.5" />
+                    Delete lead
+                  </Button>
+                  <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete lead</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Delete lead for "{lead.customer_name}"? This cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            setShowDeleteConfirm(false);
+                            setBusy(true);
+                            try {
+                              const { error } = await supabase
+                                .from("qualified_leads")
+                                .delete()
+                                .eq("id", lead.id);
+                              if (error) throw error;
+                              await supabase.from("activity_logs").insert({
+                                actor_id: auth.user?.id,
+                                actor_name: auth.profile?.full_name,
+                                actor_role: auth.primaryRole,
+                                action: "cs.deleted",
+                                entity_type: "qualified_lead",
+                                entity_id: lead.id,
+                                metadata: { customer_name: lead.customer_name },
+                              });
+                              toast.success("Lead deleted");
+                              qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                              onSaved();
+                            } catch (err) {
+                              toast.error(friendlyError(err));
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </>
+              ) : (
+                <span />
+              )}
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={onClose} disabled={busy}>
+                  Close
+                </Button>
+                <Button onClick={save} disabled={busy}>
+                  {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
+                </Button>
+              </div>
+            </div>
+
+            {/* History / Notes */}
+            {notes.length > 0 && (
+              <div className="border-t border-border pt-4 mt-2">
+                <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium mb-3 flex items-center gap-2">
+                  <MessageSquarePlus className="h-3 w-3" /> History · {notes.length}
+                </div>
+                <div className="space-y-2.5">
+                  {[...notes].reverse().map((n, i) => (
+                    <div key={i} className="bg-surface/60 border border-border rounded-md p-3">
+                      <div className="text-[11px] text-muted-foreground tabular-nums">
+                        {n.by} · {new Date(n.at).toLocaleString()}
+                      </div>
+                      <div className="text-[13px] mt-1 whitespace-pre-wrap leading-relaxed">
+                        {n.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
-        )}
+
+        </div>
       </div>
     </div>
   );

@@ -1824,9 +1824,15 @@ function QualifyDialog({
   async function send(values: LeadFormValues) {
     setBusy(true);
     try {
+      const cleanedExtras = (values.extraNumbers || [])
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
+        .map((p) => formatPhone(p) || p);
       const { error } = await supabase.from("qualified_leads").insert({
         customer_name: values.customerName,
         customer_number: formatPhone(values.customerNumber) || values.customerNumber,
+        customer_number_2: cleanedExtras[0] ?? null,
+        extra_numbers: cleanedExtras,
         post_text: values.exactCustomerText,
         context: values.context,
         service: values.service,
@@ -1882,6 +1888,7 @@ function QualifyDialog({
           initialValues={{
             customerName: row["Account Name"] ?? "",
             customerNumber: formatPhoneInput(entry.phone ?? ""),
+            extraNumbers: initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : [],
             area: row["Account Area"] ?? row["Sub Area / Neighborhood"] ?? "",
             service: "",
             context: "",

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ImagePlus, Loader2, Star, Upload, X } from "lucide-react";
+import { ImagePlus, Loader2, Star, Upload, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
+import { normalizePhone } from "@/lib/crm-lite";
 
 const BUCKET = "lead-attachments";
-const MAX_IMAGES = 5;
+const MAX_IMAGES = 20;
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export type LeadReferenceMode = "manual-dropdown" | "auto-scraping" | "auto-fb" | "manual-text";
@@ -24,6 +25,7 @@ export type LeadFormValues = {
   reference: string;
   isImportant: boolean;
   files: File[];
+  extraNumbers?: string[];
 };
 
 type LeadFormInitialValues = {
@@ -35,7 +37,15 @@ type LeadFormInitialValues = {
   exactCustomerText?: string;
   reference?: string;
   isImportant?: boolean;
+  extraNumbers?: string[];
 };
+
+export function formatPhoneInput(value: string): string {
+  const digits = normalizePhone(value);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+}
 
 export function uploadLeadImages({
   files,
@@ -98,6 +108,7 @@ export function LeadForm({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [customerName, setCustomerName] = useState(initialValues?.customerName ?? "");
   const [customerNumber, setCustomerNumber] = useState(initialValues?.customerNumber ?? "");
+  const [extraNumbers, setExtraNumbers] = useState<string[]>(initialValues?.extraNumbers ?? []);
   const [area, setArea] = useState(initialValues?.area ?? "");
   const [service, setService] = useState(initialValues?.service ?? "");
   const [context, setContext] = useState(initialValues?.context ?? "");
@@ -199,6 +210,7 @@ export function LeadForm({
       reference: reference.trim(),
       isImportant: importantValue === "yes",
       files,
+      extraNumbers: extraNumbers.filter((num) => num.trim() !== ""),
     });
   }
 
@@ -222,7 +234,7 @@ export function LeadForm({
         <Field label="Customer Number" required>
           <Input
             value={customerNumber}
-            onChange={(e) => setCustomerNumber(e.target.value)}
+            onChange={(e) => setCustomerNumber(formatPhoneInput(e.target.value))}
             maxLength={40}
             inputMode="tel"
           />
@@ -238,6 +250,49 @@ export function LeadForm({
         <Field label="Service" required>
           <Input value={service} onChange={(e) => setService(e.target.value)} maxLength={120} />
         </Field>
+      </div>
+
+      <div className="space-y-2.5">
+        <Label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Additional Numbers (Optional, Max 5)
+        </Label>
+        {extraNumbers.map((num, index) => (
+          <div key={index} className="flex gap-2 items-center">
+            <Input
+              value={num}
+              onChange={(e) => {
+                const val = e.target.value;
+                setExtraNumbers((prev) => prev.map((n, i) => (i === index ? formatPhoneInput(val) : n)));
+              }}
+              maxLength={40}
+              placeholder={`Additional number ${index + 1}`}
+              inputMode="tel"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => {
+                setExtraNumbers((prev) => prev.filter((_, i) => i !== index));
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+        {extraNumbers.length < 5 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => setExtraNumbers((prev) => [...prev, ""])}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Add another number
+          </Button>
+        )}
       </div>
 
       <Field label="Context" required>
