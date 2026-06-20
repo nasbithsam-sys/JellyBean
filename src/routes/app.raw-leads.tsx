@@ -1907,6 +1907,10 @@ function QualifyDialog({
       toast.error("Context is required");
       return;
     }
+    if (!passItTo.trim()) {
+      toast.error("Pass it to is required");
+      return;
+    }
     if (duplicateMessage) {
       toast.error(duplicateMessage);
       return;
@@ -2017,7 +2021,7 @@ function QualifyDialog({
           <Field label="Sub Area">
             <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} />
           </Field>
-          <Field label="Pass it to">
+          <Field label="Pass it to *">
             <Input
               value={passItTo}
               onChange={(e) => setPassItTo(e.target.value)}
@@ -2060,7 +2064,7 @@ function QualifyDialog({
           <Button variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={send} disabled={busy || !!duplicateMessage}>
+          <Button onClick={send} disabled={busy || !!duplicateMessage || !passItTo.trim()}>
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
