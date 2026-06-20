@@ -2292,6 +2292,15 @@ function LeadDrawer({
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
+  // Lock background body scroll when drawer is open
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+
   const creator = lead.created_by ? profilesById?.get(lead.created_by) : null;
   const forwardedByText = creator
     ? (creator.full_name || creator.email)
