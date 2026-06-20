@@ -421,6 +421,10 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
       toast.error("Name and number are required");
       return;
     }
+    if (!isSubmitterRole && !passItTo.trim()) {
+      toast.error("Pass it to is required");
+      return;
+    }
     if (!context.trim()) {
       toast.error("Context is required");
       return;
@@ -487,6 +491,8 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
     }
   }
 
+  const passItToMissing = !isSubmitterRole && !passItTo.trim();
+
   return (
     <form onSubmit={submit} onPaste={handlePaste} className="space-y-4">
       {isSubmitterRole ? (
@@ -546,12 +552,15 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
             />
           </div>
           <div>
-            <Label className="mb-1.5 block">Pass it to</Label>
+            <Label className="mb-1.5 block">
+              Pass it to <span className="text-destructive">*</span>
+            </Label>
             <Input
               value={passItTo}
               onChange={(e) => setPassItTo(e.target.value)}
               placeholder="CS rep / team"
               maxLength={120}
+              required
             />
           </div>
           <div>
@@ -636,7 +645,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         <Button type="button" variant="outline" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting || passItToMissing}>
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
