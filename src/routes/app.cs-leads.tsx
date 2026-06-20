@@ -390,6 +390,7 @@ function Inner() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
   const isCs = auth.primaryRole === "cs";
+  const isAdmin = auth.primaryRole === "admin";
   const composeTemplate = useCsComposeTemplate(auth.user?.id);
   const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
 
@@ -743,7 +744,6 @@ function Inner() {
     }
   };
 
-  const isAdmin = auth.primaryRole === "admin";
   const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__" | "templates">("__all__");
 
   const filtered = useMemo(() => {
