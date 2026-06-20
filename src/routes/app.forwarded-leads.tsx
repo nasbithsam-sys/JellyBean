@@ -401,6 +401,10 @@ function ForwardedLeadForm({
       toast.error("Name and number are required");
       return;
     }
+    if (!passItTo.trim()) {
+      toast.error("Pass it to is required");
+      return;
+    }
     setSaving(true);
     try {
       const { error } = await supabase
@@ -448,8 +452,15 @@ function ForwardedLeadForm({
           <Input value={service} onChange={(e) => setService(e.target.value)} maxLength={120} />
         </div>
         <div>
-          <Label className="mb-1.5 block">Pass it to</Label>
-          <Input value={passItTo} onChange={(e) => setPassItTo(e.target.value)} maxLength={120} />
+          <Label className="mb-1.5 block">
+            Pass it to <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            value={passItTo}
+            onChange={(e) => setPassItTo(e.target.value)}
+            maxLength={120}
+            required
+          />
         </div>
         <div>
           <Label className="mb-1.5 block">Main area</Label>
@@ -476,7 +487,7 @@ function ForwardedLeadForm({
         <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || !passItTo.trim()}>
           {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
           Save changes
         </Button>

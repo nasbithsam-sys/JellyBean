@@ -13,8 +13,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write .",
-    "preinstall": "node -e \"if(process.env.npm_execpath && process.env.npm_execpath.includes('npm')) { console.error('\\n⚠ Use bun instead of npm. Run: bun install\\n'); process.exit(1); }\""
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
