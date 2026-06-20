@@ -1504,7 +1504,6 @@ function Inner() {
         />
       )}
 
-
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1568,7 +1567,6 @@ function LeadDetailDialog({
   const duplicateMatches = (duplicateQuery.data?.matches ?? []) as DuplicatePhoneMatch[];
   const hasPrimaryDuplicate = duplicateMatches.length > 0;
 
-
   async function handleNotFound() {
     setBusy(true);
     try {
@@ -1614,7 +1612,6 @@ function LeadDetailDialog({
       setBusy(false);
     }
   }
-
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
@@ -1732,7 +1729,6 @@ function LeadDetailDialog({
             </Button>
           </div>
         </div>
-
 
         <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between gap-2">
           <div className="flex gap-2">
