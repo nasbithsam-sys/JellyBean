@@ -1870,6 +1870,7 @@ function QualifyDialog({
   const [context, setContext] = useState("");
   const [passItTo, setPassItTo] = useState("");
   const [subArea, setSubArea] = useState(row["Sub Area / Neighborhood"] ?? "");
+  const [service, setService] = useState("");
   const [isImportant, setIsImportant] = useState(false);
   const [busy, setBusy] = useState(false);
   const checkDuplicate = useServerFn(checkDuplicatePhone);
@@ -1899,6 +1900,14 @@ function QualifyDialog({
       toast.error("Customer name and number are required");
       return;
     }
+    if (!subArea.trim()) {
+      toast.error("Sub Area is required");
+      return;
+    }
+    if (!service.trim()) {
+      toast.error("Service is required");
+      return;
+    }
     if (!context.trim()) {
       toast.error("Context is required");
       return;
@@ -1922,7 +1931,9 @@ function QualifyDialog({
         context: context.trim() || null,
         pass_it_to: passItTo.trim() || null,
         sub_area: subArea.trim() || null,
-        main_area: null,
+        main_area: subArea.trim() || null,
+        service: service.trim() || null,
+        requirement_2: "Scraping",
         original_lead_link: row["Lead Link"] || null,
         assigned_by: actorId,
         created_by: actorId,
@@ -2016,8 +2027,16 @@ function QualifyDialog({
                 {duplicateMessage}
               </div>
             )}
-            <Field label="Sub Area">
-              <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} />
+            <Field label={<>Sub Area <span className="text-destructive">*</span></>}>
+              <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} required />
+            </Field>
+            <Field label={<>Service <span className="text-destructive">*</span></>}>
+              <Input
+                value={service}
+                onChange={(e) => setService(e.target.value)}
+                placeholder="e.g. Plumbing"
+                required
+              />
             </Field>
             <Field label={<>Pass it to <span className="text-destructive">*</span></>}>
               <Input
@@ -2064,7 +2083,7 @@ function QualifyDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy || !!duplicateMessage || !passItTo.trim()}>
+            <Button type="submit" disabled={busy || !!duplicateMessage || !passItTo.trim() || !subArea.trim() || !service.trim()}>
               {busy ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (

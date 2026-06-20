@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -42,6 +42,16 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { DateRange } from "react-day-picker";
+import { useServerFn } from "@tanstack/react-start";
+import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
+import { normalizePhone, formatPhone } from "@/lib/crm-lite";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/app/submit-lead")({ component: Page });
 
@@ -353,6 +363,84 @@ function QuickRange({ label, onClick }: { label: string; onClick: () => void }) 
   );
 }
 
+type DuplicatePhoneMatch = {
+  id: string;
+  customer_name: string;
+  customer_number: string;
+  customer_number_2: string | null;
+  assigned_at: string;
+};
+
+function ExtraPhoneRow({
+  index,
+  value,
+  onChange,
+  onRemove,
+  onDuplicateChange,
+}: {
+  index: number;
+  value: string;
+  onChange: (next: string) => void;
+  onRemove: () => void;
+  onDuplicateChange: (dup: boolean) => void;
+}) {
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const digits = normalizePhone(value);
+  const query = useQuery({
+    queryKey: ["duplicate-phone", digits],
+    enabled: digits.length >= 7,
+    queryFn: () => checkDuplicate({ data: { phone: value } }),
+    staleTime: 15_000,
+  });
+  const matches = (query.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const hasDup = matches.length > 0;
+  useEffect(() => {
+    onDuplicateChange(hasDup);
+    return () => onDuplicateChange(false);
+  }, [hasDup, onDuplicateChange]);
+
+  return (
+    <div className="border border-border/60 rounded-md p-3 bg-muted/20 space-y-2 mt-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+          Additional Contact {index + 1}
+        </Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={onRemove}
+        >
+          <X className="mr-1 h-3.5 w-3.5" />
+          Remove
+        </Button>
+      </div>
+      <Input
+        value={value}
+        onChange={(e) => onChange(formatPhoneInput(e.target.value))}
+        placeholder="Extra phone number"
+      />
+      {query.isFetching && (
+        <p className="text-[10px] text-muted-foreground">Checking duplicates...</p>
+      )}
+      {hasDup && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11px] text-destructive">
+          Duplicate phone number detected in the last 72 hours
+          {matches[0]?.customer_name ? `: ${matches[0].customer_name}` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatPhoneInput(value: string): string {
+  const digits = normalizePhone(value);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+}
+
 function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   const auth = useAuth();
   const qc = useQueryClient();
@@ -368,13 +456,38 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   const [number, setNumber] = useState("");
   const [passItTo, setPassItTo] = useState("");
   const [context, setContext] = useState("");
+  const [exactText, setExactText] = useState("");
   const [important, setImportant] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // New fields specifically for SEO role
-  const [email, setEmail] = useState("");
-  const [reference, setReference] = useState("");
+  // Reference for Manual Lead dropdown / SEO text field
+  const [reference, setReference] = useState(() => {
+    if (role === "seo") return "";
+    return "Scraping Manually";
+  });
+
+  // Additional Contacts (unlimited)
+  const [extraPhones, setExtraPhones] = useState<string[]>([]);
+  const [extraDuplicates, setExtraDuplicates] = useState<boolean[]>([]);
+
+  // Primary number duplicate check
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const numberDigits = normalizePhone(number);
+  const duplicatePrimary = useQuery({
+    queryKey: ["duplicate-phone", numberDigits],
+    enabled: numberDigits.length >= 7,
+    queryFn: () => checkDuplicate({ data: { phone: number } }),
+    staleTime: 15_000,
+  });
+  const primaryMatches = (duplicatePrimary.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const hasExtraDup = extraDuplicates.some(Boolean);
+  const duplicateMessage =
+    primaryMatches.length > 0
+      ? `Duplicate phone number detected in the last 72 hours${primaryMatches[0]?.customer_name ? `: ${primaryMatches[0].customer_name}` : ""}`
+      : hasExtraDup
+        ? `Duplicate phone number detected in extra numbers (last 72 hours)`
+        : null;
 
   function addFiles(picked: FileList | null) {
     if (!picked) return;
@@ -425,55 +538,75 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!auth.user?.id) return;
+    
+    // Basic verification
     if (!name.trim() || !number.trim()) {
-      toast.error("Name and number are required");
+      toast.error("Customer name and number are required");
       return;
     }
+    
     if (isSeoRole) {
-      if (!email.trim() || !service.trim() || !context.trim() || !reference.trim()) {
-        toast.error("All fields except Address are required");
+      if (!service.trim() || !context.trim() || !exactText.trim() || !reference.trim()) {
+        toast.error("Customer name, Contact, Service, Conversation, Exact Customer Text, and Reference are required");
+        return;
+      }
+    } else if (isFacebookRole) {
+      if (!area.trim() || !service.trim() || !context.trim() || !exactText.trim()) {
+        toast.error("Name, Number, Area, Service, Context, and Exact Customer Text are required");
+        return;
+      }
+    } else {
+      if (!area.trim() || !service.trim() || !context.trim() || !exactText.trim() || !passItTo.trim() || !reference.trim()) {
+        toast.error("Customer name, Customer number, Area, Service, Context, Exact Customer Text, Pass it to, and Reference are required");
         return;
       }
     }
-    if (!isSubmitterRole && !passItTo.trim()) {
-      toast.error("Pass it to is required");
+    
+    if (duplicateMessage) {
+      toast.error(duplicateMessage);
       return;
     }
-    if (!isSeoRole && !context.trim()) {
-      toast.error("Context is required");
-      return;
-    }
+
     setSubmitting(true);
     try {
       const imageUrls = await uploadImages();
 
+      const cleanedExtras = extraPhones
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
+        .map((p) => formatPhone(p) || p);
+
       let finalContext = context.trim();
       let finalMainArea = area.trim() || null;
       let finalSubArea = area.trim() || null;
-      let finalService = isSubmitterRole ? service.trim() || null : null;
+      let finalService = service.trim() || null;
       let finalPassItTo = isSubmitterRole ? null : passItTo.trim() || null;
+      let finalReference = reference.trim();
 
-      if (isSeoRole) {
-        finalContext = [
-          email.trim() ? `Email: ${email.trim()}` : "",
-          area.trim() ? `Address: ${area.trim()}` : "",
-          reference.trim() ? `Reference: ${reference.trim()}` : "",
-          context.trim() ? `Conversation:\n${context.trim()}` : "",
-        ].filter(Boolean).join("\n\n");
-        finalService = service.trim() || null;
-        finalPassItTo = null;
+      if (isFacebookRole) {
+        finalReference = "FB";
       }
+
+      // Format Context by prefixing metadata
+      const formattedMetadata = [
+        `Reference: ${finalReference}`,
+        finalMainArea ? `Address: ${finalMainArea}` : "",
+      ].filter(Boolean).join("\n");
+      
+      finalContext = `${formattedMetadata}\n\nContext:\n${context.trim()}`;
 
       const { error } = await supabase.from("qualified_leads").insert({
         customer_name: name.trim(),
-        customer_number: number.trim(),
+        customer_number: formatPhone(number.trim()) || number.trim(),
+        customer_number_2: cleanedExtras[0] ?? null,
+        extra_numbers: cleanedExtras,
         service: finalService,
         main_area: finalMainArea,
         sub_area: finalSubArea,
         pass_it_to: finalPassItTo,
         context: finalContext,
-        requirement_1: isSeoRole ? email.trim() || null : null,
-        requirement_2: isSeoRole ? reference.trim() || null : null,
+        post_text: exactText.trim() || null,
+        requirement_2: finalReference,
         images: imageUrls,
         submitted_by_role: role,
         is_important: important,
@@ -527,7 +660,11 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
   }
 
   const passItToMissing = !isSubmitterRole && !passItTo.trim();
-  const seoMissing = isSeoRole && (!name.trim() || !number.trim() || !email.trim() || !service.trim() || !context.trim() || !reference.trim());
+  const seoMissing = isSeoRole && (!name.trim() || !number.trim() || !service.trim() || !context.trim() || !exactText.trim() || !reference.trim());
+  const fbMissing = isFacebookRole && (!name.trim() || !number.trim() || !area.trim() || !service.trim() || !context.trim() || !exactText.trim());
+  const manualMissing = !isSubmitterRole && (!name.trim() || !number.trim() || !area.trim() || !service.trim() || !context.trim() || !exactText.trim() || !passItTo.trim() || !reference.trim());
+
+  const isFormInvalid = seoMissing || fbMissing || manualMissing;
 
   return (
     <form onSubmit={submit} onPaste={handlePaste} className="space-y-4">
@@ -550,22 +687,19 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
             </Label>
             <Input
               value={number}
-              onChange={(e) => setNumber(e.target.value)}
+              onChange={(e) => setNumber(formatPhoneInput(e.target.value))}
               required
               maxLength={40}
               inputMode="tel"
             />
           </div>
           <div>
-            <Label className="mb-1.5 block">
-              Email <span className="text-destructive">*</span>
-            </Label>
+            <Label className="mb-1.5 block">Address (Area)</Label>
             <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              maxLength={120}
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              placeholder="e.g. 123 Main St"
+              maxLength={160}
             />
           </div>
           <div>
@@ -581,15 +715,6 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
             />
           </div>
           <div>
-            <Label className="mb-1.5 block">Address</Label>
-            <Input
-              value={area}
-              onChange={(e) => setArea(e.target.value)}
-              placeholder="e.g. 123 Main St"
-              maxLength={160}
-            />
-          </div>
-          <div>
             <Label className="mb-1.5 block">
               Reference <span className="text-destructive">*</span>
             </Label>
@@ -601,11 +726,82 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
               maxLength={120}
             />
           </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Exact Customer Text <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={exactText}
+              onChange={(e) => setExactText(e.target.value)}
+              placeholder="Exact text or request"
+              required
+              maxLength={500}
+            />
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <Label className="mb-1.5 block">
+              Conversation <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              rows={3}
+              placeholder="Enter conversation notes..."
+              required
+              maxLength={2000}
+            />
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            {duplicateMessage && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                {duplicateMessage}
+              </div>
+            )}
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <Label className="mb-1.5 block">Additional Contacts</Label>
+            <div className="space-y-2">
+              {extraPhones.map((val, idx) => (
+                <ExtraPhoneRow
+                  key={idx}
+                  index={idx}
+                  value={val}
+                  onChange={(next) =>
+                    setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
+                  }
+                  onRemove={() => {
+                    setExtraPhones((prev) => prev.filter((_, i) => i !== idx));
+                    setExtraDuplicates((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                  onDuplicateChange={(dup) =>
+                    setExtraDuplicates((prev) => {
+                      const next = [...prev];
+                      while (next.length <= idx) next.push(false);
+                      next[idx] = dup;
+                      return next;
+                    })
+                  }
+                />
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 mt-2"
+                onClick={() => setExtraPhones((prev) => [...prev, ""])}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Additional Contact
+              </Button>
+            </div>
+          </div>
         </div>
       ) : isFacebookRole ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label className="mb-1.5 block">Name</Label>
+            <Label className="mb-1.5 block">
+              Customer name <span className="text-destructive">*</span>
+            </Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -614,33 +810,117 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
             />
           </div>
           <div>
-            <Label className="mb-1.5 block">Service</Label>
-            <Input
-              value={service}
-              onChange={(e) => setService(e.target.value)}
-              placeholder="e.g. Plumbing"
-              maxLength={120}
-            />
-          </div>
-          <div>
-            <Label className="mb-1.5 block">Area</Label>
-            <Input value={area} onChange={(e) => setArea(e.target.value)} maxLength={160} />
-          </div>
-          <div>
-            <Label className="mb-1.5 block">Number</Label>
+            <Label className="mb-1.5 block">
+              Contact <span className="text-destructive">*</span>
+            </Label>
             <Input
               value={number}
-              onChange={(e) => setNumber(e.target.value)}
+              onChange={(e) => setNumber(formatPhoneInput(e.target.value))}
               required
               maxLength={40}
               inputMode="tel"
             />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Area <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              placeholder="e.g. Area name"
+              required
+              maxLength={160}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Service <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={service}
+              onChange={(e) => setService(e.target.value)}
+              placeholder="e.g. Plumbing"
+              required
+              maxLength={120}
+            />
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <Label className="mb-1.5 block">
+              Exact Customer Text <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={exactText}
+              onChange={(e) => setExactText(e.target.value)}
+              placeholder="Exact text or request"
+              required
+              maxLength={500}
+            />
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <Label className="mb-1.5 block">
+              Context <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              rows={3}
+              placeholder="Enter context notes..."
+              required
+              maxLength={2000}
+            />
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            {duplicateMessage && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                {duplicateMessage}
+              </div>
+            )}
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <Label className="mb-1.5 block">Additional Contacts</Label>
+            <div className="space-y-2">
+              {extraPhones.map((val, idx) => (
+                <ExtraPhoneRow
+                  key={idx}
+                  index={idx}
+                  value={val}
+                  onChange={(next) =>
+                    setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
+                  }
+                  onRemove={() => {
+                    setExtraPhones((prev) => prev.filter((_, i) => i !== idx));
+                    setExtraDuplicates((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                  onDuplicateChange={(dup) =>
+                    setExtraDuplicates((prev) => {
+                      const next = [...prev];
+                      while (next.length <= idx) next.push(false);
+                      next[idx] = dup;
+                      return next;
+                    })
+                  }
+                />
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 mt-2"
+                onClick={() => setExtraPhones((prev) => [...prev, ""])}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Additional Contact
+              </Button>
+            </div>
           </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label className="mb-1.5 block">Customer name</Label>
+            <Label className="mb-1.5 block">
+              Customer name <span className="text-destructive">*</span>
+            </Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -649,14 +929,55 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
             />
           </div>
           <div>
-            <Label className="mb-1.5 block">Customer number</Label>
+            <Label className="mb-1.5 block">
+              Customer number <span className="text-destructive">*</span>
+            </Label>
             <Input
               value={number}
-              onChange={(e) => setNumber(e.target.value)}
+              onChange={(e) => setNumber(formatPhoneInput(e.target.value))}
               required
               maxLength={40}
               inputMode="tel"
             />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Area <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              placeholder="e.g. Area name"
+              required
+              maxLength={160}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Service <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={service}
+              onChange={(e) => setService(e.target.value)}
+              placeholder="e.g. Plumbing"
+              required
+              maxLength={120}
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block">
+              Reference <span className="text-destructive">*</span>
+            </Label>
+            <Select value={reference} onValueChange={(val) => setReference(val)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select reference" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Scraping Manually">Scraping Manually</SelectItem>
+                <SelectItem value="Listing">Listing</SelectItem>
+                <SelectItem value="Posting">Posting</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label className="mb-1.5 block">
@@ -670,33 +991,77 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
               required
             />
           </div>
-          <div>
-            <Label className="mb-1.5 block">Area</Label>
-            <Input value={area} onChange={(e) => setArea(e.target.value)} maxLength={160} />
+          <div className="col-span-1 md:col-span-2">
+            <Label className="mb-1.5 block">
+              Exact Customer Text <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              value={exactText}
+              onChange={(e) => setExactText(e.target.value)}
+              placeholder="Exact text or request"
+              required
+              maxLength={500}
+            />
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <Label className="mb-1.5 block">
+              Context <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              rows={3}
+              placeholder="Enter context notes..."
+              required
+              maxLength={2000}
+            />
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            {duplicateMessage && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                {duplicateMessage}
+              </div>
+            )}
+          </div>
+          <div className="col-span-1 md:col-span-2">
+            <Label className="mb-1.5 block">Additional Contacts</Label>
+            <div className="space-y-2">
+              {extraPhones.map((val, idx) => (
+                <ExtraPhoneRow
+                  key={idx}
+                  index={idx}
+                  value={val}
+                  onChange={(next) =>
+                    setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
+                  }
+                  onRemove={() => {
+                    setExtraPhones((prev) => prev.filter((_, i) => i !== idx));
+                    setExtraDuplicates((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                  onDuplicateChange={(dup) =>
+                    setExtraDuplicates((prev) => {
+                      const next = [...prev];
+                      while (next.length <= idx) next.push(false);
+                      next[idx] = dup;
+                      return next;
+                    })
+                  }
+                />
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 mt-2"
+                onClick={() => setExtraPhones((prev) => [...prev, ""])}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Additional Contact
+              </Button>
+            </div>
           </div>
         </div>
       )}
-
-      <div>
-        <Label className="mb-1.5 block">
-          {isSeoRole ? (
-            <>
-              Conversation <span className="text-destructive">*</span>
-            </>
-          ) : (
-            <>
-              Context <span className="text-destructive">*</span>
-            </>
-          )}
-        </Label>
-        <Textarea
-          value={context}
-          onChange={(e) => setContext(e.target.value)}
-          rows={3}
-          maxLength={2000}
-          required
-        />
-      </div>
 
       <div className="flex items-center gap-2 p-3 rounded-md border border-warning/40 bg-warning/5">
         <Checkbox
@@ -765,7 +1130,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         <Button type="button" variant="outline" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={submitting || passItToMissing || seoMissing}>
+        <Button type="submit" disabled={submitting || isFormInvalid || !!duplicateMessage}>
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
