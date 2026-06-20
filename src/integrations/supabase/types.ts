@@ -267,6 +267,7 @@ export type Database = {
           customer_name: string
           customer_number: string
           customer_number_2: string | null
+          extra_numbers: string[]
           followup_at: string | null
           id: string
           images: Json
@@ -298,6 +299,7 @@ export type Database = {
           customer_name: string
           customer_number: string
           customer_number_2?: string | null
+          extra_numbers?: string[]
           followup_at?: string | null
           id?: string
           images?: Json
@@ -329,6 +331,7 @@ export type Database = {
           customer_name?: string
           customer_number?: string
           customer_number_2?: string | null
+          extra_numbers?: string[]
           followup_at?: string | null
           id?: string
           images?: Json
