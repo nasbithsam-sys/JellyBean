@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -2276,6 +2277,12 @@ function LeadDrawer({
 }) {
   const auth = useAuth();
   const qc = useQueryClient();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
@@ -2392,13 +2399,15 @@ function LeadDrawer({
     }
   }
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-md animate-fade-in-up"
       onClick={onClose}
     >
       <div
-        className="bg-card w-full max-w-5xl max-h-[90vh] md:h-[85vh] flex flex-col rounded-2xl border border-border p-6 shadow-2xl overflow-y-auto md:overflow-hidden"
+        className="bg-card w-full max-w-5xl max-h-[90vh] md:h-[80vh] flex flex-col rounded-2xl border border-border p-6 shadow-2xl overflow-y-auto md:overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header (Static) */}
@@ -2427,10 +2436,10 @@ function LeadDrawer({
         </div>
 
         {/* 2-Column Body */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:flex-1 md:min-h-0 mt-4 md:overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:flex-1 md:min-h-0 mt-4 overflow-visible md:overflow-hidden">
           
           {/* Left Column: Lead Details */}
-          <div className="col-span-1 md:col-span-5 space-y-4 md:overflow-y-auto md:pr-4">
+          <div className="col-span-1 md:col-span-5 space-y-4 overflow-visible md:overflow-y-auto md:pr-4 md:min-h-0">
             <div className="grid grid-cols-2 gap-3">
               {lead.sub_area && <Info label="Area" value={lead.sub_area} />}
               {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
@@ -2473,7 +2482,7 @@ function LeadDrawer({
           </div>
 
           {/* Right Column: Edit Form & History */}
-          <div className="col-span-1 md:col-span-7 flex flex-col gap-5 md:overflow-y-auto md:pl-4 md:border-l md:border-border pr-2">
+          <div className="col-span-1 md:col-span-7 flex flex-col gap-5 overflow-visible md:overflow-y-auto md:pl-4 md:border-l md:border-border pr-2 md:min-h-0">
             
             {/* Form Fields */}
             <div className="space-y-4">
@@ -2652,79 +2661,6 @@ function LeadDrawer({
               </div>
             </div>
 
-            {/* Save / Delete Buttons */}
-            <div className="border-t border-border pt-4 mt-auto flex items-center justify-between gap-2 bg-card sticky bottom-0 z-10">
-              {isAdmin ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 px-3 text-[13px]"
-                    disabled={busy}
-                    onClick={() => setShowDeleteConfirm(true)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-1.5" />
-                    Delete lead
-                  </Button>
-                  <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete lead</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Delete lead for "{lead.customer_name}"? This cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            setShowDeleteConfirm(false);
-                            setBusy(true);
-                            try {
-                              const { error } = await supabase
-                                .from("qualified_leads")
-                                .delete()
-                                .eq("id", lead.id);
-                              if (error) throw error;
-                              await supabase.from("activity_logs").insert({
-                                actor_id: auth.user?.id,
-                                actor_name: auth.profile?.full_name,
-                                actor_role: auth.primaryRole,
-                                action: "cs.deleted",
-                                entity_type: "qualified_lead",
-                                entity_id: lead.id,
-                                metadata: { customer_name: lead.customer_name },
-                              });
-                              toast.success("Lead deleted");
-                              qc.invalidateQueries({ queryKey: ["cs_leads"] });
-                              onSaved();
-                            } catch (err) {
-                              toast.error(friendlyError(err));
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </>
-              ) : (
-                <span />
-              )}
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={onClose} disabled={busy}>
-                  Close
-                </Button>
-                <Button onClick={save} disabled={busy}>
-                  {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
-                </Button>
-              </div>
-            </div>
-
             {/* History / Notes */}
             {notes.length > 0 && (
               <div className="border-t border-border pt-4 mt-2">
@@ -2749,8 +2685,83 @@ function LeadDrawer({
           </div>
 
         </div>
+
+        {/* Footer: Save / Close / Delete Buttons */}
+        <div className="border-t border-border pt-4 mt-4 flex items-center justify-between gap-2 bg-card">
+          {isAdmin ? (
+            <>
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 px-3 text-[13px]"
+                disabled={busy}
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete lead
+              </Button>
+              <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete lead</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Delete lead for "{lead.customer_name}"? This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        setShowDeleteConfirm(false);
+                        setBusy(true);
+                        try {
+                          const { error } = await supabase
+                            .from("qualified_leads")
+                            .delete()
+                            .eq("id", lead.id);
+                          if (error) throw error;
+                          await supabase.from("activity_logs").insert({
+                            actor_id: auth.user?.id,
+                            actor_name: auth.profile?.full_name,
+                            actor_role: auth.primaryRole,
+                            action: "cs.deleted",
+                            entity_type: "qualified_lead",
+                            entity_id: lead.id,
+                            metadata: { customer_name: lead.customer_name },
+                          });
+                          toast.success("Lead deleted");
+                          qc.invalidateQueries({ queryKey: ["cs_leads"] });
+                          onSaved();
+                        } catch (err) {
+                          toast.error(friendlyError(err));
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} disabled={busy}>
+              Close
+            </Button>
+            <Button onClick={save} disabled={busy}>
+              {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save
+            </Button>
+          </div>
+        </div>
+
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
