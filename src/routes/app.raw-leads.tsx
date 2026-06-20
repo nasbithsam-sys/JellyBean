@@ -1550,33 +1550,24 @@ function LeadDetailDialog({
   onNotFound: () => void | Promise<void>;
   onWrong: () => void | Promise<void>;
   onDuplicate: () => void | Promise<void>;
-  onForward: (phone: string, secondPhone: string) => void | Promise<void>;
+  onForward: (phone: string, extraPhones: string[]) => void | Promise<void>;
   onLeadChange: (lead: "yes" | "no") => void | Promise<void>;
 }) {
   const r = entry.data;
   const [phone, setPhone] = useState(entry.phone ?? "");
-  const [secondPhone, setSecondPhone] = useState("");
-  const [showSecondPhone, setShowSecondPhone] = useState(false);
+  const [extraPhones, setExtraPhones] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const checkDuplicate = useServerFn(checkDuplicatePhone);
   const phoneDigits = normalizePhone(phone);
-  const secondPhoneDigits = normalizePhone(secondPhone);
   const duplicateQuery = useQuery({
     queryKey: ["duplicate-phone", phoneDigits],
     enabled: phoneDigits.length >= 7,
     queryFn: () => checkDuplicate({ data: { phone } }),
     staleTime: 15_000,
   });
-  const secondDuplicateQuery = useQuery({
-    queryKey: ["duplicate-phone", secondPhoneDigits],
-    enabled: secondPhoneDigits.length >= 7,
-    queryFn: () => checkDuplicate({ data: { phone: secondPhone } }),
-    staleTime: 15_000,
-  });
   const duplicateMatches = (duplicateQuery.data?.matches ?? []) as DuplicatePhoneMatch[];
-  const secondDuplicateMatches = (secondDuplicateQuery.data?.matches ??
-    []) as DuplicatePhoneMatch[];
-  const hasDuplicate = duplicateMatches.length > 0 || secondDuplicateMatches.length > 0;
+  const hasPrimaryDuplicate = duplicateMatches.length > 0;
+
 
   async function handleNotFound() {
     setBusy(true);
