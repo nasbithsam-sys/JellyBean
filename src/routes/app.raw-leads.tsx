@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
@@ -35,7 +35,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { LeadForm, type LeadFormValues } from "@/components/lead-form";
 import {
   Loader2,
   ExternalLink,
@@ -400,7 +399,7 @@ function Inner() {
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
-  const [qualifySecondPhone, setQualifySecondPhone] = useState("");
+  const [qualifyExtraPhones, setQualifyExtraPhones] = useState<string[]>([]);
   const [aiPrompt, setAiPrompt] = useState(FROZEN_LEAD_PROMPT);
   const [promptDirty, setPromptDirty] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
@@ -1415,7 +1414,7 @@ function Inner() {
 
       {/* Ingest endpoint info */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Extension ingest endpoint</DialogTitle>
           </DialogHeader>
@@ -1474,10 +1473,10 @@ function Inner() {
             setDetailFor(null);
             toast.success("Moved to Duplicate");
           }}
-          onForward={async (phone, secondPhone) => {
+          onForward={async (phone, extraPhones) => {
             await updateAction(detailFor.row_key, { phone });
             setQualifyFor({ ...detailFor, phone });
-            setQualifySecondPhone(secondPhone);
+            setQualifyExtraPhones(extraPhones);
             setDetailFor(null);
           }}
         />
@@ -1491,15 +1490,15 @@ function Inner() {
             auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? null
           }
           actorRole={auth.primaryRole}
-          initialSecondPhone={qualifySecondPhone}
+          initialExtraPhones={qualifyExtraPhones}
           onClose={() => {
             setQualifyFor(null);
-            setQualifySecondPhone("");
+            setQualifyExtraPhones([]);
           }}
           onSent={async () => {
             await updateAction(qualifyFor.row_key, { category: "forwarded" });
             setQualifyFor(null);
-            setQualifySecondPhone("");
+            setQualifyExtraPhones([]);
             toast.success("Forwarded to CS");
           }}
         />
@@ -1550,33 +1549,23 @@ function LeadDetailDialog({
   onNotFound: () => void | Promise<void>;
   onWrong: () => void | Promise<void>;
   onDuplicate: () => void | Promise<void>;
-  onForward: (phone: string, secondPhone: string) => void | Promise<void>;
+  onForward: (phone: string, extraPhones: string[]) => void | Promise<void>;
   onLeadChange: (lead: "yes" | "no") => void | Promise<void>;
 }) {
   const r = entry.data;
   const [phone, setPhone] = useState(entry.phone ?? "");
-  const [secondPhone, setSecondPhone] = useState("");
-  const [showSecondPhone, setShowSecondPhone] = useState(false);
+  const [extraPhones, setExtraPhones] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const checkDuplicate = useServerFn(checkDuplicatePhone);
   const phoneDigits = normalizePhone(phone);
-  const secondPhoneDigits = normalizePhone(secondPhone);
   const duplicateQuery = useQuery({
     queryKey: ["duplicate-phone", phoneDigits],
     enabled: phoneDigits.length >= 7,
     queryFn: () => checkDuplicate({ data: { phone } }),
     staleTime: 15_000,
   });
-  const secondDuplicateQuery = useQuery({
-    queryKey: ["duplicate-phone", secondPhoneDigits],
-    enabled: secondPhoneDigits.length >= 7,
-    queryFn: () => checkDuplicate({ data: { phone: secondPhone } }),
-    staleTime: 15_000,
-  });
   const duplicateMatches = (duplicateQuery.data?.matches ?? []) as DuplicatePhoneMatch[];
-  const secondDuplicateMatches = (secondDuplicateQuery.data?.matches ??
-    []) as DuplicatePhoneMatch[];
-  const hasDuplicate = duplicateMatches.length > 0 || secondDuplicateMatches.length > 0;
+  const hasPrimaryDuplicate = duplicateMatches.length > 0;
 
   async function handleNotFound() {
     setBusy(true);
@@ -1602,6 +1591,10 @@ function LeadDetailDialog({
       setBusy(false);
     }
   }
+  const [extraDuplicates, setExtraDuplicates] = useState<boolean[]>([]);
+  const hasDuplicate = hasPrimaryDuplicate || extraDuplicates.some(Boolean);
+  const cleanedExtras = extraPhones.map((p) => p.trim()).filter((p) => p.length > 0);
+
   async function handleForward() {
     const p = phone.trim();
     if (!p) {
@@ -1614,7 +1607,7 @@ function LeadDetailDialog({
     }
     setBusy(true);
     try {
-      await onForward(p, secondPhone.trim());
+      await onForward(p, cleanedExtras);
     } finally {
       setBusy(false);
     }
@@ -1622,7 +1615,7 @@ function LeadDetailDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Lead Details</DialogTitle>
         </DialogHeader>
@@ -1701,56 +1694,39 @@ function LeadDetailDialog({
               )}
             </div>
           </div>
-          <div>
-            {showSecondPhone ? (
-              <>
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-                    Another Number
-                  </Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={() => {
-                      setSecondPhone("");
-                      setShowSecondPhone(false);
-                    }}
-                  >
-                    <X className="mr-1 h-3.5 w-3.5" />
-                    Remove
-                  </Button>
-                </div>
-                <Input
-                  value={secondPhone}
-                  onChange={(e) => setSecondPhone(formatPhoneInput(e.target.value))}
-                  placeholder="Optional extra phone"
-                />
-                {secondDuplicateQuery.isFetching && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">Checking duplicates...</p>
-                )}
-                {secondDuplicateMatches.length > 0 && (
-                  <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
-                    Duplicate second phone number detected in the last 72 hours
-                    {secondDuplicateMatches[0]?.customer_name
-                      ? `: ${secondDuplicateMatches[0].customer_name}`
-                      : ""}
-                  </div>
-                )}
-              </>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9"
-                onClick={() => setShowSecondPhone(true)}
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add another number
-              </Button>
-            )}
+          <div className="space-y-2">
+            {extraPhones.map((val, idx) => (
+              <ExtraPhoneRow
+                key={idx}
+                index={idx}
+                value={val}
+                onChange={(next) =>
+                  setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
+                }
+                onRemove={() => {
+                  setExtraPhones((prev) => prev.filter((_, i) => i !== idx));
+                  setExtraDuplicates((prev) => prev.filter((_, i) => i !== idx));
+                }}
+                onDuplicateChange={(dup) =>
+                  setExtraDuplicates((prev) => {
+                    const next = [...prev];
+                    while (next.length <= idx) next.push(false);
+                    next[idx] = dup;
+                    return next;
+                  })
+                }
+              />
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => setExtraPhones((prev) => [...prev, ""])}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add another number
+            </Button>
           </div>
         </div>
 
@@ -1800,13 +1776,78 @@ function DetailField({ label, value }: { label: string; value?: string }) {
   );
 }
 
+// ── Extra phone row with per-row duplicate check ─────────────────────────────
+function ExtraPhoneRow({
+  index,
+  value,
+  onChange,
+  onRemove,
+  onDuplicateChange,
+}: {
+  index: number;
+  value: string;
+  onChange: (next: string) => void;
+  onRemove: () => void;
+  onDuplicateChange: (dup: boolean) => void;
+}) {
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const digits = normalizePhone(value);
+  const query = useQuery({
+    queryKey: ["duplicate-phone", digits],
+    enabled: digits.length >= 7,
+    queryFn: () => checkDuplicate({ data: { phone: value } }),
+    staleTime: 15_000,
+  });
+  const matches = (query.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const hasDup = matches.length > 0;
+  useEffect(() => {
+    onDuplicateChange(hasDup);
+    return () => onDuplicateChange(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDup]);
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+          Another Number {index + 1}
+        </Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-[11px]"
+          onClick={onRemove}
+        >
+          <X className="mr-1 h-3.5 w-3.5" />
+          Remove
+        </Button>
+      </div>
+      <Input
+        value={value}
+        onChange={(e) => onChange(formatPhoneInput(e.target.value))}
+        placeholder="Extra phone number"
+      />
+      {query.isFetching && (
+        <p className="mt-1 text-[11px] text-muted-foreground">Checking duplicates...</p>
+      )}
+      {hasDup && (
+        <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
+          Duplicate phone number detected in the last 72 hours
+          {matches[0]?.customer_name ? `: ${matches[0].customer_name}` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Forward to CS dialog ──────────────────────────────────────────────────────
 function QualifyDialog({
   entry,
   actorId,
   actorName,
   actorRole,
-  initialSecondPhone,
+  initialExtraPhones,
   onClose,
   onSent,
 }: {
@@ -1814,39 +1855,90 @@ function QualifyDialog({
   actorId: string | null;
   actorName: string | null;
   actorRole: string | null;
-  initialSecondPhone: string;
+  initialExtraPhones: string[];
   onClose: () => void;
   onSent: () => void;
 }) {
   const row = entry.data;
+  const [customerName, setCustomerName] = useState(row["Account Name"] ?? "");
+  const [customerNumber, setCustomerNumber] = useState(formatPhoneInput(entry.phone ?? ""));
+  const [extraPhones, setExtraPhones] = useState<string[]>(() =>
+    initialExtraPhones.map((p) => formatPhoneInput(p)).filter((p) => p.length > 0),
+  );
+  const [extraDuplicates, setExtraDuplicates] = useState<boolean[]>([]);
+  const [postText, setPostText] = useState(row["Post Text"] ?? "");
+  const [context, setContext] = useState("");
+  const [passItTo, setPassItTo] = useState("");
+  const [subArea, setSubArea] = useState(row["Sub Area / Neighborhood"] ?? "");
+  const [service, setService] = useState("");
+  const [isImportant, setIsImportant] = useState(false);
   const [busy, setBusy] = useState(false);
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const customerNumberDigits = normalizePhone(customerNumber);
+  const duplicatePrimary = useQuery({
+    queryKey: ["duplicate-phone", customerNumberDigits],
+    enabled: customerNumberDigits.length >= 7,
+    queryFn: () => checkDuplicate({ data: { phone: customerNumber } }),
+    staleTime: 15_000,
+  });
+  const primaryMatches = (duplicatePrimary.data?.matches ?? []) as DuplicatePhoneMatch[];
+  const hasExtraDup = extraDuplicates.some(Boolean);
+  const duplicateMessage =
+    primaryMatches.length > 0
+      ? `Duplicate phone number detected in the last 72 hours${primaryMatches[0]?.customer_name ? `: ${primaryMatches[0].customer_name}` : ""}`
+      : hasExtraDup
+        ? `Duplicate phone number detected in extra numbers (last 72 hours)`
+        : null;
 
-  async function send(values: LeadFormValues) {
+  const cleanedExtras = extraPhones
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .map((p) => formatPhone(p) || p);
+
+  async function send() {
+    if (!customerName.trim() || !customerNumber.trim()) {
+      toast.error("Customer name and number are required");
+      return;
+    }
+    if (!subArea.trim()) {
+      toast.error("Sub Area is required");
+      return;
+    }
+    if (!service.trim()) {
+      toast.error("Service is required");
+      return;
+    }
+    if (!context.trim()) {
+      toast.error("Context is required");
+      return;
+    }
+    if (!passItTo.trim()) {
+      toast.error("Pass it to is required");
+      return;
+    }
+    if (duplicateMessage) {
+      toast.error(duplicateMessage);
+      return;
+    }
     setBusy(true);
     try {
-      const cleanedExtras = (values.extraNumbers || [])
-        .map((p) => p.trim())
-        .filter((p) => p.length > 0)
-        .map((p) => formatPhone(p) || p);
       const { error } = await supabase.from("qualified_leads").insert({
-        customer_name: values.customerName,
-        customer_number: formatPhone(values.customerNumber) || values.customerNumber,
+        customer_name: customerName.trim(),
+        customer_number: formatPhone(customerNumber.trim()) || customerNumber.trim(),
         customer_number_2: cleanedExtras[0] ?? null,
         extra_numbers: cleanedExtras,
-        post_text: values.exactCustomerText,
-        context: values.context,
-        service: values.service,
-        pass_it_to: values.service,
-        reference: values.reference,
-        sub_area: values.area || null,
-        main_area: values.area || null,
+        post_text: postText.trim() || null,
+        context: context.trim() || null,
+        pass_it_to: passItTo.trim() || null,
+        sub_area: subArea.trim() || null,
+        main_area: subArea.trim() || null,
+        service: service.trim() || null,
+        requirement_2: "Scraping",
         original_lead_link: row["Lead Link"] || null,
         assigned_by: actorId,
         created_by: actorId,
         cs_status: "new",
-        is_important: values.isImportant,
-        pinned_important: values.isImportant,
-        submitted_by_role: actorRole,
+        is_important: isImportant,
       } as never);
       if (error) throw error;
       if (actorId) {
@@ -1857,10 +1949,9 @@ function QualifyDialog({
           action: "raw.forwarded_to_cs",
           entity_type: "qualified_lead",
           metadata: {
-            customer_name: values.customerName,
-            customer_number: formatPhone(values.customerNumber) || values.customerNumber,
-            area: values.area || null,
-            reference: values.reference,
+            customer_name: customerName.trim(),
+            customer_number: formatPhone(customerNumber.trim()) || customerNumber.trim(),
+            area: row["Account Area"]?.trim() || row["Sub Area / Neighborhood"]?.trim() || null,
           },
         });
       }
@@ -1874,32 +1965,146 @@ function QualifyDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Forward to CS</DialogTitle>
         </DialogHeader>
-        <LeadForm
-          title="Raw lead to CS"
-          submitLabel="Send"
-          forwardedBy={actorName ?? "Current user"}
-          showAttachments={false}
-          areaRequired
-          referenceMode="auto-scraping"
-          submitting={busy}
-          initialValues={{
-            customerName: row["Account Name"] ?? "",
-            customerNumber: formatPhoneInput(entry.phone ?? ""),
-            extraNumbers: initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : [],
-            area: row["Account Area"] ?? row["Sub Area / Neighborhood"] ?? "",
-            service: "",
-            context: "",
-            exactCustomerText: row["Post Text"] ?? "",
-            isImportant: false,
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
           }}
-          onCancel={onClose}
-          onSubmit={send}
-        />
+          className="space-y-4"
+        >
+          <div className="grid grid-cols-2 gap-3 min-w-0">
+            <Field label="Customer Name">
+              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
+            </Field>
+            <Field label="Customer Number">
+              <Input
+                value={customerNumber}
+                onChange={(e) => setCustomerNumber(formatPhoneInput(e.target.value))}
+                placeholder="Primary phone number"
+                required
+              />
+            </Field>
+            <div className="col-span-2 space-y-2">
+              {extraPhones.map((val, idx) => (
+                <ExtraPhoneRow
+                  key={idx}
+                  index={idx}
+                  value={val}
+                  onChange={(next) =>
+                    setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
+                  }
+                  onRemove={() => {
+                    setExtraPhones((prev) => prev.filter((_, i) => i !== idx));
+                    setExtraDuplicates((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                  onDuplicateChange={(dup) =>
+                    setExtraDuplicates((prev) => {
+                      const next = [...prev];
+                      while (next.length <= idx) next.push(false);
+                      next[idx] = dup;
+                      return next;
+                    })
+                  }
+                />
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setExtraPhones((prev) => [...prev, ""])}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add another number
+              </Button>
+            </div>
+            {duplicateMessage && (
+              <div className="col-span-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                {duplicateMessage}
+              </div>
+            )}
+            <Field label={<>Sub Area <span className="text-destructive">*</span></>}>
+              <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} required />
+            </Field>
+            <Field label={<>Service <span className="text-destructive">*</span></>}>
+              <Input
+                value={service}
+                onChange={(e) => setService(e.target.value)}
+                placeholder="e.g. Plumbing"
+                required
+              />
+            </Field>
+            <Field label={<>Pass it to <span className="text-destructive">*</span></>}>
+              <Input
+                value={passItTo}
+                onChange={(e) => setPassItTo(e.target.value)}
+                placeholder="CS rep / team"
+                required
+              />
+            </Field>
+            <div className="col-span-2">
+              <Field label="Post Text (auto-filled from original post)">
+                <Textarea rows={4} value={postText} onChange={(e) => setPostText(e.target.value)} />
+              </Field>
+            </div>
+            <div className="col-span-2">
+              <Field label={<>Context (required notes for CS) <span className="text-destructive">*</span></>}>
+                <Textarea
+                  rows={3}
+                  value={context}
+                  onChange={(e) => setContext(e.target.value)}
+                  placeholder="Add any extra context for CS — e.g. urgency, special instructions…"
+                  required
+                />
+              </Field>
+            </div>
+            <div className="col-span-2">
+              <label className="flex items-start gap-2.5 rounded-md border border-border bg-surface/60 px-3 py-2.5 cursor-pointer hover:border-warning/60 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={isImportant}
+                  onChange={(e) => setIsImportant(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-warning cursor-pointer"
+                />
+                <div className="text-[12.5px]">
+                  <div className="font-medium text-foreground">Mark as important / urgent job</div>
+                  <div className="text-[11.5px] text-muted-foreground">
+                    Pins this lead to the top of the CS pipeline so it gets called first.
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy || !!duplicateMessage || !passItTo.trim() || !subArea.trim() || !service.trim()}>
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Send className="h-4 w-4 mr-2" />
+              )}
+              Send
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+        {label}
+      </Label>
+      {children}
+    </div>
   );
 }

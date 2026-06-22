@@ -1,7 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Checkbox } from "@/components/ui/checkbox";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -183,7 +181,6 @@ type Lead = {
   images: string[];
   submitted_by_role: string | null;
   created_by: string | null;
-  assigned_by: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
