@@ -600,9 +600,7 @@ function ForwardedLeadForm({
   const [name, setName] = useState(lead.customer_name);
   const [number, setNumber] = useState(lead.customer_number);
   const [service, setService] = useState(lead.service ?? "");
-  const [passItTo, setPassItTo] = useState(lead.pass_it_to ?? "");
-  const [mainArea, setMainArea] = useState(lead.main_area ?? "");
-  const [subArea, setSubArea] = useState(lead.sub_area ?? "");
+  const [area, setArea] = useState(lead.main_area ?? lead.sub_area ?? "");
   const [context, setContext] = useState(lead.context ?? "");
   const [exactText, setExactText] = useState(lead.post_text ?? "");
   const [reference, setReference] = useState(lead.requirement_2 ?? "Scraping Manually");
@@ -695,9 +693,8 @@ function ForwardedLeadForm({
           customer_number_2: cleanedExtras[0] ?? null,
           extra_numbers: cleanedExtras,
           service: service.trim() || null,
-          pass_it_to: passItTo.trim() || null,
-          main_area: mainArea.trim() || null,
-          sub_area: subArea.trim() || null,
+          main_area: area.trim() || null,
+          sub_area: area.trim() || null,
           context: context.trim() || null,
           post_text: exactText.trim() || null,
           requirement_2: reference.trim() || null,
@@ -741,13 +738,8 @@ function ForwardedLeadForm({
         </div>
         {/* Area */}
         <div>
-          <Label className="mb-1.5 block">Main Area</Label>
-          <Input value={mainArea} onChange={(e) => setMainArea(e.target.value)} maxLength={160} />
-        </div>
-        {/* Sub Area */}
-        <div>
-          <Label className="mb-1.5 block">Sub Area</Label>
-          <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} maxLength={160} />
+          <Label className="mb-1.5 block">Area</Label>
+          <Input value={area} onChange={(e) => setArea(e.target.value)} maxLength={160} placeholder="e.g. Phoenix, AZ" />
         </div>
         {/* Service */}
         <div>
@@ -774,16 +766,6 @@ function ForwardedLeadForm({
               <SelectItem value="SEO">SEO</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-        {/* Pass it to */}
-        <div>
-          <Label className="mb-1.5 block">Pass it to</Label>
-          <Input
-            value={passItTo}
-            onChange={(e) => setPassItTo(e.target.value)}
-            placeholder="CS rep / team"
-            maxLength={120}
-          />
         </div>
         {/* Original Post Link */}
         <div>
