@@ -182,6 +182,8 @@ type Lead = {
   service: string | null;
   images: string[];
   submitted_by_role: string | null;
+  created_by: string | null;
+  assigned_by: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
