@@ -1550,6 +1550,7 @@ function CsLeadsTable({
             <th className="text-left px-3 py-2 font-medium">Status</th>
             <th className="text-left px-3 py-2 font-medium">Assigned</th>
             <th className="text-left px-3 py-2 font-medium">Area</th>
+            <th className="text-left px-3 py-2 font-medium">Reference</th>
             <th className="text-left px-3 py-2 font-medium">Compose</th>
             <th className="text-left px-3 py-2 font-medium">Forwarded</th>
             {isAdmin && <th className="text-left px-3 py-2 font-medium">Forwarded By</th>}
@@ -1584,6 +1585,9 @@ function CsLeadsTable({
                   {assignee ? assignee.full_name || assignee.email : "Unassigned"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{lead.sub_area || "-"}</td>
+                <td className="px-3 py-2 text-muted-foreground max-w-[200px]">
+                  <div className="truncate">{lead.requirement_2 || "-"}</div>
+                </td>
                 <td className="px-3 py-2 text-muted-foreground max-w-[260px]">
                   <div className="truncate">{lead.marketing_notes || "-"}</div>
                 </td>
@@ -2456,9 +2460,20 @@ function LeadDrawer({
     }
   }
 
-  return (
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up"
+      className="fixed inset-0 z-[100] bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up"
       onClick={onClose}
     >
       <div
@@ -2811,7 +2826,8 @@ function LeadDrawer({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
