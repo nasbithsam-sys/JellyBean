@@ -556,8 +556,8 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         return;
       }
     } else {
-      if (!area.trim() || !service.trim() || !context.trim() || !exactText.trim() || !passItTo.trim() || !reference.trim()) {
-        toast.error("Customer name, Customer number, Area, Service, Context, Exact Customer Text, Pass it to, and Reference are required");
+      if (!area.trim() || !service.trim() || !context.trim() || !exactText.trim() || !reference.trim()) {
+        toast.error("Customer name, Customer number, Area, Service, Context, Exact Customer Text, and Reference are required");
         return;
       }
     }
@@ -603,7 +603,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
         service: finalService,
         main_area: finalMainArea,
         sub_area: finalSubArea,
-        pass_it_to: finalPassItTo,
+
         context: finalContext,
         post_text: exactText.trim() || null,
         requirement_2: finalReference,
@@ -789,9 +789,10 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
                 size="sm"
                 className="h-9 mt-2"
                 onClick={() => setExtraPhones((prev) => [...prev, ""])}
+                disabled={extraPhones.length >= 5}
               >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add Additional Contact
+                {extraPhones.length >= 5 ? "Limit reached (Max 5)" : "Add Additional Contact"}
               </Button>
             </div>
           </div>
@@ -908,9 +909,10 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
                 size="sm"
                 className="h-9 mt-2"
                 onClick={() => setExtraPhones((prev) => [...prev, ""])}
+                disabled={extraPhones.length >= 5}
               >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add Additional Contact
+                {extraPhones.length >= 5 ? "Limit reached (Max 5)" : "Add Additional Contact"}
               </Button>
             </div>
           </div>
@@ -979,18 +981,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="mb-1.5 block">
-              Pass it to <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              value={passItTo}
-              onChange={(e) => setPassItTo(e.target.value)}
-              placeholder="CS rep / team"
-              maxLength={120}
-              required
-            />
-          </div>
+
           <div className="col-span-1 md:col-span-2">
             <Label className="mb-1.5 block">
               Exact Customer Text <span className="text-destructive">*</span>
@@ -1054,9 +1045,10 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
                 size="sm"
                 className="h-9 mt-2"
                 onClick={() => setExtraPhones((prev) => [...prev, ""])}
+                disabled={extraPhones.length >= 5}
               >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add Additional Contact
+                {extraPhones.length >= 5 ? "Limit reached (Max 5)" : "Add Additional Contact"}
               </Button>
             </div>
           </div>
