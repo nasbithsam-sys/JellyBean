@@ -2456,9 +2456,20 @@ function LeadDrawer({
     }
   }
 
-  return (
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up"
+      className="fixed inset-0 z-[100] bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up"
       onClick={onClose}
     >
       <div
