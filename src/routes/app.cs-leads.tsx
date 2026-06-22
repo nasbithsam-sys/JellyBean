@@ -1893,12 +1893,13 @@ function LeadCard({
         </div>
       )}
 
-      {lead.requirement_2 && (
-        <div className="mt-2 flex items-start gap-1.5 text-[12px]">
-          <span className="text-muted-foreground">Reference: </span>
-          <span className="text-foreground/90 font-medium">{lead.requirement_2}</span>
-        </div>
-      )}
+      <div className="mt-2 flex items-start gap-1.5 text-[12px] rounded-md bg-primary/5 border border-primary/15 px-2 py-1">
+        <span className="text-muted-foreground shrink-0">Reference:</span>
+        <span className="text-foreground/90 font-medium break-words min-w-0">
+          {lead.requirement_2?.trim() || <span className="text-muted-foreground/70 italic">—</span>}
+        </span>
+      </div>
+
 
       {lead.context && (
         <div className="mt-3">
