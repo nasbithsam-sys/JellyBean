@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useRef } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X } from "lucide-react";
+import { Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
@@ -269,7 +269,7 @@ function Inner() {
       )}
 
       <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit forwarded lead</DialogTitle>
           </DialogHeader>
@@ -390,30 +390,58 @@ function ForwardedTable({
               </td>
               <td className="px-3 py-2">
                 <div className="flex justify-end gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2"
-                    onClick={() => onEdit(r)}
-                    title="Edit lead"
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2 text-destructive hover:text-destructive"
-                    onClick={() => void deleteForwardedLead(r, auth, qc)}
-                    title="Delete lead"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  {isAdmin || r.cs_status === "new" ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => onEdit(r)}
+                        title="Edit lead"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 text-destructive hover:text-destructive"
+                        onClick={() => void deleteForwardedLead(r, auth, qc)}
+                        title="Delete lead"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 italic pr-2" title="Only pending leads can be modified by staff">
+                      <Lock className="h-3 w-3" /> Locked
+                    </span>
+                  )}
                 </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  required = false,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      <Label className="block mb-1.5">
+        {label}
+        {required ? <span className="text-destructive"> (Required)</span> : null}
+      </Label>
+      {children}
     </div>
   );
 }
@@ -496,6 +524,11 @@ function ForwardedLeadForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
+    if (!isAdmin && lead.cs_status !== "new") {
+      toast.error("Only pending leads can be edited.");
+      return;
+    }
     if (!name.trim() || !number.trim()) {
       toast.error("Name and number are required");
       return;
@@ -543,26 +576,23 @@ function ForwardedLeadForm({
   }
 
   return (
-    <form onSubmit={submit} onPaste={handlePaste} className="space-y-4">
+    <form onSubmit={submit} onPaste={handlePaste} className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label className="mb-1.5 block">Customer name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required />
-        </div>
-        <div>
-          <Label className="mb-1.5 block">Customer number</Label>
+        <Field label="Customer Name" required>
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+        </Field>
+        <Field label="Customer Number" required>
           <Input
             value={number}
             onChange={(e) => setNumber(formatPhoneInput(e.target.value))}
             maxLength={40}
             inputMode="tel"
-            required
           />
-        </div>
-        
+        </Field>
+
         {/* Additional Numbers (Optional, Max 5) */}
-        <div className="col-span-1 md:col-span-2 space-y-2">
-          <Label className="block text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+        <div className="col-span-1 md:col-span-2 space-y-2.5">
+          <Label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Additional Numbers (Optional, Max 5)
           </Label>
           <div className="space-y-2">
@@ -596,7 +626,7 @@ function ForwardedLeadForm({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8"
+                className="h-9"
                 onClick={() => setExtraNumbers((prev) => [...prev, ""])}
               >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -606,46 +636,38 @@ function ForwardedLeadForm({
           </div>
         </div>
 
-        <div>
-          <Label className="mb-1.5 block">Service</Label>
+        <Field label="Service">
           <Input value={service} onChange={(e) => setService(e.target.value)} maxLength={120} />
-        </div>
-        <div>
-          <Label className="mb-1.5 block">
-            Pass it to <span className="text-destructive">*</span>
-          </Label>
+        </Field>
+        <Field label="Pass It To" required>
           <Input
             value={passItTo}
             onChange={(e) => setPassItTo(e.target.value)}
             maxLength={120}
-            required
           />
-        </div>
-        <div>
-          <Label className="mb-1.5 block">Main area</Label>
+        </Field>
+        <Field label="Main Area">
           <Input value={mainArea} onChange={(e) => setMainArea(e.target.value)} maxLength={160} />
-        </div>
-        <div>
-          <Label className="mb-1.5 block">Sub area</Label>
+        </Field>
+        <Field label="Sub Area">
           <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} maxLength={160} />
-        </div>
+        </Field>
       </div>
-      <div>
-        <Label className="mb-1.5 block">Context</Label>
-        <Textarea value={context} onChange={(e) => setContext(e.target.value)} rows={4} />
-      </div>
-      <div>
-        <Label className="mb-1.5 block">Original post link</Label>
+
+      <Field label="Context">
+        <Textarea value={context} onChange={(e) => setContext(e.target.value)} rows={3} />
+      </Field>
+
+      <Field label="Original Post Link">
         <Input
           value={postLink}
           onChange={(e) => setPostLink(e.target.value)}
           placeholder="https://..."
         />
-      </div>
+      </Field>
 
       {/* Attachments Section */}
-      <div>
-        <Label className="mb-1.5 block">Attachments (Optional, Max 20)</Label>
+      <Field label="Attachments (Optional, Max 20)">
         <div className="space-y-3">
           <div className="text-[11px] text-muted-foreground">
             Up to 20 images total. Paste with Ctrl/Cmd+V is supported.
@@ -717,7 +739,7 @@ function ForwardedLeadForm({
             )}
           </div>
         </div>
-      </div>
+      </Field>
 
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
         <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
@@ -737,6 +759,11 @@ async function deleteForwardedLead(
   auth: ReturnType<typeof useAuth>,
   qc: ReturnType<typeof useQueryClient>,
 ) {
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
+  if (!isAdmin && lead.cs_status !== "new") {
+    toast.error("Only pending leads can be deleted.");
+    return;
+  }
   if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`)) return;
   try {
     const { error } = await supabase.from("qualified_leads").delete().eq("id", lead.id);
