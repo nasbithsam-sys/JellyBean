@@ -1550,6 +1550,7 @@ function CsLeadsTable({
             <th className="text-left px-3 py-2 font-medium">Status</th>
             <th className="text-left px-3 py-2 font-medium">Assigned</th>
             <th className="text-left px-3 py-2 font-medium">Area</th>
+            <th className="text-left px-3 py-2 font-medium">Reference</th>
             <th className="text-left px-3 py-2 font-medium">Compose</th>
             <th className="text-left px-3 py-2 font-medium">Forwarded</th>
             {isAdmin && <th className="text-left px-3 py-2 font-medium">Forwarded By</th>}
