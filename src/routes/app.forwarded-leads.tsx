@@ -42,6 +42,8 @@ type Row = {
   assigned_at: string;
   updated_at: string;
   created_by: string | null;
+  extra_numbers?: string[] | null;
+  images?: string[] | null;
 };
 
 const OUTCOME_FILTERS = [

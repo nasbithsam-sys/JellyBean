@@ -182,6 +182,8 @@ type Lead = {
   service: string | null;
   images: string[];
   submitted_by_role: string | null;
+  created_by: string | null;
+  assigned_by: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -1560,9 +1562,9 @@ function CsLeadsTable({
                   <div className="flex items-center gap-1.5">
                     {lead.is_important && (
                       lead.pinned_important && lead.cs_status === "new" ? (
-                        <Pin className="h-3.5 w-3.5 text-warning fill-warning/20 rotate-45 shrink-0" title="Pinned Important" />
+                        <Pin aria-label="Pinned Important" className="h-3.5 w-3.5 text-warning fill-warning/20 rotate-45 shrink-0" />
                       ) : (
-                        <Sparkles className="h-3.5 w-3.5 text-warning fill-warning/20 shrink-0" title="Important" />
+                        <Sparkles aria-label="Important" className="h-3.5 w-3.5 text-warning fill-warning/20 shrink-0" />
                       )
                     )}
                     <span>{lead.customer_name}</span>
