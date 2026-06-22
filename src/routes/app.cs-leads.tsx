@@ -2822,7 +2822,8 @@ function LeadDrawer({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
