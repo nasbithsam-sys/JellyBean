@@ -1231,7 +1231,7 @@ function Inner() {
       ) : (
         <>
           {(isCs || isAdmin) && selectedIds.size > 0 && (
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-3 py-2.5 rounded-md bg-surface/95 backdrop-blur-md border border-border text-[12px] shadow-sm">
+            <div className="sticky top-0 z-40 flex items-center justify-between gap-3 px-3 py-2.5 -mx-1 rounded-md bg-surface/95 backdrop-blur-md border border-border text-[12px] shadow-md ring-1 ring-border/60">
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">
                   {selectedIds.size} selected
