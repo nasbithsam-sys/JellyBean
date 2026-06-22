@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TrustRouteImport } from './routes/trust'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/app'
@@ -27,6 +28,11 @@ import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-pro
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
 import { Route as ApiPublicNextdoorLeadsRouteImport } from './routes/api.public.nextdoor-leads'
 
+const TrustRoute = TrustRouteImport.update({
+  id: '/trust',
+  path: '/trust',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
+  '/trust': typeof TrustRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -136,6 +143,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
+  '/trust': typeof TrustRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -156,6 +164,7 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/setup': typeof SetupRoute
+  '/trust': typeof TrustRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/login'
     | '/setup'
+    | '/trust'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/setup'
+    | '/trust'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -214,6 +225,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/login'
     | '/setup'
+    | '/trust'
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
@@ -234,11 +246,19 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   SetupRoute: typeof SetupRoute
+  TrustRoute: typeof TrustRoute
   ApiPublicNextdoorLeadsRoute: typeof ApiPublicNextdoorLeadsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/trust': {
+      id: '/trust'
+      path: '/trust'
+      fullPath: '/trust'
+      preLoaderRoute: typeof TrustRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/setup': {
       id: '/setup'
       path: '/setup'
@@ -398,6 +418,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   SetupRoute: SetupRoute,
+  TrustRoute: TrustRoute,
   ApiPublicNextdoorLeadsRoute: ApiPublicNextdoorLeadsRoute,
 }
 export const routeTree = rootRouteImport
