@@ -24,6 +24,7 @@ import { Route as AppLogsRouteImport } from './routes/app.logs'
 import { Route as AppHealthRouteImport } from './routes/app.health'
 import { Route as AppForwardedLeadsRouteImport } from './routes/app.forwarded-leads'
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
+import { Route as AppCsReportsRouteImport } from './routes/app.cs-reports'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
 import { Route as ApiPublicNextdoorLeadsRouteImport } from './routes/api.public.nextdoor-leads'
@@ -103,6 +104,11 @@ const AppCsLeadsRoute = AppCsLeadsRouteImport.update({
   path: '/cs-leads',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCsReportsRoute = AppCsReportsRouteImport.update({
+  id: '/cs-reports',
+  path: '/cs-reports',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBrowserProfilesRoute = AppBrowserProfilesRouteImport.update({
   id: '/browser-profiles',
   path: '/browser-profiles',
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
+  '/app/cs-reports': typeof AppCsReportsRoute
   '/app/forwarded-leads': typeof AppForwardedLeadsRoute
   '/app/health': typeof AppHealthRoute
   '/app/logs': typeof AppLogsRoute
@@ -147,6 +154,7 @@ export interface FileRoutesByTo {
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
+  '/app/cs-reports': typeof AppCsReportsRoute
   '/app/forwarded-leads': typeof AppForwardedLeadsRoute
   '/app/health': typeof AppHealthRoute
   '/app/logs': typeof AppLogsRoute
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
+  '/app/cs-reports': typeof AppCsReportsRoute
   '/app/forwarded-leads': typeof AppForwardedLeadsRoute
   '/app/health': typeof AppHealthRoute
   '/app/logs': typeof AppLogsRoute
@@ -190,6 +199,7 @@ export interface FileRouteTypes {
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
+    | '/app/cs-reports'
     | '/app/forwarded-leads'
     | '/app/health'
     | '/app/logs'
@@ -209,6 +219,7 @@ export interface FileRouteTypes {
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
+    | '/app/cs-reports'
     | '/app/forwarded-leads'
     | '/app/health'
     | '/app/logs'
@@ -229,6 +240,7 @@ export interface FileRouteTypes {
     | '/app/analytics'
     | '/app/browser-profiles'
     | '/app/cs-leads'
+    | '/app/cs-reports'
     | '/app/forwarded-leads'
     | '/app/health'
     | '/app/logs'
@@ -357,6 +369,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCsLeadsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/cs-reports': {
+      id: '/app/cs-reports'
+      path: '/cs-reports'
+      fullPath: '/app/cs-reports'
+      preLoaderRoute: typeof AppCsReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/browser-profiles': {
       id: '/app/browser-profiles'
       path: '/browser-profiles'
@@ -385,6 +404,7 @@ interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppBrowserProfilesRoute: typeof AppBrowserProfilesRoute
   AppCsLeadsRoute: typeof AppCsLeadsRoute
+  AppCsReportsRoute: typeof AppCsReportsRoute
   AppForwardedLeadsRoute: typeof AppForwardedLeadsRoute
   AppHealthRoute: typeof AppHealthRoute
   AppLogsRoute: typeof AppLogsRoute
@@ -400,6 +420,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppBrowserProfilesRoute: AppBrowserProfilesRoute,
   AppCsLeadsRoute: AppCsLeadsRoute,
+  AppCsReportsRoute: AppCsReportsRoute,
   AppForwardedLeadsRoute: AppForwardedLeadsRoute,
   AppHealthRoute: AppHealthRoute,
   AppLogsRoute: AppLogsRoute,
