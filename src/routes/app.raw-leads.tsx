@@ -1620,9 +1620,16 @@ function LeadDetailDialog({
     }
   }
 
+  const isDirty = phone.trim() !== "" || secondPhone.trim() !== "";
+
   return (
-    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+    <Dialog open onOpenChange={(o) => {
+      if (!o && !busy) {
+        if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+        onClose();
+      }
+    }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Lead Details</DialogTitle>
         </DialogHeader>
@@ -1769,7 +1776,10 @@ function LeadDetailDialog({
             </Button>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} disabled={busy}>
+            <Button variant="outline" onClick={() => {
+              if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+              onClose();
+            }} disabled={busy}>
               Close
             </Button>
             <Button onClick={handleForward} disabled={busy || hasDuplicate}>
@@ -1820,6 +1830,7 @@ function QualifyDialog({
 }) {
   const row = entry.data;
   const [busy, setBusy] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
 
   async function send(values: LeadFormValues) {
     setBusy(true);
@@ -1873,8 +1884,13 @@ function QualifyDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+    <Dialog open onOpenChange={(o) => {
+      if (!o) {
+        if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+        onClose();
+      }
+    }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Forward to CS</DialogTitle>
         </DialogHeader>
@@ -1886,6 +1902,7 @@ function QualifyDialog({
           areaRequired
           referenceMode="auto-scraping"
           submitting={busy}
+          onDirtyChange={setIsDirty}
           initialValues={{
             customerName: row["Account Name"] ?? "",
             customerNumber: formatPhoneInput(entry.phone ?? ""),

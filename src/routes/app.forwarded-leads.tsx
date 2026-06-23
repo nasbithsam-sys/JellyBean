@@ -99,6 +99,7 @@ function Inner() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
 
   const todayStart = useMemo(() => {
     const d = new Date();
@@ -346,12 +347,18 @@ function Inner() {
         />
       )}
 
-      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <Dialog open={!!editing} onOpenChange={(open) => {
+        if (!open) {
+          if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+          setEditing(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
           <DialogTitle className="sr-only">Edit Forwarded Lead</DialogTitle>
           {editing && (
             <UnifiedForwardedLeadForm
               lead={editing}
+              onDirtyChange={setIsDirty}
               forwardedBy={
                 (() => {
                   const id = editing.created_by ?? editing.assigned_by;
@@ -359,9 +366,10 @@ function Inner() {
                   return profile?.full_name || profile?.email || "Unknown user";
                 })()
               }
-              onCancel={() => setEditing(null)}
+              onCancel={() => { setEditing(null); setIsDirty(false); }}
               onSaved={() => {
                 setEditing(null);
+                setIsDirty(false);
                 qc.invalidateQueries({ queryKey: ["forwarded-leads"] });
                 qc.invalidateQueries({ queryKey: ["forwarded-sent-today"] });
               }}
@@ -512,11 +520,13 @@ function ForwardedTable({
 function UnifiedForwardedLeadForm({
   lead,
   forwardedBy,
+  onDirtyChange,
   onCancel,
   onSaved,
 }: {
   lead: Row;
   forwardedBy: string;
+  onDirtyChange?: (isDirty: boolean) => void;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -590,6 +600,7 @@ function UnifiedForwardedLeadForm({
         isImportant: lead.is_important,
       }}
       submitting={saving}
+      onDirtyChange={onDirtyChange}
       onCancel={onCancel}
       onSubmit={save}
     />

@@ -2383,9 +2383,23 @@ function LeadDrawer({
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
+  const isImportantInitial = lead.is_important;
   const [isImportant, setIsImportant] = useState(lead.is_important);
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
+
+  const isDirty = status !== lead.cs_status ||
+    assignedTo !== lead.assigned_to ||
+    note !== "" ||
+    requirement1 !== (lead.requirement_1 ?? "") ||
+    requirement2 !== (lead.requirement_2 ?? "") ||
+    followup !== (lead.followup_at ? lead.followup_at.slice(0, 16) : "") ||
+    isImportant !== lead.is_important;
+
+  function handleClose() {
+    if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+    onClose();
+  }
 
   // Lock background body scroll when drawer is open
   useEffect(() => {
@@ -2494,7 +2508,6 @@ function LeadDrawer({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-md animate-fade-in-up"
-      onClick={onClose}
     >
       <div
         className="bg-card w-full max-w-5xl max-h-[90vh] md:h-[80vh] flex flex-col rounded-2xl border border-border p-6 shadow-2xl overflow-y-auto md:overflow-hidden"
@@ -2520,7 +2533,7 @@ function LeadDrawer({
               </div>
             )}
           </div>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={handleClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -2856,7 +2869,7 @@ function LeadDrawer({
             <span />
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} disabled={busy}>
+            <Button variant="outline" onClick={handleClose} disabled={busy}>
               Close
             </Button>
             <Button onClick={save} disabled={busy}>

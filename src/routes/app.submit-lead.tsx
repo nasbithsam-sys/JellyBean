@@ -73,6 +73,7 @@ function Dashboard() {
   const auth = useAuth();
   const role = auth.primaryRole ?? "submitter";
   const [open, setOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [range, setRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 29),
     to: new Date(),
@@ -154,18 +155,21 @@ function Dashboard() {
         title="Submissions dashboard"
         description={`Track the leads you sent to CS${role === "facebook" || role === "seo" ? ` as ${role.toUpperCase()}` : ""}.`}
         actions={
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={(newOpen) => {
+            if (!newOpen && isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+            setOpen(newOpen);
+          }}>
             <DialogTrigger asChild>
               <Button size="sm">
                 <Plus className="h-4 w-4 mr-1.5" />
                 New lead
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
               <DialogHeader>
                 <DialogTitle>Send a new lead to CS</DialogTitle>
               </DialogHeader>
-              <SubmitForm role={role} onDone={() => setOpen(false)} />
+              <SubmitForm role={role} onDone={() => { setOpen(false); setIsDirty(false); }} onDirtyChange={setIsDirty} />
             </DialogContent>
           </Dialog>
         }
@@ -350,7 +354,7 @@ function QuickRange({ label, onClick }: { label: string; onClick: () => void }) 
   );
 }
 
-function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
+function SubmitForm({ role, onDone, onDirtyChange }: { role: string; onDone: () => void; onDirtyChange?: (isDirty: boolean) => void }) {
   const auth = useAuth();
   const qc = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
@@ -427,6 +431,7 @@ function SubmitForm({ role, onDone }: { role: string; onDone: () => void }) {
       areaRequired={role !== "seo"}
       referenceMode={referenceMode}
       submitting={submitting}
+      onDirtyChange={onDirtyChange}
       onCancel={onDone}
       onSubmit={submit}
     />

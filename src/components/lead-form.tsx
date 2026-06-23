@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Loader2, Star, Upload, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -91,6 +91,7 @@ export function LeadForm({
   referenceMode,
   initialValues,
   submitting,
+  onDirtyChange,
   onCancel,
   onSubmit,
 }: {
@@ -102,6 +103,7 @@ export function LeadForm({
   referenceMode: LeadReferenceMode;
   initialValues?: LeadFormInitialValues;
   submitting?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
   onCancel: () => void;
   onSubmit: (values: LeadFormValues) => Promise<void>;
 }) {
@@ -122,6 +124,22 @@ export function LeadForm({
     (initialValues?.isImportant ?? false) ? "yes" : "no",
   );
   const [files, setFiles] = useState<File[]>([]);
+
+  const isDirty =
+    customerName !== (initialValues?.customerName ?? "") ||
+    customerNumber !== (initialValues?.customerNumber ?? "") ||
+    area !== (initialValues?.area ?? "") ||
+    service !== (initialValues?.service ?? "") ||
+    context !== (initialValues?.context ?? "") ||
+    exactCustomerText !== (initialValues?.exactCustomerText ?? "") ||
+    reference !== resolveInitialReference(referenceMode, initialValues?.reference) ||
+    importantValue !== ((initialValues?.isImportant ?? false) ? "yes" : "no") ||
+    files.length > 0 ||
+    extraNumbers.join() !== (initialValues?.extraNumbers ?? []).join();
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   function addFiles(picked: FileList | null) {
     if (!picked) return;
@@ -406,7 +424,15 @@ export function LeadForm({
       ) : null}
 
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+            onCancel();
+          }}
+          disabled={submitting}
+        >
           Cancel
         </Button>
         <Button type="submit" disabled={submitting}>
