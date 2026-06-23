@@ -12,6 +12,7 @@ import {
   Globe,
   ShieldCheck,
   Send,
+  PieChart,
 } from "lucide-react";
 import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
@@ -32,6 +33,7 @@ const ADMIN: Item[] = [
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/analytics", label: "Analytics", icon: LineChart, shortcut: "N" },
   { to: "/app/reports", label: "Reports", icon: BarChart3, shortcut: "R" },
+  { to: "/app/cs-reports", label: "CS Reports", icon: PieChart },
   { to: "/app/logs", label: "Activity", icon: ScrollText, shortcut: "G" },
   { to: "/app/health", label: "Health", icon: ShieldCheck, shortcut: "H" },
   { to: "/app/settings", label: "Settings", icon: Settings, shortcut: "S" },
