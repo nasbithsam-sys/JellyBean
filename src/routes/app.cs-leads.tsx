@@ -1234,7 +1234,7 @@ function Inner() {
       ) : (
         <>
           {(isCs || isAdmin) && selectedIds.size > 0 && (
-            <div className="sticky top-16 z-30 px-4 py-2 -mx-4 flex items-center justify-between gap-3 border-b border-border bg-surface/95 backdrop-blur shadow-md supports-[backdrop-filter]:bg-surface/85 text-[12px]">
+            <div className="sticky top-[96px] z-20 px-4 py-2 -mx-4 mb-4 flex items-center justify-between gap-3 border-b border-border bg-surface/95 backdrop-blur shadow-md supports-[backdrop-filter]:bg-surface/85 text-[12px] rounded-lg">
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">{selectedIds.size} selected</span>
                 <button
