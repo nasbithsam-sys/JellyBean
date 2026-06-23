@@ -81,12 +81,12 @@ export const DEFAULT_REPHRASE_PROMPT = `You are a professional customer service 
 You will be given:
 - Template: A message draft containing placeholders like "(Person first name)", "(Service Context)", "(Requirement)", etc.
 - Customer Name: The name of the customer (should be used to replace the "(Person first name)" placeholder or addressed at the beginning).
-- Post Text: The exact customer request or post. You must read this post and extract the specific service request as the "Service Context" (e.g., if the post says "Looking for someone to fix a broken garage door springs", the Service Context is "repairing your garage door springs").
+- Context: The service context entered by the lead forwarder. Use only this field as the "Service Context".
 - Requirement 1 (optional): A specific detail/question we need to ask or verify.
 - Requirement 2 (optional): Another specific detail/question we need to ask or verify.
 
 Instructions:
-1. Extract the specific service requested (Service Context) from the Post Text. Make it flow naturally in the sentence.
+1. Use the Context field as the Service Context. Do not infer it from exact customer text or requirements. Make it flow naturally in the sentence.
 2. Replace "(Person first name)" with the customer's name.
 3. Integrate Requirement 1 and Requirement 2 into the template. Do not just blindly insert them; rewrite the sentence around them so it is elegant, polite, flows beautifully, and is grammatically correct.
 4. Output ONLY the rephrased message. Do not include any brackets, placeholders, quotes, introductory or concluding text.`;
@@ -184,6 +184,7 @@ type Lead = {
   submitted_by_role: string | null;
   created_by: string | null;
   assigned_by: string | null;
+  reference: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -470,7 +471,7 @@ function Inner() {
     const selectedLeads = (list.data ?? []).filter((l) => selectedIds.has(l.id));
     const targets = selectedLeads.filter(
       (lead) =>
-        lead.post_text?.trim() && (lead.requirement_1?.trim() || lead.requirement_2?.trim()),
+        lead.context?.trim() && (lead.requirement_1?.trim() || lead.requirement_2?.trim()),
     );
 
     if (targets.length === 0) {
@@ -493,7 +494,7 @@ function Inner() {
             data: {
               template: templateObj.template,
               customerName: lead.customer_name || "there",
-              postText: lead.post_text,
+              contextText: lead.context,
               requirement1: lead.requirement_1 || "",
               requirement2: lead.requirement_2 || "",
               systemPrompt: aiPrompt,
@@ -585,7 +586,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, pinned_important, service, images, submitted_by_role",
+          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, assigned_by, created_by, is_important, pinned_important, service, reference, images, submitted_by_role",
         )
         .order("assigned_at", { ascending: false })
         .limit(500);
@@ -1634,6 +1635,8 @@ function LeadCard({
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
   const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
   const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
+  const [important, setImportant] = useState(lead.is_important);
+  const [savingImportant, setSavingImportant] = useState(false);
   const initials = "";
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
@@ -1652,7 +1655,7 @@ function LeadCard({
 
   async function handleRephrase(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!lead.post_text) return;
+    if (!lead.context) return;
     setRephrasing(true);
     try {
       const templateToUse = selectedTemplateText || compose || finalTemplates[0]?.template || "";
@@ -1660,7 +1663,7 @@ function LeadCard({
         data: {
           template: templateToUse,
           customerName: lead.customer_name || "there",
-          postText: lead.post_text,
+          contextText: lead.context,
           requirement1: requirement1,
           requirement2: requirement2,
         },
@@ -1767,6 +1770,37 @@ function LeadCard({
     await changeAssignee(auth.user.id);
   }
 
+  async function toggleImportant(e: React.MouseEvent) {
+    e.stopPropagation();
+    if ((!isAdmin && !isCs) || lead.pinned_important) return;
+    const next = !important;
+    setImportant(next);
+    setSavingImportant(true);
+    try {
+      const { error } = await supabase
+        .from("qualified_leads")
+        .update({ is_important: next })
+        .eq("id", lead.id);
+      if (error) throw error;
+      await supabase.from("activity_logs").insert({
+        actor_id: auth.user?.id,
+        actor_name: auth.profile?.full_name,
+        actor_role: auth.primaryRole,
+        action: next ? "cs.marked_important" : "cs.unmarked_important",
+        entity_type: "qualified_lead",
+        entity_id: lead.id,
+        metadata: { customer_name: lead.customer_name, pinned: false },
+      });
+      toast.success(next ? "Lead marked important" : "Important tag removed");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    } catch (error) {
+      setImportant(!next);
+      toast.error(friendlyError(error));
+    } finally {
+      setSavingImportant(false);
+    }
+  }
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   async function performDelete() {
@@ -1801,11 +1835,11 @@ function LeadCard({
       className={cn(
         "glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up",
         selected && "ring-2 ring-primary border-primary",
-        lead.is_important && "border-warning/60 bg-warning/5",
+        important && "border-warning/60 bg-warning/5",
       )}
       onClick={onOpen}
     >
-      {lead.is_important && (
+      {important && (
         <div className="-mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/40 text-[10.5px] font-semibold uppercase tracking-wide">
           {lead.pinned_important && lead.cs_status === "new" ? (
             <Pin className="h-3 w-3 fill-warning/20 rotate-45" />
@@ -1853,15 +1887,22 @@ function LeadCard({
         </div>
       )}
 
-      {lead.pass_it_to && (
+      {lead.service && (
         <div className="mt-2 flex items-start gap-1.5 text-[12px]">
           <ArrowRightCircle className="h-3 w-3 mt-0.5 text-primary shrink-0" />
           <div className="min-w-0">
-            <span className="text-muted-foreground">Pass it to: </span>
-            <span className="text-foreground/90 font-medium">{lead.pass_it_to}</span>
+            <span className="text-muted-foreground">Service: </span>
+            <span className="text-foreground/90 font-medium">{lead.service}</span>
           </div>
         </div>
       )}
+
+      <div className="mt-2 flex items-start gap-1.5 text-[12px]">
+        <div className="min-w-0">
+          <span className="text-muted-foreground">Reference: </span>
+          <span className="text-foreground/90 font-medium">{lead.reference || "-"}</span>
+        </div>
+      </div>
 
       {lead.context && (
         <div className="mt-3">
@@ -1885,18 +1926,11 @@ function LeadCard({
         </div>
       )}
 
-      {(lead.service || lead.submitted_by_role) && (
+      {lead.submitted_by_role && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {lead.service && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-              {lead.service}
-            </span>
-          )}
-          {lead.submitted_by_role && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/40 text-accent-foreground border border-border uppercase font-semibold tracking-wide">
-              via {lead.submitted_by_role}
-            </span>
-          )}
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/40 text-accent-foreground border border-border uppercase font-semibold tracking-wide">
+            via {lead.submitted_by_role}
+          </span>
         </div>
       )}
 
@@ -2002,7 +2036,7 @@ function LeadCard({
                 ))}
               </SelectContent>
             </Select>
-            {lead.post_text && (
+            {lead.context && (
               <Button
                 type="button"
                 variant="outline"
@@ -2155,6 +2189,32 @@ function LeadCard({
               </AlertDialogContent>
             </AlertDialog>
           </>
+        )}
+        {(isAdmin || isCs) && (
+          <button
+            type="button"
+            onClick={toggleImportant}
+            disabled={savingImportant || lead.pinned_important}
+            className={cn(
+              "inline-flex items-center gap-1 transition-colors disabled:cursor-not-allowed",
+              important ? "text-warning" : "hover:text-warning",
+              lead.pinned_important && "opacity-60",
+            )}
+            title={
+              lead.pinned_important
+                ? "This lead was pinned as important before reaching CS"
+                : important
+                  ? "Remove important tag"
+                  : "Mark as important without pinning"
+            }
+          >
+            {savingImportant ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className={cn("h-3.5 w-3.5", important && "fill-warning/20")} />
+            )}
+            {lead.pinned_important ? "Pinned important" : important ? "Important" : "Mark important"}
+          </button>
         )}
         <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-primary" />
       </div>
@@ -2344,7 +2404,7 @@ function LeadDrawer({
   const rephraseFn = useServerFn(rephraseLeadTemplateWithAi);
 
   async function handleRephrase() {
-    if (!lead.post_text) return;
+    if (!lead.context) return;
     setRephrasing(true);
     try {
       const templateToUse = selectedTemplateText || compose || finalTemplates[0]?.template || "";
@@ -2352,7 +2412,7 @@ function LeadDrawer({
         data: {
           template: templateToUse,
           customerName: lead.customer_name || "there",
-          postText: lead.post_text,
+          contextText: lead.context,
           requirement1: requirement1,
           requirement2: requirement2,
         },
@@ -2471,6 +2531,7 @@ function LeadDrawer({
               {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
             </div>
             {lead.service && <Info label="Service" value={lead.service} />}
+            <Info label="Reference" value={lead.reference || "-"} />
             {lead.submitted_by_role && (
               <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
             )}
@@ -2570,7 +2631,7 @@ function LeadDrawer({
                         ))}
                       </SelectContent>
                     </Select>
-                    {lead.post_text && (
+                    {lead.context && (
                       <Button
                         type="button"
                         variant="outline"

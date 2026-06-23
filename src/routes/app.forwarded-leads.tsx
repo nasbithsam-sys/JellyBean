@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useRef } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock } from "lucide-react";
+import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -21,7 +21,13 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhone } from "@/lib/crm-lite";
-import { formatPhoneInput, uploadLeadImages } from "@/components/lead-form";
+import {
+  LeadForm,
+  formatPhoneInput,
+  uploadLeadImages,
+  type LeadFormValues,
+  type LeadReferenceMode,
+} from "@/components/lead-form";
 import type { ForwardedStatus } from "@/lib/crm-types";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import { cn } from "@/lib/utils";
@@ -32,6 +38,7 @@ type Row = {
   id: string;
   customer_name: string;
   customer_number: string;
+  customer_number_2: string | null;
   service: string | null;
   context: string | null;
   pass_it_to: string | null;
@@ -40,10 +47,16 @@ type Row = {
   original_lead_link: string | null;
   cs_status: ForwardedStatus | string;
   assigned_at: string;
+  assigned_by: string | null;
   updated_at: string;
   created_by: string | null;
-  extra_numbers?: string[] | null;
-  images?: string[] | null;
+  extra_numbers: string[];
+  images: string[];
+  post_text: string | null;
+  reference: string | null;
+  is_important: boolean;
+  pinned_important: boolean;
+  submitted_by_role: string | null;
 };
 
 const OUTCOME_FILTERS = [
@@ -82,6 +95,9 @@ function Inner() {
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
   const [query, setQuery] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState<"all" | "pending" | ForwardedStatus>("all");
+  const [forwardedByFilter, setForwardedByFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
 
   const todayStart = useMemo(() => {
@@ -147,7 +163,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, service, context, pass_it_to, main_area, sub_area, original_lead_link, cs_status, assigned_at, updated_at, created_by",
+          "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, post_text, pass_it_to, main_area, sub_area, original_lead_link, reference, is_important, pinned_important, images, submitted_by_role, cs_status, assigned_at, assigned_by, updated_at, created_by",
         )
         .order("updated_at", { ascending: false })
         .limit(500);
@@ -159,6 +175,8 @@ function Inner() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+    const toTime = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
     return (list.data ?? []).filter((r) => {
       if (outcomeFilter === "pending" && r.cs_status !== "new") return false;
       if (outcomeFilter !== "all" && outcomeFilter !== "pending" && r.cs_status !== outcomeFilter)
@@ -177,9 +195,14 @@ function Inner() {
       ) {
         return false;
       }
+      const forwarderId = r.created_by ?? r.assigned_by;
+      if (forwardedByFilter !== "all" && forwarderId !== forwardedByFilter) return false;
+      const forwardedAt = new Date(r.assigned_at).getTime();
+      if (fromTime !== null && forwardedAt < fromTime) return false;
+      if (toTime !== null && forwardedAt > toTime) return false;
       return true;
     });
-  }, [list.data, query, outcomeFilter]);
+  }, [dateFrom, dateTo, forwardedByFilter, list.data, query, outcomeFilter]);
 
   return (
     <div className="space-y-4">
@@ -228,6 +251,59 @@ function Inner() {
             ))}
           </SelectContent>
         </Select>
+        {isAdmin && (
+          <Select value={forwardedByFilter} onValueChange={setForwardedByFilter}>
+            <SelectTrigger className="h-9 w-[190px] text-[12px]">
+              <SelectValue placeholder="Forwarded by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All forwarders</SelectItem>
+              {(allProfiles.data ?? [])
+                .slice()
+                .sort((a, b) =>
+                  (a.full_name || a.email).localeCompare(b.full_name || b.email),
+                )
+                .map((profile) => (
+                  <SelectItem key={profile.user_id} value={profile.user_id}>
+                    {profile.full_name || profile.email}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        )}
+        <div className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2 h-9">
+          <CalendarRange className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            aria-label="Forwarded from date"
+            className="h-7 w-[132px] border-0 bg-transparent px-1 text-[12px] shadow-none"
+          />
+          <span className="text-[11px] text-muted-foreground">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            min={dateFrom || undefined}
+            aria-label="Forwarded to date"
+            className="h-7 w-[132px] border-0 bg-transparent px-1 text-[12px] shadow-none"
+          />
+        </div>
+        {(dateFrom || dateTo || forwardedByFilter !== "all") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9"
+            onClick={() => {
+              setDateFrom("");
+              setDateTo("");
+              setForwardedByFilter("all");
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -272,12 +348,16 @@ function Inner() {
 
       <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit forwarded lead</DialogTitle>
-          </DialogHeader>
           {editing && (
-            <ForwardedLeadForm
+            <UnifiedForwardedLeadForm
               lead={editing}
+              forwardedBy={
+                (() => {
+                  const id = editing.created_by ?? editing.assigned_by;
+                  const profile = id ? profilesById.get(id) : null;
+                  return profile?.full_name || profile?.email || "Unknown user";
+                })()
+              }
               onCancel={() => setEditing(null)}
               onSaved={() => {
                 setEditing(null);
@@ -377,9 +457,9 @@ function ForwardedTable({
               </td>
               {isAdmin && (
                 <td className="px-3 py-2 text-muted-foreground">
-                  {r.created_by
-                    ? (profilesById.get(r.created_by)?.full_name ??
-                       profilesById.get(r.created_by)?.email ??
+                  {r.created_by || r.assigned_by
+                    ? (profilesById.get(r.created_by ?? r.assigned_by!)?.full_name ??
+                       profilesById.get(r.created_by ?? r.assigned_by!)?.email ??
                        "Unknown user")
                     : "-"}
                 </td>
@@ -425,6 +505,93 @@ function ForwardedTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function UnifiedForwardedLeadForm({
+  lead,
+  forwardedBy,
+  onCancel,
+  onSaved,
+}: {
+  lead: Row;
+  forwardedBy: string;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const auth = useAuth();
+  const [saving, setSaving] = useState(false);
+  const role = lead.submitted_by_role ?? auth.primaryRole ?? "maturing";
+  const referenceMode: LeadReferenceMode =
+    role === "facebook" ? "auto-fb" : role === "seo" ? "manual-text" : "manual-dropdown";
+
+  async function save(values: LeadFormValues) {
+    const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
+    if (!isAdmin && lead.cs_status !== "new") {
+      toast.error("Only pending leads can be edited.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const uploadedImages =
+        values.files.length > 0 && auth.user?.id
+          ? await uploadLeadImages({ files: values.files, userId: auth.user.id, supabase })
+          : [];
+      const cleanedExtras = (values.extraNumbers ?? [])
+        .map((number) => number.trim())
+        .filter(Boolean)
+        .map((number) => formatPhone(number) || number);
+      const { error } = await supabase
+        .from("qualified_leads")
+        .update({
+          customer_name: values.customerName,
+          customer_number: formatPhone(values.customerNumber) || values.customerNumber,
+          customer_number_2: cleanedExtras[0] ?? null,
+          extra_numbers: cleanedExtras,
+          service: values.service,
+          pass_it_to: null,
+          main_area: values.area || null,
+          sub_area: values.area || null,
+          context: values.context,
+          post_text: values.exactCustomerText,
+          reference: values.reference,
+          is_important: lead.pinned_important ? true : values.isImportant,
+          images: [...(lead.images ?? []), ...uploadedImages],
+        } as never)
+        .eq("id", lead.id);
+      if (error) throw error;
+      toast.success("Forwarded lead updated");
+      onSaved();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <LeadForm
+      title="Edit forwarded lead"
+      submitLabel="Save changes"
+      forwardedBy={forwardedBy}
+      showAttachments
+      areaRequired
+      referenceMode={referenceMode}
+      initialValues={{
+        customerName: lead.customer_name,
+        customerNumber: lead.customer_number,
+        extraNumbers: lead.extra_numbers ?? [],
+        area: lead.main_area || lead.sub_area || "",
+        service: lead.service || lead.pass_it_to || "",
+        context: lead.context || "",
+        exactCustomerText: lead.post_text || lead.context || "",
+        reference: lead.reference || undefined,
+        isImportant: lead.is_important,
+      }}
+      submitting={saving}
+      onCancel={onCancel}
+      onSubmit={save}
+    />
   );
 }
 

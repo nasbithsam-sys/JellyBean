@@ -40,16 +40,7 @@ export function serviceContextForLead(lead: {
   pass_it_to?: string | null;
   post_text?: string | null;
 }) {
-  const serviceContext = lead.service?.trim() || lead.context?.trim() || lead.pass_it_to?.trim();
-  const exactRequirement = lead.post_text?.trim();
-
-  if (exactRequirement && serviceContext) {
-    const sameText =
-      exactRequirement.localeCompare(serviceContext, undefined, { sensitivity: "base" }) === 0;
-    return sameText ? exactRequirement : `${exactRequirement} (Service context: ${serviceContext})`;
-  }
-
-  return exactRequirement || serviceContext || "your service";
+  return lead.context?.trim() || "your service";
 }
 
 export function renderCsComposeSuggestion(
