@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { Download, Loader2, Users, ClipboardList, PhoneOff, UserCheck } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,6 +17,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { downloadCsv } from "@/lib/crm-lite";
 import { cn } from "@/lib/utils";
+import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
 
 type DatePreset = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
 
@@ -69,12 +71,6 @@ const NEEDS_CONTACT_STATUS = "new";
 // "Need follow-up" also means still needs contact action
 const NEEDS_FOLLOWUP_STATUS = "need_follow_up";
 
-type CsUserRow = {
-  user_id: string;
-  full_name: string | null;
-  email: string;
-};
-
 type CsStats = {
   user_id: string;
   name: string;
@@ -113,18 +109,12 @@ function Inner() {
     [preset, fromDate, toDate],
   );
 
-  // Fetch all CS users
+  const listTeam = useServerFn(listCsTeam);
+
+  // Fetch all CS users via the existing server function
   const csUsers = useQuery({
-    queryKey: ["cs-report-users"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email, primary_role")
-        .eq("primary_role", "cs")
-        .order("full_name");
-      if (error) throw error;
-      return (data ?? []) as CsUserRow[];
-    },
+    queryKey: ["cs_team"],
+    queryFn: () => listTeam(),
   });
 
   // Fetch leads for the range, assigned_to is not null
@@ -145,10 +135,9 @@ function Inner() {
   });
 
   const stats = useMemo((): CsStats[] => {
-    const users = csUsers.data ?? [];
+    const users: CsTeamMember[] = csUsers.data ?? [];
     const leads = leadsQuery.data ?? [];
 
-    // If a specific user is selected, only show that user
     const targetUsers =
       userFilter === "all" ? users : users.filter((u) => u.user_id === userFilter);
 
