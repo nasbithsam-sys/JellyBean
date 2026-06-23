@@ -23,8 +23,8 @@ import { Route as AppMapRouteImport } from './routes/app.map'
 import { Route as AppLogsRouteImport } from './routes/app.logs'
 import { Route as AppHealthRouteImport } from './routes/app.health'
 import { Route as AppForwardedLeadsRouteImport } from './routes/app.forwarded-leads'
-import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppCsReportsRouteImport } from './routes/app.cs-reports'
+import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
 import { Route as ApiPublicNextdoorLeadsRouteImport } from './routes/api.public.nextdoor-leads'
@@ -99,14 +99,14 @@ const AppForwardedLeadsRoute = AppForwardedLeadsRouteImport.update({
   path: '/forwarded-leads',
   getParentRoute: () => AppRoute,
 } as any)
-const AppCsLeadsRoute = AppCsLeadsRouteImport.update({
-  id: '/cs-leads',
-  path: '/cs-leads',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppCsReportsRoute = AppCsReportsRouteImport.update({
   id: '/cs-reports',
   path: '/cs-reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCsLeadsRoute = AppCsLeadsRouteImport.update({
+  id: '/cs-leads',
+  path: '/cs-leads',
   getParentRoute: () => AppRoute,
 } as any)
 const AppBrowserProfilesRoute = AppBrowserProfilesRouteImport.update({
@@ -362,18 +362,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppForwardedLeadsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/cs-leads': {
-      id: '/app/cs-leads'
-      path: '/cs-leads'
-      fullPath: '/app/cs-leads'
-      preLoaderRoute: typeof AppCsLeadsRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/app/cs-reports': {
       id: '/app/cs-reports'
       path: '/cs-reports'
       fullPath: '/app/cs-reports'
       preLoaderRoute: typeof AppCsReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/cs-leads': {
+      id: '/app/cs-leads'
+      path: '/cs-leads'
+      fullPath: '/app/cs-leads'
+      preLoaderRoute: typeof AppCsLeadsRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/browser-profiles': {

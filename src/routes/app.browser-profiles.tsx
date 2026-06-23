@@ -604,7 +604,7 @@ function Inner() {
       />
       {historyFor && (
         <Dialog open onOpenChange={(o) => !o && setHistoryFor(null)}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>Last 5 launches · {historyFor.profile_name}</DialogTitle>
             </DialogHeader>

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { Download, Loader2, Users, ClipboardList, PhoneOff, UserCheck } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,6 +17,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { downloadCsv } from "@/lib/crm-lite";
 import { cn } from "@/lib/utils";
+import { listCsTeam } from "@/lib/cs-team.functions";
 
 type DatePreset = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
 
@@ -107,28 +109,12 @@ function Inner() {
     [preset, fromDate, toDate],
   );
 
-  // Fetch all CS users directly via user_roles + profiles join
-  const csUsers = useQuery({
-    queryKey: ["cs-report-users"],
-    queryFn: async () => {
-      // Get all user_ids with role = 'cs'
-      const { data: roleRows, error: roleErr } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "cs");
-      if (roleErr) throw roleErr;
-      const ids = (roleRows ?? []).map((r) => r.user_id);
-      if (ids.length === 0) return [];
+  const listTeam = useServerFn(listCsTeam);
 
-      // Get their profile info
-      const { data: profiles, error: profErr } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email")
-        .in("user_id", ids)
-        .eq("is_active", true);
-      if (profErr) throw profErr;
-      return (profiles ?? []) as { user_id: string; full_name: string; email: string }[];
-    },
+  // Fetch all CS users via server function (uses supabaseAdmin, bypasses RLS)
+  const csUsers = useQuery({
+    queryKey: ["cs_team"],
+    queryFn: () => listTeam(),
   });
 
   // Fetch leads for the range, assigned_to is not null

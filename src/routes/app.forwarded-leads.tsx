@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -347,7 +347,8 @@ function Inner() {
       )}
 
       <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">Edit Forwarded Lead</DialogTitle>
           {editing && (
             <UnifiedForwardedLeadForm
               lead={editing}
@@ -549,7 +550,7 @@ function UnifiedForwardedLeadForm({
           customer_number_2: cleanedExtras[0] ?? null,
           extra_numbers: cleanedExtras,
           service: values.service,
-          pass_it_to: null,
+          pass_it_to: role === "facebook" || role === "seo" ? null : values.service,
           main_area: values.area || null,
           sub_area: values.area || null,
           context: values.context,
