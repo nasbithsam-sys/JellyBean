@@ -1234,7 +1234,7 @@ function Inner() {
       ) : (
         <>
           {(isCs || isAdmin) && selectedIds.size > 0 && (
-            <div className="fixed top-16 left-0 right-0 z-30 px-4 py-2 flex items-center justify-between gap-3 border-b border-border bg-surface/95 backdrop-blur shadow-md supports-[backdrop-filter]:bg-surface/85 text-[12px] md:left-64">
+            <div className="sticky top-16 z-30 px-4 py-2 -mx-4 flex items-center justify-between gap-3 border-b border-border bg-surface/95 backdrop-blur shadow-md supports-[backdrop-filter]:bg-surface/85 text-[12px]">
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">{selectedIds.size} selected</span>
                 <button
@@ -1300,10 +1300,6 @@ function Inner() {
                 </Button>
               )}
             </div>
-          )}
-          {/* Spacer so content doesn't hide under the fixed bar when it appears */}
-          {(isCs || isAdmin) && selectedIds.size > 0 && (
-            <div className="h-12" aria-hidden />
           )}
           {dueLeads.length > 0 && (
             <div className="glass-card p-4 border-sky-500/40 bg-sky-500/5 rounded-xl space-y-3 mb-4">
