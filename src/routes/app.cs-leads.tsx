@@ -53,7 +53,7 @@ import {
   Sparkles,
   Copy,
   Check,
-  Star,
+  Pin,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -81,12 +81,12 @@ export const DEFAULT_REPHRASE_PROMPT = `You are a professional customer service 
 You will be given:
 - Template: A message draft containing placeholders like "(Person first name)", "(Service Context)", "(Requirement)", etc.
 - Customer Name: The name of the customer (should be used to replace the "(Person first name)" placeholder or addressed at the beginning).
-- Post Text: The exact customer request or post. You must read this post and extract the specific service request as the "Service Context" (e.g., if the post says "Looking for someone to fix a broken garage door springs", the Service Context is "repairing your garage door springs").
+- Context: The service context entered by the lead forwarder. Use only this field as the "Service Context".
 - Requirement 1 (optional): A specific detail/question we need to ask or verify.
 - Requirement 2 (optional): Another specific detail/question we need to ask or verify.
 
 Instructions:
-1. Extract the specific service requested (Service Context) from the Post Text. Make it flow naturally in the sentence.
+1. Use the Context field as the Service Context. Do not infer it from exact customer text or requirements. Make it flow naturally in the sentence.
 2. Replace "(Person first name)" with the customer's name.
 3. Integrate Requirement 1 and Requirement 2 into the template. Do not just blindly insert them; rewrite the sentence around them so it is elegant, polite, flows beautifully, and is grammatically correct.
 4. Output ONLY the rephrased message. Do not include any brackets, placeholders, quotes, introductory or concluding text.`;
@@ -178,12 +178,13 @@ type Lead = {
   assigned_at: string;
   assigned_to: string | null;
   is_important: boolean;
-  is_important_by_cs: boolean;
+  pinned_important: boolean;
   service: string | null;
   images: string[];
   submitted_by_role: string | null;
   created_by: string | null;
   assigned_by: string | null;
+  reference: string | null;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -384,28 +385,6 @@ function Page() {
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
-  const isAdmin = auth.primaryRole === "admin";
-
-  const listProfiles = useQuery({
-    queryKey: ["all_profiles"],
-    enabled: isAdmin,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email");
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  const profilesByUserId = useMemo(() => {
-    const map = new Map<string, { full_name: string; email: string }>();
-    for (const p of listProfiles.data ?? []) {
-      map.set(p.user_id, p);
-    }
-    return map;
-  }, [listProfiles.data]);
-
   const { newLeadCount, clearAlert } = useNewLeadAlert();
   const [query, setQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("all");
@@ -418,6 +397,7 @@ function Inner() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
   const isCs = auth.primaryRole === "cs";
+  const isAdmin = auth.primaryRole === "admin";
   const composeTemplate = useCsComposeTemplate(auth.user?.id);
   const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
 
@@ -491,7 +471,7 @@ function Inner() {
     const selectedLeads = (list.data ?? []).filter((l) => selectedIds.has(l.id));
     const targets = selectedLeads.filter(
       (lead) =>
-        lead.post_text?.trim() && (lead.requirement_1?.trim() || lead.requirement_2?.trim()),
+        lead.context?.trim() && (lead.requirement_1?.trim() || lead.requirement_2?.trim()),
     );
 
     if (targets.length === 0) {
@@ -514,7 +494,7 @@ function Inner() {
             data: {
               template: templateObj.template,
               customerName: lead.customer_name || "there",
-              postText: lead.post_text,
+              contextText: lead.context,
               requirement1: lead.requirement_1 || "",
               requirement2: lead.requirement_2 || "",
               systemPrompt: aiPrompt,
@@ -571,7 +551,10 @@ function Inner() {
         const slice = ids.slice(i, i + CHUNK);
         const { error } = await supabase
           .from("qualified_leads")
-          .update({ assigned_to: nextAssignee })
+          .update({
+            assigned_to: nextAssignee,
+            assigned_by: nextAssignee ? auth.user?.id : null,
+          } as never)
           .in("id", slice);
         if (error) throw error;
       }
@@ -603,7 +586,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, is_important, is_important_by_cs, service, images, submitted_by_role, created_by",
+          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, assigned_by, created_by, is_important, pinned_important, service, reference, images, submitted_by_role",
         )
         .order("assigned_at", { ascending: false })
         .limit(500);
@@ -643,6 +626,26 @@ function Inner() {
     for (const m of team.data ?? []) map.set(m.user_id, m);
     return map;
   }, [team.data]);
+
+  const allProfiles = useQuery({
+    queryKey: ["all_profiles"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const profilesById = useMemo(() => {
+    const map = new Map<string, { full_name: string | null; email: string }>();
+    for (const p of allProfiles.data ?? []) {
+      map.set(p.user_id, { full_name: p.full_name, email: p.email });
+    }
+    return map;
+  }, [allProfiles.data]);
 
   const dueLeads = useMemo(() => {
     if (!list.data) return [];
@@ -807,8 +810,8 @@ function Inner() {
     const leads =
       activeStatus === "__all__" ? filtered : filtered.filter((l) => l.cs_status === activeStatus);
     return [...leads].sort((a, b) => {
-      const aPinned = a.is_important;
-      const bPinned = b.is_important;
+      const aPinned = a.pinned_important && a.cs_status === "new";
+      const bPinned = b.pinned_important && b.cs_status === "new";
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
       return new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime();
     });
@@ -1231,11 +1234,9 @@ function Inner() {
       ) : (
         <>
           {(isCs || isAdmin) && selectedIds.size > 0 && (
-            <div className="sticky top-0 z-40 flex items-center justify-between gap-3 px-3 py-2.5 -mx-1 rounded-md bg-surface/95 backdrop-blur-md border border-border text-[12px] shadow-md ring-1 ring-border/60">
+            <div className="sticky top-[104px] z-20 flex items-center justify-between gap-3 rounded-md border border-border bg-surface/95 px-3 py-2 text-[12px] shadow-sm backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <div className="flex items-center gap-3">
-                <span className="text-muted-foreground">
-                  {selectedIds.size} selected
-                </span>
+                <span className="text-muted-foreground">{selectedIds.size} selected</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1246,15 +1247,13 @@ function Inner() {
                 >
                   Select all visible
                 </button>
-                {selectedIds.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={clearSelection}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    Clear
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
               </div>
               {isAdmin ? (
                 <div className="flex items-center gap-2">
@@ -1365,12 +1364,12 @@ function Inner() {
                   selected={selectedIds.has(l.id)}
                   onToggleSelect={() => toggleSelect(l.id)}
                   showSelect={isCs || isAdmin}
-                  profilesByUserId={profilesByUserId}
+                  profilesById={profilesById}
                 />
               ))}
             </div>
           ) : (
-            <CsLeadsTable leads={shownLeads} teamById={teamById} onOpen={setOpened} profilesByUserId={profilesByUserId} isAdmin={isAdmin} />
+            <CsLeadsTable leads={shownLeads} teamById={teamById} onOpen={setOpened} />
           )}
         </>
       )}
@@ -1394,7 +1393,7 @@ function Inner() {
             setOpened(null);
             qc.invalidateQueries({ queryKey: ["cs_leads"] });
           }}
-          profilesByUserId={profilesByUserId}
+          profilesById={profilesById}
         />
       )}
 
@@ -1529,14 +1528,10 @@ function CsLeadsTable({
   leads,
   teamById,
   onOpen,
-  profilesByUserId,
-  isAdmin,
 }: {
   leads: Lead[];
   teamById: Map<string, CsTeamMember>;
   onOpen: (lead: Lead) => void;
-  profilesByUserId?: Map<string, { full_name: string; email: string }>;
-  isAdmin?: boolean;
 }) {
   return (
     <div className="overflow-x-auto rounded-md border border-border">
@@ -1550,10 +1545,8 @@ function CsLeadsTable({
             <th className="text-left px-3 py-2 font-medium">Status</th>
             <th className="text-left px-3 py-2 font-medium">Assigned</th>
             <th className="text-left px-3 py-2 font-medium">Area</th>
-            <th className="text-left px-3 py-2 font-medium">Reference</th>
             <th className="text-left px-3 py-2 font-medium">Compose</th>
             <th className="text-left px-3 py-2 font-medium">Forwarded</th>
-            {isAdmin && <th className="text-left px-3 py-2 font-medium">Forwarded By</th>}
           </tr>
         </thead>
         <tbody>
@@ -1566,7 +1559,18 @@ function CsLeadsTable({
                 className="border-t border-border hover:bg-surface/50 cursor-pointer"
                 onClick={() => onOpen(lead)}
               >
-                <td className="px-3 py-2 font-medium">{lead.customer_name}</td>
+                <td className="px-3 py-2 font-medium">
+                  <div className="flex items-center gap-1.5">
+                    {lead.is_important && (
+                      lead.pinned_important && lead.cs_status === "new" ? (
+                        <Pin aria-label="Pinned Important" className="h-3.5 w-3.5 text-warning fill-warning/20 rotate-45 shrink-0" />
+                      ) : (
+                        <Sparkles aria-label="Important" className="h-3.5 w-3.5 text-warning fill-warning/20 shrink-0" />
+                      )
+                    )}
+                    <span>{lead.customer_name}</span>
+                  </div>
+                </td>
                 <td className="px-3 py-2 text-muted-foreground">
                   <PhoneCopyLink phone={lead.customer_number} compact />
                 </td>
@@ -1585,24 +1589,12 @@ function CsLeadsTable({
                   {assignee ? assignee.full_name || assignee.email : "Unassigned"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{lead.sub_area || "-"}</td>
-                <td className="px-3 py-2 text-muted-foreground max-w-[200px]">
-                  <div className="truncate">{lead.requirement_2 || "-"}</div>
-                </td>
                 <td className="px-3 py-2 text-muted-foreground max-w-[260px]">
                   <div className="truncate">{lead.marketing_notes || "-"}</div>
                 </td>
                 <td className="px-3 py-2 text-muted-foreground tabular-nums">
                   {formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}
                 </td>
-                {isAdmin && (
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {lead.created_by
-                      ? (profilesByUserId?.get(lead.created_by)?.full_name ||
-                        profilesByUserId?.get(lead.created_by)?.email ||
-                        "-")
-                      : "-"}
-                  </td>
-                )}
               </tr>
             );
           })}
@@ -1621,7 +1613,7 @@ function LeadCard({
   selected = false,
   onToggleSelect,
   showSelect = false,
-  profilesByUserId,
+  profilesById,
 }: {
   lead: Lead;
   team: CsTeamMember[];
@@ -1631,7 +1623,7 @@ function LeadCard({
   selected?: boolean;
   onToggleSelect?: () => void;
   showSelect?: boolean;
-  profilesByUserId?: Map<string, { full_name: string; email: string }>;
+  profilesById?: Map<string, { full_name: string | null; email: string }>;
 }) {
   const qc = useQueryClient();
   const auth = useAuth();
@@ -1643,22 +1635,27 @@ function LeadCard({
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
   const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
   const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
+  const [important, setImportant] = useState(lead.is_important);
+  const [savingImportant, setSavingImportant] = useState(false);
   const initials = "";
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
+  const creator = lead.created_by ? profilesById?.get(lead.created_by) : null;
+  const forwardedByText = creator
+    ? (creator.full_name || creator.email)
+    : lead.created_by
+      ? "Unknown user"
+      : null;
 
   const [rephrasing, setRephrasing] = useState(false);
   const [selectedTemplateText, setSelectedTemplateText] = useState("");
   const rephraseFn = useServerFn(rephraseLeadTemplateWithAi);
 
-  const creatorProfile = lead.created_by ? profilesByUserId?.get(lead.created_by) : null;
-  const creatorName = creatorProfile ? (creatorProfile.full_name || creatorProfile.email) : null;
-
   async function handleRephrase(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!lead.post_text) return;
+    if (!lead.context) return;
     setRephrasing(true);
     try {
       const templateToUse = selectedTemplateText || compose || finalTemplates[0]?.template || "";
@@ -1666,7 +1663,7 @@ function LeadCard({
         data: {
           template: templateToUse,
           customerName: lead.customer_name || "there",
-          postText: lead.post_text,
+          contextText: lead.context,
           requirement1: requirement1,
           requirement2: requirement2,
         },
@@ -1743,8 +1740,8 @@ function LeadCard({
         .from("qualified_leads")
         .update({
           assigned_to: next,
-          assigned_by: next ? auth.user?.id : null,
-        })
+          assigned_by: next ? (lead.assigned_to === next ? lead.assigned_by : (auth.user?.id || null)) : null,
+        } as never)
         .eq("id", lead.id);
       if (error) throw error;
       const nextName = next ? (teamById.get(next)?.full_name ?? "teammate") : "unassigned";
@@ -1773,28 +1770,38 @@ function LeadCard({
     await changeAssignee(auth.user.id);
   }
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [markingImportant, setMarkingImportant] = useState(false);
-
-  async function toggleImportantByCs(e: React.MouseEvent) {
+  async function toggleImportant(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!isAdmin && !isCs) return;
-    const next = !lead.is_important_by_cs;
-    setMarkingImportant(true);
+    if ((!isAdmin && !isCs) || lead.pinned_important) return;
+    const next = !important;
+    setImportant(next);
+    setSavingImportant(true);
     try {
       const { error } = await supabase
         .from("qualified_leads")
-        .update({ is_important_by_cs: next } as never)
+        .update({ is_important: next })
         .eq("id", lead.id);
       if (error) throw error;
-      toast.success(next ? "Marked as important" : "Removed important mark");
+      await supabase.from("activity_logs").insert({
+        actor_id: auth.user?.id,
+        actor_name: auth.profile?.full_name,
+        actor_role: auth.primaryRole,
+        action: next ? "cs.marked_important" : "cs.unmarked_important",
+        entity_type: "qualified_lead",
+        entity_id: lead.id,
+        metadata: { customer_name: lead.customer_name, pinned: false },
+      });
+      toast.success(next ? "Lead marked important" : "Important tag removed");
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
-    } catch (err) {
-      toast.error(friendlyError(err));
+    } catch (error) {
+      setImportant(!next);
+      toast.error(friendlyError(error));
     } finally {
-      setMarkingImportant(false);
+      setSavingImportant(false);
     }
   }
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   async function performDelete() {
     try {
@@ -1828,21 +1835,18 @@ function LeadCard({
       className={cn(
         "glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up",
         selected && "ring-2 ring-primary border-primary",
-        lead.is_important && "border-warning/60 bg-warning/5",
-        !lead.is_important && lead.is_important_by_cs && "border-orange-400/50 bg-orange-400/5",
+        important && "border-warning/60 bg-warning/5",
       )}
       onClick={onOpen}
     >
-      {lead.is_important && (
+      {important && (
         <div className="-mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/40 text-[10.5px] font-semibold uppercase tracking-wide">
-          <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
-          Important job
-        </div>
-      )}
-      {!lead.is_important && lead.is_important_by_cs && (
-        <div className="-mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-400/15 text-orange-500 border border-orange-400/40 text-[10.5px] font-semibold uppercase tracking-wide">
-          <Star className="h-3 w-3 fill-orange-400" />
-          Important
+          {lead.pinned_important && lead.cs_status === "new" ? (
+            <Pin className="h-3 w-3 fill-warning/20 rotate-45" />
+          ) : (
+            <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+          )}
+          {lead.pinned_important && lead.cs_status === "new" ? "Pinned Important" : "Important job"}
         </div>
       )}
       <div className="flex items-start gap-3">
@@ -1893,13 +1897,12 @@ function LeadCard({
         </div>
       )}
 
-      <div className="mt-2 flex items-start gap-1.5 text-[12px] rounded-md bg-primary/5 border border-primary/15 px-2 py-1">
-        <span className="text-muted-foreground shrink-0">Reference:</span>
-        <span className="text-foreground/90 font-medium break-words min-w-0">
-          {lead.requirement_2?.trim() || <span className="text-muted-foreground/70 italic">—</span>}
-        </span>
+      <div className="mt-2 flex items-start gap-1.5 text-[12px]">
+        <div className="min-w-0">
+          <span className="text-muted-foreground">Reference: </span>
+          <span className="text-foreground/90 font-medium">{lead.reference || "-"}</span>
+        </div>
       </div>
-
 
       {lead.context && (
         <div className="mt-3">
@@ -1923,18 +1926,18 @@ function LeadCard({
         </div>
       )}
 
-      {(lead.service || lead.submitted_by_role || (isAdmin && creatorName)) && (
+      {lead.submitted_by_role && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {lead.submitted_by_role && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/40 text-accent-foreground border border-border uppercase font-semibold tracking-wide">
-              via {lead.submitted_by_role}
-            </span>
-          )}
-          {isAdmin && creatorName && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">
-              Forwarded by: {creatorName}
-            </span>
-          )}
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/40 text-accent-foreground border border-border uppercase font-semibold tracking-wide">
+            via {lead.submitted_by_role}
+          </span>
+        </div>
+      )}
+
+      {isAdmin && forwardedByText && (
+        <div className="mt-2.5 text-[11px] text-muted-foreground flex items-center gap-1.5">
+          <span>Forwarded by:</span>
+          <span className="font-medium text-foreground">{forwardedByText}</span>
         </div>
       )}
 
@@ -2033,7 +2036,7 @@ function LeadCard({
                 ))}
               </SelectContent>
             </Select>
-            {lead.post_text && (
+            {lead.context && (
               <Button
                 type="button"
                 variant="outline"
@@ -2144,77 +2147,75 @@ function LeadCard({
             Follow-up {formatDistanceToNow(new Date(lead.followup_at), { addSuffix: true })}
           </span>
         )}
-        <div className="flex items-center gap-2">
-          {(isAdmin || isCs) && (
+        {isAdmin && (
+          <>
             <button
               type="button"
-              onClick={toggleImportantByCs}
-              disabled={markingImportant}
-              className={cn(
-                "inline-flex items-center gap-1 transition-colors text-[11px]",
-                lead.is_important_by_cs
-                  ? "text-orange-500 hover:text-orange-400"
-                  : "text-muted-foreground hover:text-orange-500",
-              )}
-              title={lead.is_important_by_cs ? "Remove important mark" : "Mark as important"}
+              onClick={deleteLead}
+              className="inline-flex items-center gap-1 text-destructive hover:text-destructive/80 transition-colors"
+              title="Delete this lead"
             >
-              {markingImportant ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Star
-                  className={cn(
-                    "h-3.5 w-3.5",
-                    lead.is_important_by_cs && "fill-orange-400",
-                  )}
-                />
-              )}
-              Important
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
             </button>
-          )}
-          {isAdmin && (
-            <>
-              <button
-                type="button"
-                onClick={deleteLead}
-                className="inline-flex items-center gap-1 text-destructive hover:text-destructive/80 transition-colors"
-                title="Delete this lead"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </button>
-              <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-                <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete lead</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Delete lead for "{lead.customer_name}"? This cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowDeleteConfirm(false);
-                      }}
-                    >
-                      Cancel
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        setShowDeleteConfirm(false);
-                        await performDelete();
-                      }}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </>
-          )}
-        </div>
+            <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+              <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete lead</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Delete lead for "{lead.customer_name}"? This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDeleteConfirm(false);
+                    }}
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setShowDeleteConfirm(false);
+                      await performDelete();
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
+        {(isAdmin || isCs) && (
+          <button
+            type="button"
+            onClick={toggleImportant}
+            disabled={savingImportant || lead.pinned_important}
+            className={cn(
+              "inline-flex items-center gap-1 transition-colors disabled:cursor-not-allowed",
+              important ? "text-warning" : "hover:text-warning",
+              lead.pinned_important && "opacity-60",
+            )}
+            title={
+              lead.pinned_important
+                ? "This lead was pinned as important before reaching CS"
+                : important
+                  ? "Remove important tag"
+                  : "Mark as important without pinning"
+            }
+          >
+            {savingImportant ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Sparkles className={cn("h-3.5 w-3.5", important && "fill-warning/20")} />
+            )}
+            {lead.pinned_important ? "Pinned important" : important ? "Important" : "Mark important"}
+          </button>
+        )}
         <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-primary" />
       </div>
     </div>
@@ -2347,7 +2348,7 @@ function LeadDrawer({
   templates = [],
   onClose,
   onSaved,
-  profilesByUserId,
+  profilesById,
 }: {
   lead: Lead;
   team: CsTeamMember[];
@@ -2355,10 +2356,16 @@ function LeadDrawer({
   templates?: ComposeTemplateItem[];
   onClose: () => void;
   onSaved: () => void;
-  profilesByUserId?: Map<string, { full_name: string; email: string }>;
+  profilesById?: Map<string, { full_name: string | null; email: string }>;
 }) {
   const auth = useAuth();
   const qc = useQueryClient();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
@@ -2367,23 +2374,37 @@ function LeadDrawer({
   const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
   const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
   const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
-  const [busy, setBusy] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
+  const [isImportant, setIsImportant] = useState(lead.is_important);
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
+
+  // Lock background body scroll when drawer is open
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+
+  const creator = lead.created_by ? profilesById?.get(lead.created_by) : null;
+  const forwardedByText = creator
+    ? (creator.full_name || creator.email)
+    : lead.created_by
+      ? "Unknown user"
+      : null;
 
   const [rephrasing, setRephrasing] = useState(false);
   const [selectedTemplateText, setSelectedTemplateText] = useState("");
   const rephraseFn = useServerFn(rephraseLeadTemplateWithAi);
 
-  const creatorProfile = lead.created_by ? profilesByUserId?.get(lead.created_by) : null;
-  const creatorName = creatorProfile ? (creatorProfile.full_name || creatorProfile.email) : null;
-
   async function handleRephrase() {
-    if (!lead.post_text) return;
+    if (!lead.context) return;
     setRephrasing(true);
     try {
       const templateToUse = selectedTemplateText || compose || finalTemplates[0]?.template || "";
@@ -2391,7 +2412,7 @@ function LeadDrawer({
         data: {
           template: templateToUse,
           customerName: lead.customer_name || "there",
-          postText: lead.post_text,
+          contextText: lead.context,
           requirement1: requirement1,
           requirement2: requirement2,
         },
@@ -2435,10 +2456,13 @@ function LeadDrawer({
           cs_notes: newNotes as Json,
           followup_at: followup ? new Date(followup).toISOString() : null,
           assigned_to: assignedTo,
+          assigned_by: assignedTo ? (lead.assigned_to === assignedTo ? lead.assigned_by : (auth.user?.id || null)) : null,
           number_name: numberName.trim() || null,
           marketing_notes: compose.trim() || null,
           requirement_1: requirement1.trim() || null,
           requirement_2: requirement2.trim() || null,
+          is_important: isImportant,
+          pinned_important: isImportant ? lead.pinned_important : false,
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
@@ -2461,118 +2485,94 @@ function LeadDrawer({
     }
   }
 
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
-  if (typeof document === "undefined") return null;
+  if (!mounted) return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] bg-background/70 backdrop-blur-md flex justify-end animate-fade-in-up"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-md animate-fade-in-up"
       onClick={onClose}
     >
       <div
-        className="bg-card w-full max-w-4xl h-full flex flex-col border-l border-border shadow-lg"
+        className="bg-card w-full max-w-5xl max-h-[90vh] md:h-[80vh] flex flex-col rounded-2xl border border-border p-6 shadow-2xl overflow-y-auto md:overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Drawer Header (Fixed at top) */}
-        <div className="p-7 pb-4 border-b border-border flex justify-between items-start shrink-0">
+        {/* Header (Static) */}
+        <div className="pb-4 border-b border-border flex justify-between items-start gap-4">
           <div>
             <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">
               Customer
             </div>
             <h2 className="text-[22px] font-semibold tracking-tight mt-1">{lead.customer_name}</h2>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-3">
               <PhoneCopyLink phone={lead.customer_number} />
-              {lead.customer_number_2 && <PhoneCopyLink phone={lead.customer_number_2} />}
+              {lead.customer_number_2 && (
+                <PhoneCopyLink phone={lead.customer_number_2} />
+              )}
             </div>
+            {isAdmin && forwardedByText && (
+              <div className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <span>Forwarded by:</span>
+                <span className="font-medium text-foreground">{forwardedByText}</span>
+              </div>
+            )}
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          >
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
 
-        {/* Drawer Body (Scrollable Split Columns) */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-7">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-            {/* Left Column: Read-Only Info & History */}
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-3">
-                {lead.sub_area && <Info label="Area" value={lead.sub_area} />}
-                {lead.service && <Info label="Service" value={lead.service} />}
-              </div>
-              {lead.requirement_2 && <Info label="Reference" value={lead.requirement_2} />}
-              {lead.submitted_by_role && (
-                <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
-              )}
-              {isAdmin && creatorName && (
-                <Info label="Forwarded by" value={creatorName} />
-              )}
-              {lead.post_text && (
-                <Info label="Customer exact requirement" value={lead.post_text} multiline />
-              )}
-              {lead.context && <Info label="Context" value={lead.context} multiline />}
-
-              {isAdmin && Array.isArray(lead.images) && lead.images.length > 0 && (
-                <div>
-                  <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-                    Attachments ({lead.images.length})
-                  </Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {lead.images.map((url) => (
-                      <a
-                        key={url}
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block aspect-square rounded-md overflow-hidden border border-border bg-muted hover:opacity-80 transition-opacity"
-                      >
-                        <img
-                          src={url}
-                          alt="Lead attachment"
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {notes.length > 0 && (
-                <div className="border-t border-border pt-5">
-                  <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium mb-3 flex items-center gap-2">
-                    <MessageSquarePlus className="h-3 w-3" /> History · {notes.length}
-                  </div>
-                  <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-                    {[...notes].reverse().map((n, i) => (
-                      <div key={i} className="bg-surface/60 border border-border rounded-md p-3">
-                        <div className="text-[11px] text-muted-foreground tabular-nums">
-                          {n.by} · {new Date(n.at).toLocaleString()}
-                        </div>
-                        <div className="text-[13px] mt-1 whitespace-pre-wrap leading-relaxed">
-                          {n.text}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+        {/* 2-Column Body */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:flex-1 md:min-h-0 mt-4 overflow-visible md:overflow-hidden">
+          
+          {/* Left Column: Lead Details */}
+          <div className="col-span-1 md:col-span-5 space-y-4 overflow-visible md:overflow-y-auto md:pr-4 md:min-h-0">
+            <div className="grid grid-cols-2 gap-3">
+              {lead.sub_area && <Info label="Area" value={lead.sub_area} />}
+              {lead.pass_it_to && <Info label="Pass to" value={lead.pass_it_to} />}
             </div>
+            {lead.service && <Info label="Service" value={lead.service} />}
+            <Info label="Reference" value={lead.reference || "-"} />
+            {lead.submitted_by_role && (
+              <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
+            )}
+            {lead.post_text && (
+              <Info label="Customer exact requirement" value={lead.post_text} multiline />
+            )}
+            {lead.requirement_1 && <Info label="Requirement 1" value={lead.requirement_1} multiline />}
+            {lead.requirement_2 && <Info label="Requirement 2" value={lead.requirement_2} multiline />}
+            {lead.context && <Info label="Context" value={lead.context} multiline />}
+            {isAdmin && Array.isArray(lead.images) && lead.images.length > 0 && (
+              <div>
+                <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+                  Attachments ({lead.images.length})
+                </Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {lead.images.map((url) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block aspect-square rounded-md overflow-hidden border border-border bg-muted hover:opacity-80 transition-opacity"
+                    >
+                      <img
+                        src={url}
+                        alt="Lead attachment"
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
-            {/* Right Column: Editable Form Fields */}
-            <div className="space-y-5 border-t md:border-t-0 md:border-l border-border pt-5 md:pt-0 md:pl-8">
+          {/* Right Column: Edit Form & History */}
+          <div className="col-span-1 md:col-span-7 flex flex-col gap-5 overflow-visible md:overflow-y-auto md:pl-4 md:border-l md:border-border pr-2 md:min-h-0">
+            
+            {/* Form Fields */}
+            <div className="space-y-4">
               <div>
                 <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
                   Status
@@ -2582,6 +2582,21 @@ function LeadDrawer({
                   onChange={setStatus}
                   disabled={busy || (!isAdmin && (!assignedTo || auth.user?.id !== assignedTo))}
                 />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Checkbox
+                  id="drawer-important"
+                  checked={isImportant}
+                  onCheckedChange={(checked) => setIsImportant(!!checked)}
+                  disabled={busy || !(isCs || isAdmin)}
+                />
+                <Label
+                  htmlFor="drawer-important"
+                  className="text-[13px] font-medium cursor-pointer flex items-center gap-1.5"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-warning fill-warning/20 animate-pulse" />
+                  Mark as Important
+                </Label>
               </div>
               <div>
                 <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
@@ -2616,7 +2631,7 @@ function LeadDrawer({
                         ))}
                       </SelectContent>
                     </Select>
-                    {lead.post_text && (
+                    {lead.context && (
                       <Button
                         type="button"
                         variant="outline"
@@ -2638,7 +2653,7 @@ function LeadDrawer({
                 <Textarea
                   value={compose}
                   onChange={(e) => setCompose(e.target.value)}
-                  rows={3}
+                  rows={4}
                   maxLength={2000}
                   placeholder="Compose a message or note for this lead..."
                 />
@@ -2658,7 +2673,7 @@ function LeadDrawer({
                 <Textarea
                   value={requirement1}
                   onChange={(e) => setRequirement1(e.target.value)}
-                  rows={2}
+                  rows={3}
                   maxLength={2000}
                   placeholder="Requirement 1"
                 />
@@ -2670,7 +2685,7 @@ function LeadDrawer({
                 <Textarea
                   value={requirement2}
                   onChange={(e) => setRequirement2(e.target.value)}
-                  rows={2}
+                  rows={3}
                   maxLength={2000}
                   placeholder="Requirement 2"
                 />
@@ -2737,23 +2752,49 @@ function LeadDrawer({
                   Comment
                 </Label>
                 <Textarea
-                  rows={2}
+                  rows={3}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Write comment..."
+                  placeholder="Write what happened in your own words — e.g. customer is interested, already done by someone else, asked to message later…"
                 />
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  Free-text comment. Appended to the history when you save.
+                </p>
               </div>
             </div>
+
+            {/* History / Notes */}
+            {notes.length > 0 && (
+              <div className="border-t border-border pt-4 mt-2">
+                <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium mb-3 flex items-center gap-2">
+                  <MessageSquarePlus className="h-3 w-3" /> History · {notes.length}
+                </div>
+                <div className="space-y-2.5">
+                  {[...notes].reverse().map((n, i) => (
+                    <div key={i} className="bg-surface/60 border border-border rounded-md p-3">
+                      <div className="text-[11px] text-muted-foreground tabular-nums">
+                        {n.by} · {new Date(n.at).toLocaleString()}
+                      </div>
+                      <div className="text-[13px] mt-1 whitespace-pre-wrap leading-relaxed">
+                        {n.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
+
         </div>
 
-        {/* Drawer Footer (Fixed at bottom) */}
-        <div className="p-7 pt-4 border-t border-border flex justify-between items-center shrink-0">
+        {/* Footer: Save / Close / Delete Buttons */}
+        <div className="border-t border-border pt-4 mt-4 flex items-center justify-between gap-2 bg-card">
           {isAdmin ? (
             <>
               <Button
                 variant="ghost"
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-9 px-3 text-[13px]"
                 disabled={busy}
                 onClick={() => setShowDeleteConfirm(true)}
               >
@@ -2761,7 +2802,7 @@ function LeadDrawer({
                 Delete lead
               </Button>
               <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-                <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete lead</AlertDialogTitle>
                     <AlertDialogDescription>
@@ -2769,17 +2810,10 @@ function LeadDrawer({
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowDeleteConfirm(false);
-                      }}
-                    >
-                      Cancel
-                    </AlertDialogCancel>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={async (e) => {
-                        e.stopPropagation();
+                        e.preventDefault();
                         setShowDeleteConfirm(false);
                         setBusy(true);
                         try {
@@ -2826,9 +2860,10 @@ function LeadDrawer({
             </Button>
           </div>
         </div>
+
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }
 

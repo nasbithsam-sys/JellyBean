@@ -297,7 +297,7 @@ async function ensureRequesterCanRephrase(userId: string) {
 const rephraseInputSchema = z.object({
   template: z.string(),
   customerName: z.string(),
-  postText: z.string().nullable().optional(),
+  contextText: z.string().nullable().optional(),
   requirement1: z.string().nullable().optional(),
   requirement2: z.string().nullable().optional(),
   systemPrompt: z.string().nullable().optional(),
@@ -317,12 +317,12 @@ export const rephraseLeadTemplateWithAi = createServerFn({ method: "POST" })
 You will be given:
 - Template: A message draft containing placeholders like "(Person first name)", "(Service Context)", "(Requirement)", etc.
 - Customer Name: The name of the customer (should be used to replace the "(Person first name)" placeholder or addressed at the beginning).
-- Post Text: The exact customer request or post. You must read this post and extract the specific service request as the "Service Context" (e.g., if the post says "Looking for someone to fix a broken garage door springs", the Service Context is "repairing your garage door springs").
+- Context: The service context entered by the lead forwarder. Use only this field as the "Service Context".
 - Requirement 1 (optional): A specific detail/question we need to ask or verify.
 - Requirement 2 (optional): Another specific detail/question we need to ask or verify.
 
 Instructions:
-1. Extract the specific service requested (Service Context) from the Post Text. Make it flow naturally in the sentence.
+1. Use the Context field as the Service Context. Do not infer it from exact customer text or requirements. Make it flow naturally in the sentence.
 2. Replace "(Person first name)" with the customer's name.
 3. Integrate Requirement 1 and Requirement 2 into the template. Do not just blindly insert them; rewrite the sentence around them so it is elegant, polite, flows beautifully, and is grammatically correct.
 4. Output ONLY the rephrased message. Do not include any brackets, placeholders, quotes, introductory or concluding text.`;
@@ -332,7 +332,7 @@ Instructions:
     const userContent = JSON.stringify({
       template: data.template,
       customerName: data.customerName,
-      postText: data.postText || "",
+      context: data.contextText || "",
       requirement1: data.requirement1 || "",
       requirement2: data.requirement2 || "",
     });

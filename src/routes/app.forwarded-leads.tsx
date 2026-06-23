@@ -1,21 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Edit3,
-  Loader2,
-  MapPin,
-  Phone,
-  RefreshCw,
-  Search,
-  Trash2,
-  CalendarDays,
-  Plus,
-  X,
-  ImagePlus,
-  Star,
-} from "lucide-react";
-import { formatDistanceToNow, format, startOfDay, endOfDay, subDays } from "date-fns";
+import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
 import { useAuth } from "@/hooks/use-auth";
@@ -24,8 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -33,41 +19,44 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhone } from "@/lib/crm-lite";
+import {
+  LeadForm,
+  formatPhoneInput,
+  uploadLeadImages,
+  type LeadFormValues,
+  type LeadReferenceMode,
+} from "@/components/lead-form";
 import type { ForwardedStatus } from "@/lib/crm-types";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import { cn } from "@/lib/utils";
-import type { DateRange } from "react-day-picker";
 
 export const Route = createFileRoute("/app/forwarded-leads")({ component: Page });
-
-const BUCKET = "lead-attachments";
-const MAX_IMAGES = 20;
-const MAX_BYTES = 10 * 1024 * 1024;
 
 type Row = {
   id: string;
   customer_name: string;
   customer_number: string;
   customer_number_2: string | null;
-  extra_numbers: string[];
   service: string | null;
   context: string | null;
   pass_it_to: string | null;
   main_area: string | null;
   sub_area: string | null;
   original_lead_link: string | null;
-  post_text: string | null;
-  requirement_2: string | null;
-  is_important: boolean;
-  images: string[];
   cs_status: ForwardedStatus | string;
   assigned_at: string;
+  assigned_by: string | null;
   updated_at: string;
   created_by: string | null;
+  extra_numbers: string[];
+  images: string[];
+  post_text: string | null;
+  reference: string | null;
+  is_important: boolean;
+  pinned_important: boolean;
+  submitted_by_role: string | null;
 };
 
 const OUTCOME_FILTERS = [
@@ -104,31 +93,11 @@ function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
-
-  const listProfiles = useQuery({
-    queryKey: ["all_profiles"],
-    enabled: isAdmin,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email");
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  const profilesByUserId = useMemo(() => {
-    const map = new Map<string, { full_name: string; email: string }>();
-    for (const p of listProfiles.data ?? []) {
-      map.set(p.user_id, p);
-    }
-    return map;
-  }, [listProfiles.data]);
-
   const [query, setQuery] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState<"all" | "pending" | ForwardedStatus>("all");
   const [forwardedByFilter, setForwardedByFilter] = useState("all");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
 
   const todayStart = useMemo(() => {
@@ -167,6 +136,26 @@ function Inner() {
     },
   });
 
+  const allProfiles = useQuery({
+    queryKey: ["all_profiles"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const profilesById = useMemo(() => {
+    const map = new Map<string, { full_name: string | null; email: string }>();
+    for (const p of allProfiles.data ?? []) {
+      map.set(p.user_id, { full_name: p.full_name, email: p.email });
+    }
+    return map;
+  }, [allProfiles.data]);
+
   const list = useQuery({
     queryKey: ["forwarded-leads", auth.user?.id, isAdmin],
     enabled: !!auth.user?.id,
@@ -174,7 +163,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, pass_it_to, main_area, sub_area, original_lead_link, post_text, requirement_2, is_important, images, cs_status, assigned_at, updated_at, created_by",
+          "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, post_text, pass_it_to, main_area, sub_area, original_lead_link, reference, is_important, pinned_important, images, submitted_by_role, cs_status, assigned_at, assigned_by, updated_at, created_by",
         )
         .order("updated_at", { ascending: false })
         .limit(500);
@@ -186,18 +175,11 @@ function Inner() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rFrom = dateRange?.from ? startOfDay(dateRange.from).getTime() : null;
-    const rTo = dateRange?.to
-      ? endOfDay(dateRange.to).getTime()
-      : dateRange?.from
-        ? endOfDay(dateRange.from).getTime()
-        : null;
-
+    const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+    const toTime = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
     return (list.data ?? []).filter((r) => {
       if (outcomeFilter === "pending" && r.cs_status !== "new") return false;
       if (outcomeFilter !== "all" && outcomeFilter !== "pending" && r.cs_status !== outcomeFilter)
-        return false;
-      if (isAdmin && forwardedByFilter !== "all" && r.created_by !== forwardedByFilter)
         return false;
       if (
         q &&
@@ -213,13 +195,14 @@ function Inner() {
       ) {
         return false;
       }
-      if (rFrom !== null && rTo !== null) {
-        const t = new Date(r.assigned_at).getTime();
-        if (t < rFrom || t > rTo) return false;
-      }
+      const forwarderId = r.created_by ?? r.assigned_by;
+      if (forwardedByFilter !== "all" && forwarderId !== forwardedByFilter) return false;
+      const forwardedAt = new Date(r.assigned_at).getTime();
+      if (fromTime !== null && forwardedAt < fromTime) return false;
+      if (toTime !== null && forwardedAt > toTime) return false;
       return true;
     });
-  }, [list.data, query, outcomeFilter, forwardedByFilter, isAdmin, dateRange]);
+  }, [dateFrom, dateTo, forwardedByFilter, list.data, query, outcomeFilter]);
 
   return (
     <div className="space-y-4">
@@ -268,92 +251,59 @@ function Inner() {
             ))}
           </SelectContent>
         </Select>
-
         {isAdmin && (
           <Select value={forwardedByFilter} onValueChange={setForwardedByFilter}>
-            <SelectTrigger className="h-9 w-[180px] text-[12px]">
+            <SelectTrigger className="h-9 w-[190px] text-[12px]">
               <SelectValue placeholder="Forwarded by" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All users</SelectItem>
-              {listProfiles.data?.map((p) => (
-                <SelectItem key={p.user_id} value={p.user_id}>
-                  {p.full_name || p.email}
-                </SelectItem>
-              ))}
+              <SelectItem value="all">All forwarders</SelectItem>
+              {(allProfiles.data ?? [])
+                .slice()
+                .sort((a, b) =>
+                  (a.full_name || a.email).localeCompare(b.full_name || b.email),
+                )
+                .map((profile) => (
+                  <SelectItem key={profile.user_id} value={profile.user_id}>
+                    {profile.full_name || profile.email}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         )}
-
-        {/* Date Range Filter */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9 text-[12px]">
-              <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-              {dateRange?.from
-                ? dateRange.to
-                  ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d")}`
-                  : format(dateRange.from, "MMM d, yyyy")
-                : "Date range"}
-              {dateRange?.from && (
-                <span
-                  role="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDateRange(undefined);
-                  }}
-                  className="ml-1.5 -mr-1 h-4 w-4 grid place-items-center rounded-full hover:bg-destructive/20"
-                >
-                  <X className="h-3 w-3" />
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <div className="flex items-center gap-1.5 p-2 border-b border-border">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-[11px]"
-                onClick={() => setDateRange({ from: new Date(), to: new Date() })}
-              >
-                Today
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-[11px]"
-                onClick={() => setDateRange({ from: subDays(new Date(), 6), to: new Date() })}
-              >
-                7d
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-[11px]"
-                onClick={() => setDateRange({ from: subDays(new Date(), 29), to: new Date() })}
-              >
-                30d
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-[11px]"
-                onClick={() => setDateRange(undefined)}
-              >
-                Clear
-              </Button>
-            </div>
-            <Calendar
-              mode="range"
-              selected={dateRange}
-              onSelect={setDateRange}
-              numberOfMonths={2}
-              className={cn("p-3 pointer-events-auto")}
-            />
-          </PopoverContent>
-        </Popover>
-
+        <div className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2 h-9">
+          <CalendarRange className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            aria-label="Forwarded from date"
+            className="h-7 w-[132px] border-0 bg-transparent px-1 text-[12px] shadow-none"
+          />
+          <span className="text-[11px] text-muted-foreground">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            min={dateFrom || undefined}
+            aria-label="Forwarded to date"
+            className="h-7 w-[132px] border-0 bg-transparent px-1 text-[12px] shadow-none"
+          />
+        </div>
+        {(dateFrom || dateTo || forwardedByFilter !== "all") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9"
+            onClick={() => {
+              setDateFrom("");
+              setDateTo("");
+              setForwardedByFilter("all");
+            }}
+          >
+            Clear filters
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -386,17 +336,28 @@ function Inner() {
           No forwarded leads found for the current filter.
         </div>
       ) : (
-        <ForwardedTable rows={filtered} onEdit={setEditing} auth={auth} qc={qc} profilesByUserId={profilesByUserId} isAdmin={isAdmin} />
+        <ForwardedTable
+          rows={filtered}
+          onEdit={setEditing}
+          auth={auth}
+          qc={qc}
+          profilesById={profilesById}
+          isAdmin={isAdmin}
+        />
       )}
 
       <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit forwarded lead</DialogTitle>
-          </DialogHeader>
           {editing && (
-            <ForwardedLeadForm
+            <UnifiedForwardedLeadForm
               lead={editing}
+              forwardedBy={
+                (() => {
+                  const id = editing.created_by ?? editing.assigned_by;
+                  const profile = id ? profilesById.get(id) : null;
+                  return profile?.full_name || profile?.email || "Unknown user";
+                })()
+              }
               onCancel={() => setEditing(null)}
               onSaved={() => {
                 setEditing(null);
@@ -428,15 +389,15 @@ function ForwardedTable({
   onEdit,
   auth,
   qc,
-  profilesByUserId,
+  profilesById,
   isAdmin,
 }: {
   rows: Row[];
   onEdit: (row: Row) => void;
   auth: ReturnType<typeof useAuth>;
   qc: ReturnType<typeof useQueryClient>;
-  profilesByUserId?: Map<string, { full_name: string; email: string }>;
-  isAdmin?: boolean;
+  profilesById: Map<string, { full_name: string | null; email: string }>;
+  isAdmin: boolean;
 }) {
   return (
     <div className="overflow-x-auto rounded-md border border-border">
@@ -448,23 +409,16 @@ function ForwardedTable({
             <th className="text-left px-3 py-2 font-medium">Area</th>
             <th className="text-left px-3 py-2 font-medium">Details</th>
             <th className="text-left px-3 py-2 font-medium">Outcome</th>
+            {isAdmin && <th className="text-left px-3 py-2 font-medium">Forwarded by</th>}
             <th className="text-left px-3 py-2 font-medium">Forwarded</th>
             <th className="text-left px-3 py-2 font-medium">Updated</th>
-            {isAdmin && <th className="text-left px-3 py-2 font-medium">Forwarded By</th>}
             <th className="text-right px-3 py-2 font-medium">Actions</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-t border-border hover:bg-surface/50">
-              <td className="px-3 py-2 font-medium">
-                {r.customer_name}
-                {r.is_important && (
-                  <span className="ml-1.5 inline-flex items-center gap-0.5 text-[9.5px] text-warning font-semibold">
-                    <Star className="h-2.5 w-2.5 fill-warning" /> PINNED
-                  </span>
-                )}
-              </td>
+              <td className="px-3 py-2 font-medium">{r.customer_name}</td>
               <td className="px-3 py-2">
                 <a
                   href={`tel:${r.customer_number}`}
@@ -501,41 +455,49 @@ function ForwardedTable({
                   </span>
                 )}
               </td>
+              {isAdmin && (
+                <td className="px-3 py-2 text-muted-foreground">
+                  {r.created_by || r.assigned_by
+                    ? (profilesById.get(r.created_by ?? r.assigned_by!)?.full_name ??
+                       profilesById.get(r.created_by ?? r.assigned_by!)?.email ??
+                       "Unknown user")
+                    : "-"}
+                </td>
+              )}
               <td className="px-3 py-2 text-muted-foreground tabular-nums">
                 {formatDistanceToNow(new Date(r.assigned_at), { addSuffix: true })}
               </td>
               <td className="px-3 py-2 text-muted-foreground tabular-nums">
                 {formatDistanceToNow(new Date(r.updated_at), { addSuffix: true })}
               </td>
-              {isAdmin && (
-                <td className="px-3 py-2 text-muted-foreground">
-                  {r.created_by
-                    ? (profilesByUserId?.get(r.created_by)?.full_name ||
-                      profilesByUserId?.get(r.created_by)?.email ||
-                      "-")
-                    : "-"}
-                </td>
-              )}
               <td className="px-3 py-2">
                 <div className="flex justify-end gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2"
-                    onClick={() => onEdit(r)}
-                    title="Edit lead"
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2 text-destructive hover:text-destructive"
-                    onClick={() => void deleteForwardedLead(r, auth, qc)}
-                    title="Delete lead"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  {isAdmin || r.cs_status === "new" ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => onEdit(r)}
+                        title="Edit lead"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2 text-destructive hover:text-destructive"
+                        onClick={() => void deleteForwardedLead(r, auth, qc)}
+                        title="Delete lead"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/60 italic pr-2" title="Only pending leads can be modified by staff">
+                      <Lock className="h-3 w-3" /> Locked
+                    </span>
+                  )}
                 </div>
               </td>
             </tr>
@@ -546,45 +508,113 @@ function ForwardedTable({
   );
 }
 
-// ─── Extra Phone Row (same as submit-lead form) ──────────────────────────────
-function ExtraPhoneRow({
-  index,
-  value,
-  onChange,
-  onRemove,
+function UnifiedForwardedLeadForm({
+  lead,
+  forwardedBy,
+  onCancel,
+  onSaved,
 }: {
-  index: number;
-  value: string;
-  onChange: (next: string) => void;
-  onRemove: () => void;
+  lead: Row;
+  forwardedBy: string;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const auth = useAuth();
+  const [saving, setSaving] = useState(false);
+  const role = lead.submitted_by_role ?? auth.primaryRole ?? "maturing";
+  const referenceMode: LeadReferenceMode =
+    role === "facebook" ? "auto-fb" : role === "seo" ? "manual-text" : "manual-dropdown";
+
+  async function save(values: LeadFormValues) {
+    const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
+    if (!isAdmin && lead.cs_status !== "new") {
+      toast.error("Only pending leads can be edited.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const uploadedImages =
+        values.files.length > 0 && auth.user?.id
+          ? await uploadLeadImages({ files: values.files, userId: auth.user.id, supabase })
+          : [];
+      const cleanedExtras = (values.extraNumbers ?? [])
+        .map((number) => number.trim())
+        .filter(Boolean)
+        .map((number) => formatPhone(number) || number);
+      const { error } = await supabase
+        .from("qualified_leads")
+        .update({
+          customer_name: values.customerName,
+          customer_number: formatPhone(values.customerNumber) || values.customerNumber,
+          customer_number_2: cleanedExtras[0] ?? null,
+          extra_numbers: cleanedExtras,
+          service: values.service,
+          pass_it_to: null,
+          main_area: values.area || null,
+          sub_area: values.area || null,
+          context: values.context,
+          post_text: values.exactCustomerText,
+          reference: values.reference,
+          is_important: lead.pinned_important ? true : values.isImportant,
+          images: [...(lead.images ?? []), ...uploadedImages],
+        } as never)
+        .eq("id", lead.id);
+      if (error) throw error;
+      toast.success("Forwarded lead updated");
+      onSaved();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <LeadForm
+      title="Edit forwarded lead"
+      submitLabel="Save changes"
+      forwardedBy={forwardedBy}
+      showAttachments
+      areaRequired
+      referenceMode={referenceMode}
+      initialValues={{
+        customerName: lead.customer_name,
+        customerNumber: lead.customer_number,
+        extraNumbers: lead.extra_numbers ?? [],
+        area: lead.main_area || lead.sub_area || "",
+        service: lead.service || lead.pass_it_to || "",
+        context: lead.context || "",
+        exactCustomerText: lead.post_text || lead.context || "",
+        reference: lead.reference || undefined,
+        isImportant: lead.is_important,
+      }}
+      submitting={saving}
+      onCancel={onCancel}
+      onSubmit={save}
+    />
+  );
+}
+
+function Field({
+  label,
+  required = false,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="border border-border/60 rounded-md p-3 bg-muted/20 space-y-2 mt-2">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-          Additional Contact {index + 1}
-        </Label>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={onRemove}
-        >
-          <X className="mr-1 h-3.5 w-3.5" />
-          Remove
-        </Button>
-      </div>
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Extra phone number"
-      />
+    <div className="min-w-0">
+      <Label className="block mb-1.5">
+        {label}
+        {required ? <span className="text-destructive"> (Required)</span> : null}
+      </Label>
+      {children}
     </div>
   );
 }
 
-// ─── Forwarded Lead Form (matches manual lead form) ──────────────────────────
 function ForwardedLeadForm({
   lead,
   onCancel,
@@ -596,91 +626,94 @@ function ForwardedLeadForm({
 }) {
   const auth = useAuth();
   const fileRef = useRef<HTMLInputElement | null>(null);
-
   const [name, setName] = useState(lead.customer_name);
   const [number, setNumber] = useState(lead.customer_number);
-  const [service, setService] = useState(lead.service ?? "");
-  const [area, setArea] = useState(lead.main_area ?? lead.sub_area ?? "");
-  const [context, setContext] = useState(lead.context ?? "");
-  const [exactText, setExactText] = useState(lead.post_text ?? "");
-  const [reference, setReference] = useState(lead.requirement_2 ?? "Scraping Manually");
-  const [isImportant, setIsImportant] = useState(lead.is_important);
-  const [postLink, setPostLink] = useState(lead.original_lead_link ?? "");
-
-  // Additional contacts
-  const initialExtras = useMemo(() => {
-    const extras: string[] = [];
-    if (lead.customer_number_2) extras.push(lead.customer_number_2);
-    if (Array.isArray(lead.extra_numbers)) {
-      for (const n of lead.extra_numbers) {
-        if (n && n !== lead.customer_number_2) extras.push(n);
-      }
-    }
-    return extras;
-  }, [lead]);
-  const [extraPhones, setExtraPhones] = useState<string[]>(initialExtras);
-
-  // Images
-  const [existingImages, setExistingImages] = useState<string[]>(
-    Array.isArray(lead.images) ? lead.images : [],
+  const [extraNumbers, setExtraNumbers] = useState<string[]>(
+    Array.isArray(lead.extra_numbers) ? lead.extra_numbers : []
   );
-  const [newFiles, setNewFiles] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>(
+    Array.isArray(lead.images) ? (lead.images as string[]) : []
+  );
+  const [files, setFiles] = useState<File[]>([]);
+  const [service, setService] = useState(lead.service ?? "");
+  const [passItTo, setPassItTo] = useState(lead.pass_it_to ?? "");
+  const [mainArea, setMainArea] = useState(lead.main_area ?? "");
+  const [subArea, setSubArea] = useState(lead.sub_area ?? "");
+  const [context, setContext] = useState(lead.context ?? "");
+  const [postLink, setPostLink] = useState(lead.original_lead_link ?? "");
   const [saving, setSaving] = useState(false);
 
   function addFiles(picked: FileList | null) {
     if (!picked) return;
     const incoming = Array.from(picked);
     const valid: File[] = [];
-    for (const f of incoming) {
-      if (!f.type.startsWith("image/")) {
-        toast.error(`${f.name} is not an image`);
+    const maxBytes = 10 * 1024 * 1024;
+    for (const file of incoming) {
+      if (!file.type.startsWith("image/")) {
+        toast.error(`${file.name} is not an image`);
         continue;
       }
-      if (f.size > MAX_BYTES) {
-        toast.error(`${f.name} is larger than 10 MB`);
+      if (file.size > maxBytes) {
+        toast.error(`${file.name} is larger than 10 MB`);
         continue;
       }
-      valid.push(f);
+      valid.push(file);
     }
-    setNewFiles((prev) => {
-      const merged = [...prev, ...valid];
-      if (merged.length + existingImages.length > MAX_IMAGES) {
-        toast.error(`Maximum ${MAX_IMAGES} images`);
-        return merged.slice(0, MAX_IMAGES - existingImages.length);
+    const combinedLength = existingImages.length + files.length + valid.length;
+    if (combinedLength > 20) {
+      toast.error("Maximum 20 images limit reached");
+      const allowedCount = 20 - (existingImages.length + files.length);
+      if (allowedCount > 0) {
+        setFiles((prev) => [...prev, ...valid.slice(0, allowedCount)]);
       }
-      return merged;
-    });
+    } else {
+      setFiles((prev) => [...prev, ...valid]);
+    }
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  async function uploadNewImages(): Promise<string[]> {
-    if (newFiles.length === 0 || !auth.user?.id) return [];
-    const urls: string[] = [];
-    for (const f of newFiles) {
-      const ext = f.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${auth.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, f, { cacheControl: "3600", upsert: false, contentType: f.type });
-      if (error) throw new Error(`Upload failed: ${error.message}`);
-      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      urls.push(pub.publicUrl);
+  function handlePaste(event: React.ClipboardEvent) {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
     }
-    return urls;
+    if (imageFiles.length === 0) return;
+    event.preventDefault();
+    const dt = new DataTransfer();
+    imageFiles.forEach((file) => dt.items.add(file));
+    addFiles(dt.files);
+    toast.success(`Pasted ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}`);
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
+    if (!isAdmin && lead.cs_status !== "new") {
+      toast.error("Only pending leads can be edited.");
+      return;
+    }
     if (!name.trim() || !number.trim()) {
       toast.error("Name and number are required");
       return;
     }
+    if (!passItTo.trim()) {
+      toast.error("Pass it to is required");
+      return;
+    }
     setSaving(true);
     try {
-      const uploadedUrls = await uploadNewImages();
-      const allImages = [...existingImages, ...uploadedUrls];
+      const newUploadedUrls = files.length > 0 && auth.user?.id
+        ? await uploadLeadImages({ files, userId: auth.user.id, supabase })
+        : [];
+      const finalImages = [...existingImages, ...newUploadedUrls];
 
-      const cleanedExtras = extraPhones
+      const cleanedExtras = extraNumbers
         .map((p) => p.trim())
         .filter((p) => p.length > 0)
         .map((p) => formatPhone(p) || p);
@@ -689,18 +722,16 @@ function ForwardedLeadForm({
         .from("qualified_leads")
         .update({
           customer_name: name.trim(),
-          customer_number: number.trim(),
+          customer_number: formatPhone(number.trim()) || number.trim(),
           customer_number_2: cleanedExtras[0] ?? null,
           extra_numbers: cleanedExtras,
+          images: finalImages,
           service: service.trim() || null,
-          main_area: area.trim() || null,
-          sub_area: area.trim() || null,
+          pass_it_to: passItTo.trim() || null,
+          main_area: mainArea.trim() || null,
+          sub_area: subArea.trim() || null,
           context: context.trim() || null,
-          post_text: exactText.trim() || null,
-          requirement_2: reference.trim() || null,
           original_lead_link: postLink.trim() || null,
-          is_important: isImportant,
-          images: allImages,
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
@@ -714,207 +745,176 @@ function ForwardedLeadForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} onPaste={handlePaste} className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Customer Name */}
-        <div>
-          <Label className="mb-1.5 block">
-            Customer name <span className="text-destructive">*</span>
-          </Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required />
-        </div>
-        {/* Customer Number */}
-        <div>
-          <Label className="mb-1.5 block">
-            Customer number <span className="text-destructive">*</span>
-          </Label>
+        <Field label="Customer Name" required>
+          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+        </Field>
+        <Field label="Customer Number" required>
           <Input
             value={number}
-            onChange={(e) => setNumber(e.target.value)}
+            onChange={(e) => setNumber(formatPhoneInput(e.target.value))}
             maxLength={40}
             inputMode="tel"
-            required
           />
-        </div>
-        {/* Area */}
-        <div>
-          <Label className="mb-1.5 block">Area</Label>
-          <Input value={area} onChange={(e) => setArea(e.target.value)} maxLength={160} placeholder="e.g. Phoenix, AZ" />
-        </div>
-        {/* Service */}
-        <div>
-          <Label className="mb-1.5 block">Service</Label>
-          <Input
-            value={service}
-            onChange={(e) => setService(e.target.value)}
-            placeholder="e.g. Plumbing"
-            maxLength={120}
-          />
-        </div>
-        {/* Reference */}
-        <div>
-          <Label className="mb-1.5 block">Reference</Label>
-          <Select value={reference} onValueChange={(val) => setReference(val)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select reference" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Scraping Manually">Scraping Manually</SelectItem>
-              <SelectItem value="Listing">Listing</SelectItem>
-              <SelectItem value="Posting">Posting</SelectItem>
-              <SelectItem value="FB">Facebook (FB)</SelectItem>
-              <SelectItem value="SEO">SEO</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {/* Original Post Link */}
-        <div>
-          <Label className="mb-1.5 block">Original post link</Label>
-          <Input
-            value={postLink}
-            onChange={(e) => setPostLink(e.target.value)}
-            placeholder="https://..."
-          />
-        </div>
-        {/* Exact Customer Text */}
-        <div className="col-span-1 md:col-span-2">
-          <Label className="mb-1.5 block">Exact Customer Text</Label>
-          <Input
-            value={exactText}
-            onChange={(e) => setExactText(e.target.value)}
-            placeholder="Exact text or request from customer"
-            maxLength={500}
-          />
-        </div>
-        {/* Context */}
-        <div className="col-span-1 md:col-span-2">
-          <Label className="mb-1.5 block">Context / Conversation</Label>
-          <Textarea
-            value={context}
-            onChange={(e) => setContext(e.target.value)}
-            rows={3}
-            placeholder="Enter context or conversation notes..."
-            maxLength={2000}
-          />
-        </div>
+        </Field>
 
-        {/* Additional Contacts */}
-        <div className="col-span-1 md:col-span-2">
-          <Label className="mb-1.5 block">Additional Contacts</Label>
+        {/* Additional Numbers (Optional, Max 5) */}
+        <div className="col-span-1 md:col-span-2 space-y-2.5">
+          <Label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Additional Numbers (Optional, Max 5)
+          </Label>
           <div className="space-y-2">
-            {extraPhones.map((val, idx) => (
-              <ExtraPhoneRow
-                key={idx}
-                index={idx}
-                value={val}
-                onChange={(next) =>
-                  setExtraPhones((prev) => prev.map((p, i) => (i === idx ? next : p)))
-                }
-                onRemove={() => setExtraPhones((prev) => prev.filter((_, i) => i !== idx))}
-              />
+            {extraNumbers.map((num, idx) => (
+              <div key={idx} className="flex gap-2 items-center">
+                <Input
+                  value={num}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setExtraNumbers((prev) => prev.map((n, i) => (i === idx ? formatPhoneInput(val) : n)));
+                  }}
+                  maxLength={40}
+                  placeholder={`Additional number ${idx + 1}`}
+                  inputMode="tel"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => {
+                    setExtraNumbers((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 mt-2"
-              onClick={() => setExtraPhones((prev) => [...prev, ""])}
-              disabled={extraPhones.length >= 5}
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              {extraPhones.length >= 5 ? "Limit reached (Max 5)" : "Add Additional Contact"}
-            </Button>
+            {extraNumbers.length < 5 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setExtraNumbers((prev) => [...prev, ""])}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add another number
+              </Button>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Mark as Important */}
-      <div className="flex items-center gap-2 p-3 rounded-md border border-warning/40 bg-warning/5">
-        <Checkbox
-          id="edit-important"
-          checked={isImportant}
-          onCheckedChange={(v) => setIsImportant(v === true)}
-        />
-        <Label htmlFor="edit-important" className="flex items-center gap-1.5 cursor-pointer text-sm">
-          <Star
-            className={cn(
-              "h-3.5 w-3.5",
-              isImportant ? "fill-warning text-warning" : "text-muted-foreground",
-            )}
+        <Field label="Service">
+          <Input value={service} onChange={(e) => setService(e.target.value)} maxLength={120} />
+        </Field>
+        <Field label="Pass It To" required>
+          <Input
+            value={passItTo}
+            onChange={(e) => setPassItTo(e.target.value)}
+            maxLength={120}
           />
-          Mark as important — pin to top of CS pipeline
-        </Label>
+        </Field>
+        <Field label="Main Area">
+          <Input value={mainArea} onChange={(e) => setMainArea(e.target.value)} maxLength={160} />
+        </Field>
+        <Field label="Sub Area">
+          <Input value={subArea} onChange={(e) => setSubArea(e.target.value)} maxLength={160} />
+        </Field>
       </div>
 
-      {/* Attachments */}
-      <div>
-        <Label className="mb-1.5 block">
-          Attachments{" "}
-          <span className="text-xs text-muted-foreground font-normal">
-            (up to {MAX_IMAGES} images, 10 MB each)
-          </span>
-        </Label>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => addFiles(e.target.files)}
+      <Field label="Context">
+        <Textarea value={context} onChange={(e) => setContext(e.target.value)} rows={3} />
+      </Field>
+
+      <Field label="Original Post Link">
+        <Input
+          value={postLink}
+          onChange={(e) => setPostLink(e.target.value)}
+          placeholder="https://..."
         />
-        <div className="flex flex-wrap gap-3 items-start">
-          {/* Existing images */}
-          {existingImages.map((url) => (
-            <div
-              key={url}
-              className="relative h-20 w-20 rounded-md overflow-hidden border border-border bg-muted"
-            >
-              <img src={url} alt="Existing attachment" className="h-full w-full object-cover" />
-              <button
-                type="button"
-                onClick={() => setExistingImages((prev) => prev.filter((u) => u !== url))}
-                className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+      </Field>
+
+      {/* Attachments Section */}
+      <Field label="Attachments (Optional, Max 20)">
+        <div className="space-y-3">
+          <div className="text-[11px] text-muted-foreground">
+            Up to 20 images total. Paste with Ctrl/Cmd+V is supported.
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => addFiles(e.target.files)}
+          />
+          <div className="flex flex-wrap gap-3 items-start">
+            {/* Existing Images from DB */}
+            {existingImages.map((url, idx) => (
+              <div
+                key={`existing-${idx}`}
+                className="relative h-20 w-20 rounded-md overflow-hidden border border-border bg-muted"
               >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
-          {/* New files */}
-          {newFiles.map((f, idx) => (
-            <div
-              key={`${f.name}-${idx}`}
-              className="relative h-20 w-20 rounded-md overflow-hidden border border-border bg-muted"
-            >
-              <img src={URL.createObjectURL(f)} alt="" className="h-full w-full object-cover" />
-              <button
-                type="button"
-                onClick={() => setNewFiles((prev) => prev.filter((_, i) => i !== idx))}
-                className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
-          {existingImages.length + newFiles.length < MAX_IMAGES && (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="h-20 w-20 rounded-md border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors grid place-items-center text-muted-foreground hover:text-primary"
-            >
-              <div className="flex flex-col items-center gap-1 text-[11px]">
-                <ImagePlus className="h-4 w-4" />
-                Add
+                <img
+                  src={url}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                  className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </div>
-            </button>
-          )}
+            ))}
+            {/* New Files */}
+            {files.map((file, idx) => (
+              <div
+                key={`new-${idx}`}
+                className="relative h-20 w-20 rounded-md overflow-hidden border border-border bg-muted"
+              >
+                <img
+                  src={URL.createObjectURL(file)}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiles((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                  className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            {existingImages.length + files.length < 20 && (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="h-20 w-20 rounded-md border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors grid place-items-center text-muted-foreground hover:text-primary"
+              >
+                <div className="flex flex-col items-center gap-1 text-[11px]">
+                  <ImagePlus className="h-4 w-4" />
+                  Add
+                </div>
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      </Field>
 
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
         <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || !passItTo.trim()}>
           {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
           Save changes
         </Button>
@@ -928,6 +928,11 @@ async function deleteForwardedLead(
   auth: ReturnType<typeof useAuth>,
   qc: ReturnType<typeof useQueryClient>,
 ) {
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
+  if (!isAdmin && lead.cs_status !== "new") {
+    toast.error("Only pending leads can be deleted.");
+    return;
+  }
   if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`)) return;
   try {
     const { error } = await supabase.from("qualified_leads").delete().eq("id", lead.id);
