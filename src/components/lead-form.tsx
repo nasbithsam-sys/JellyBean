@@ -254,6 +254,10 @@ export function LeadForm({
       toast.error("Reference is required");
       return;
     }
+    if (hasDuplicate) {
+      toast.error("Duplicate phone number detected in the last 72 hours.");
+      return;
+    }
 
     await onSubmit({
       customerName: customerName.trim(),
