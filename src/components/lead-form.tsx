@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Loader2, Star, Upload, X, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
-import { normalizePhone } from "@/lib/crm-lite";
+import { formatPhone, normalizePhone } from "@/lib/crm-lite";
+import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
 
 const BUCKET = "lead-attachments";
 const MAX_IMAGES = 20;
