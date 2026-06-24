@@ -514,7 +514,7 @@ function resolveInitialReference(mode: LeadReferenceMode, provided?: string) {
   if (provided?.trim()) return provided;
   if (mode === "manual-dropdown") return "ND";
   if (mode === "auto-scraping") return "Scraping";
-  if (mode === "auto-fb") return "FB";
+  if (mode === "auto-fb") return "Had a conversation on Fb";
   return "";
 }
 
