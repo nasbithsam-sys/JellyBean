@@ -129,19 +129,13 @@ export function LeadForm({
   const [files, setFiles] = useState<File[]>([]);
 
   const checkDuplicate = useServerFn(checkDuplicatePhone);
-  const allPhones = useMemo(
-    () => [customerNumber, ...extraNumbers].map((p) => p ?? ""),
+  const phoneDigits = useMemo(
+    () =>
+      [customerNumber, ...extraNumbers]
+        .map((p) => normalizePhone(p ?? ""))
+        .filter((d) => d.length >= 7),
     [customerNumber, extraNumbers],
   );
-  const duplicateQueries = allPhones.map((p) => {
-    const digits = normalizePhone(p);
-    return useQuery({
-      queryKey: ["lead-form-duplicate-phone", digits],
-      enabled: digits.length >= 7,
-      queryFn: () => checkDuplicate({ data: { phone: p } }),
-      staleTime: 15_000,
-    });
-  });
   type DupMatch = {
     id: string;
     customer_name: string;
@@ -149,11 +143,19 @@ export function LeadForm({
     customer_number_2: string | null;
     assigned_at: string;
   };
-  const duplicateMatches: DupMatch[] = duplicateQueries.flatMap(
-    (q) => (q.data?.matches ?? []) as DupMatch[],
-  );
+  const duplicateQuery = useQuery({
+    queryKey: ["lead-form-duplicate-phone", phoneDigits.join(",")],
+    enabled: phoneDigits.length > 0,
+    queryFn: async () => {
+      const results = await Promise.all(
+        phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } })),
+      );
+      return results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
+    },
+    staleTime: 15_000,
+  });
   const seenDup = new Set<string>();
-  const uniqueDuplicates = duplicateMatches.filter((m) => {
+  const uniqueDuplicates = (duplicateQuery.data ?? []).filter((m) => {
     if (seenDup.has(m.id)) return false;
     seenDup.add(m.id);
     return true;
