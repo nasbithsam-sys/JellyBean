@@ -188,23 +188,15 @@ export const checkDuplicatePhone = createServerFn({ method: "GET" })
     const target = normalizePhoneDigits(data.phone);
     if (target.length < 7) return { duplicate: false, matches: [] };
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: rolesData, error: rolesError } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId);
-    if (rolesError) throw new Error(rolesError.message);
-
-    const roles = (rolesData ?? []).map((row) => row.role as string);
-    const hasAllowedRole = roles.some((role): role is RawLeadRole =>
-      ALLOWED_RAW_LEAD_ROLES.includes(role as RawLeadRole),
-    );
-    if (!hasAllowedRole) throw new Error("Forbidden: raw leads access required");
-
+    // The RPC is SECURITY DEFINER and already enforces that the caller has a
+    // role row. Call it with the authenticated user's client so any signed-in
+    // user (submitter, facebook, seo, maturing, acc_handler, admin) can run
+    // the duplicate check from the lead form.
+    void context.userId;
     const duplicateSince = new Date(
       Date.now() - DUPLICATE_LOOKBACK_HOURS * 60 * 60 * 1000,
     ).toISOString();
-    const { data: rows, error } = await supabaseAdmin.rpc(
+    const { data: rows, error } = await context.supabase.rpc(
       "check_qualified_lead_phone_duplicates" as never,
       { _phone_digits: target, _since: duplicateSince } as never,
     );

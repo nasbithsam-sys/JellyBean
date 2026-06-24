@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Loader2, Star, Upload, X, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
-import { normalizePhone } from "@/lib/crm-lite";
+import { formatPhone, normalizePhone } from "@/lib/crm-lite";
+import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
 
 const BUCKET = "lead-attachments";
 const MAX_IMAGES = 20;
@@ -125,6 +128,40 @@ export function LeadForm({
   );
   const [files, setFiles] = useState<File[]>([]);
 
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const phoneDigits = useMemo(
+    () =>
+      [customerNumber, ...extraNumbers]
+        .map((p) => normalizePhone(p ?? ""))
+        .filter((d) => d.length >= 7),
+    [customerNumber, extraNumbers],
+  );
+  type DupMatch = {
+    id: string;
+    customer_name: string;
+    customer_number: string;
+    customer_number_2: string | null;
+    assigned_at: string;
+  };
+  const duplicateQuery = useQuery({
+    queryKey: ["lead-form-duplicate-phone", phoneDigits.join(",")],
+    enabled: phoneDigits.length > 0,
+    queryFn: async () => {
+      const results = await Promise.all(
+        phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } })),
+      );
+      return results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
+    },
+    staleTime: 15_000,
+  });
+  const seenDup = new Set<string>();
+  const uniqueDuplicates = (duplicateQuery.data ?? []).filter((m) => {
+    if (seenDup.has(m.id)) return false;
+    seenDup.add(m.id);
+    return true;
+  });
+  const hasDuplicate = uniqueDuplicates.length > 0;
+
   const isDirty =
     customerName !== (initialValues?.customerName ?? "") ||
     customerNumber !== (initialValues?.customerNumber ?? "") ||
@@ -215,6 +252,10 @@ export function LeadForm({
     }
     if (!reference.trim()) {
       toast.error("Reference is required");
+      return;
+    }
+    if (hasDuplicate) {
+      toast.error("Duplicate phone number detected in the last 72 hours.");
       return;
     }
 
@@ -423,6 +464,23 @@ export function LeadForm({
         </Field>
       ) : null}
 
+      {hasDuplicate ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-[12.5px]">
+          <div className="flex items-center gap-2 font-semibold text-destructive">
+            <AlertTriangle className="h-4 w-4" />
+            Duplicate phone number detected (last 72 hours)
+          </div>
+          <ul className="mt-2 space-y-1 text-foreground/80">
+            {uniqueDuplicates.slice(0, 5).map((m) => (
+              <li key={m.id}>
+                {m.customer_name} — {formatPhone(m.customer_number)}
+                {m.customer_number_2 ? ` / ${formatPhone(m.customer_number_2)}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
         <Button
           type="button"
@@ -435,7 +493,7 @@ export function LeadForm({
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting || hasDuplicate}>
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
