@@ -379,9 +379,8 @@ export function LeadForm({
             onChange={(e) => setReference(e.target.value)}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
-            <option value="Scraping Manually">Scraping Manually</option>
-            <option value="Listing">Listing</option>
-            <option value="Posting">Posting</option>
+            <option value="ND">ND</option>
+            <option value="Had a conversation on Nextdoor">Had a conversation on Nextdoor</option>
           </select>
         ) : referenceMode === "manual-text" ? (
           <Input value={reference} onChange={(e) => setReference(e.target.value)} maxLength={160} />
@@ -513,7 +512,7 @@ export function LeadForm({
 
 function resolveInitialReference(mode: LeadReferenceMode, provided?: string) {
   if (provided?.trim()) return provided;
-  if (mode === "manual-dropdown") return "Scraping Manually";
+  if (mode === "manual-dropdown") return "ND";
   if (mode === "auto-scraping") return "Scraping";
   if (mode === "auto-fb") return "FB";
   return "";
