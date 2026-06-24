@@ -128,6 +128,38 @@ export function LeadForm({
   );
   const [files, setFiles] = useState<File[]>([]);
 
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const allPhones = useMemo(
+    () => [customerNumber, ...extraNumbers].map((p) => p ?? ""),
+    [customerNumber, extraNumbers],
+  );
+  const duplicateQueries = allPhones.map((p) => {
+    const digits = normalizePhone(p);
+    return useQuery({
+      queryKey: ["lead-form-duplicate-phone", digits],
+      enabled: digits.length >= 7,
+      queryFn: () => checkDuplicate({ data: { phone: p } }),
+      staleTime: 15_000,
+    });
+  });
+  type DupMatch = {
+    id: string;
+    customer_name: string;
+    customer_number: string;
+    customer_number_2: string | null;
+    assigned_at: string;
+  };
+  const duplicateMatches: DupMatch[] = duplicateQueries.flatMap(
+    (q) => (q.data?.matches ?? []) as DupMatch[],
+  );
+  const seenDup = new Set<string>();
+  const uniqueDuplicates = duplicateMatches.filter((m) => {
+    if (seenDup.has(m.id)) return false;
+    seenDup.add(m.id);
+    return true;
+  });
+  const hasDuplicate = uniqueDuplicates.length > 0;
+
   const isDirty =
     customerName !== (initialValues?.customerName ?? "") ||
     customerNumber !== (initialValues?.customerNumber ?? "") ||
