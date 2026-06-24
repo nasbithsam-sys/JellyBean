@@ -1863,7 +1863,17 @@ function LeadCard({
         <div className="hidden">{initials || "·"}</div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-[13.5px] font-semibold truncate">{lead.customer_name}</h3>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h3 className="text-[13.5px] font-semibold truncate">{lead.customer_name}</h3>
+              <button
+                type="button"
+                title="Copy name"
+                onClick={(e) => { e.stopPropagation(); copyToClipboard(lead.customer_name, "Name copied"); }}
+                className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <Copy className="h-3 w-3" />
+              </button>
+            </div>
             <StatusBadge status={status} />
           </div>
           <div className="mt-1 flex flex-wrap gap-2">
@@ -1878,11 +1888,19 @@ function LeadCard({
       </div>
 
       {lead.sub_area && (
-        <div className="mt-3 flex items-start gap-1.5 text-[12px]">
-          <MapPin className="h-3 w-3 mt-0.5 text-muted-foreground shrink-0" />
-          <div className="min-w-0">
+        <div className="mt-3 flex items-center gap-1.5 text-[12px]">
+          <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+          <div className="min-w-0 flex items-center gap-1.5">
             <span className="text-muted-foreground">Area: </span>
             <span className="text-foreground/90 font-medium">{lead.sub_area}</span>
+            <button
+              type="button"
+              title="Copy area"
+              onClick={(e) => { e.stopPropagation(); copyToClipboard(lead.sub_area!, "Area copied"); }}
+              className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <Copy className="h-3 w-3" />
+            </button>
           </div>
         </div>
       )}

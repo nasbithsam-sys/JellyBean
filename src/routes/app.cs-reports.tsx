@@ -76,8 +76,8 @@ type CsStats = {
   name: string;
   email: string;
   total: number;
-  still_new: number;
-  need_contact: number; // new + need_follow_up
+  still_new: number;     // cs_status === "new" — never contacted at all
+  need_contact: number;  // cs_status === "need_follow_up" — needs a callback
 };
 
 function Page() {
@@ -145,7 +145,7 @@ function Inner() {
       const userLeads = leads.filter((l) => l.assigned_to === u.user_id);
       const stillNew = userLeads.filter((l) => l.cs_status === NEEDS_CONTACT_STATUS).length;
       const needContact = userLeads.filter(
-        (l) => l.cs_status === NEEDS_CONTACT_STATUS || l.cs_status === NEEDS_FOLLOWUP_STATUS,
+        (l) => l.cs_status === NEEDS_FOLLOWUP_STATUS,
       ).length;
 
       return {
@@ -178,7 +178,7 @@ function Inner() {
   function exportCsv() {
     downloadCsv(
       "cs-reports.csv",
-      ["CS Agent", "Email", "Total Assigned", "Still New", "Need Contact"],
+      ["CS Agent", "Email", "Total Assigned", "Still New (never contacted)", "Need Follow-Up"],
       stats.map((s) => [s.name, s.email, s.total, s.still_new, s.need_contact]),
     );
   }
@@ -269,15 +269,17 @@ function Inner() {
         />
         <SummaryCard
           icon={<PhoneOff className="h-4 w-4" />}
-          label="Still new (uncontacted)"
+          label="Still New"
           value={totals.still_new}
           color="text-amber-500"
+          tooltip="Leads still at 'New' status — CS has never contacted these customers yet."
         />
         <SummaryCard
           icon={<UserCheck className="h-4 w-4" />}
-          label="Need contact / follow-up"
+          label="Need Follow-Up"
           value={totals.need_contact}
           color="text-orange-500"
+          tooltip="Leads marked 'Need Follow-Up' — CS contacted them but needs to call back."
         />
       </div>
 
@@ -293,8 +295,12 @@ function Inner() {
               <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-2.5 font-medium">CS Agent</th>
                 <th className="px-4 py-2.5 font-medium text-right">Total Assigned</th>
-                <th className="px-4 py-2.5 font-medium text-right">Still New</th>
-                <th className="px-4 py-2.5 font-medium text-right">Need Contact</th>
+                <th className="px-4 py-2.5 font-medium text-right">
+                  <span title="Leads still at 'New' status — never been contacted at all">Still New ⓘ</span>
+                </th>
+                <th className="px-4 py-2.5 font-medium text-right">
+                  <span title="Leads marked 'Need Follow-Up' — already contacted but need a callback">Need Follow-Up ⓘ</span>
+                </th>
                 <th className="px-4 py-2.5 font-medium text-right">Contacted %</th>
               </tr>
             </thead>
@@ -409,17 +415,20 @@ function SummaryCard({
   label,
   value,
   color,
+  tooltip,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   color: string;
+  tooltip?: string;
 }) {
   return (
-    <div className="bg-card border rounded-lg p-4 flex flex-col gap-2">
+    <div className="bg-card border rounded-lg p-4 flex flex-col gap-2" title={tooltip}>
       <div className={cn("flex items-center gap-2 text-xs uppercase tracking-wide font-medium text-muted-foreground")}>
         <span className={color}>{icon}</span>
         {label}
+        {tooltip && <span className="ml-auto text-[11px] normal-case font-normal text-muted-foreground/60 cursor-help">ⓘ</span>}
       </div>
       <div className="text-3xl font-bold tabular-nums">{value}</div>
     </div>
