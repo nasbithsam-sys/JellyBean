@@ -37,6 +37,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "https://storage.googleapis.com/gpt-engineer-file-uploads/XI93seEGA6eScdxwF1KlwHiSA6d2/social-images/social-1781369293890-leadgrid_crm_logo.webp",
       },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/74b77110-0ba3-49e9-9aa1-d64860805e09/id-preview-ad4846cd--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1782568319249.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/74b77110-0ba3-49e9-9aa1-d64860805e09/id-preview-ad4846cd--1f7cbdb1-066d-44c0-817c-384a452b3913.lovable.app-1782568319249.png" },
     ],
     links: [
       { rel: "preconnect", href: "https://rsms.me/" },
