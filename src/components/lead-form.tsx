@@ -41,6 +41,7 @@ type LeadFormInitialValues = {
   reference?: string;
   isImportant?: boolean;
   extraNumbers?: string[];
+  id?: string;
 };
 
 export function formatPhoneInput(value: string): string {
@@ -155,6 +156,9 @@ export function LeadForm({
     staleTime: 15_000,
   });
   const seenDup = new Set<string>();
+  if (initialValues?.id) {
+    seenDup.add(initialValues.id);
+  }
   const uniqueDuplicates = (duplicateQuery.data ?? []).filter((m) => {
     if (seenDup.has(m.id)) return false;
     seenDup.add(m.id);

@@ -589,6 +589,7 @@ function UnifiedForwardedLeadForm({
       areaRequired
       referenceMode={referenceMode}
       initialValues={{
+        id: lead.id,
         customerName: lead.customer_name,
         customerNumber: lead.customer_number,
         extraNumbers: lead.extra_numbers ?? [],
