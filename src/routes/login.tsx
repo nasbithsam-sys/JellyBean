@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useClockSkew } from "@/hooks/use-clock-skew";
 
 type LoginProfile = {
   is_active: boolean;
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const skewSeconds = useClockSkew();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -146,6 +148,23 @@ function LoginPage() {
           </div>
 
           <div className="max-w-md mx-auto">
+            {skewSeconds !== null && (
+              <div className="mb-6 p-4 rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-200 text-sm shadow-sm flex flex-col gap-2 animate-fade-in">
+                <div className="flex items-center gap-2 font-semibold">
+                  <span className="text-base">⚠️</span>
+                  <span>System Clock Out of Sync</span>
+                </div>
+                <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Your computer's clock is out of sync with our servers by about{" "}
+                  <strong>{Math.round(Math.abs(skewSeconds) / 60)} minutes</strong>.
+                  This causes security validation checks to fail, leading to rapid logouts (HTTP 429 Too Many Requests).
+                </p>
+                <p className="text-xs font-medium mt-1">
+                  <strong>To fix this:</strong> Open your device's <strong>Date & Time settings</strong> and turn on <strong>"Set time automatically"</strong>, then refresh this page.
+                </p>
+              </div>
+            )}
+
             <div className="mb-8">
               <p className="text-sm font-medium text-primary">Welcome back</p>
               <h1 className="mt-2 text-[30px] leading-tight font-semibold tracking-[-0.02em]">

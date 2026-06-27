@@ -17,6 +17,7 @@ import {
 import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { useClockSkew } from "@/hooks/use-clock-skew";
 
 type Item = {
   to: string;
@@ -98,6 +99,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   const path = useRouterState({ select: (s) => s.location.pathname });
   const items = itemsForRole(auth.primaryRole);
   const displayName = auth.profile?.full_name || auth.user?.email || "-";
+  const skewSeconds = useClockSkew();
   useRealtimeSync(auth.primaryRole);
 
   return (
@@ -185,6 +187,24 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         </div>
       </aside>
       <main className="flex-1 min-w-0 h-screen overflow-y-auto overflow-x-hidden bg-background">
+        {skewSeconds !== null && (
+          <div className="m-4 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-200 text-sm shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 font-semibold">
+                <span className="text-base">⚠️</span>
+                <span>System Clock Out of Sync</span>
+              </div>
+              <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+                Your computer's clock is out of sync with our servers by about{" "}
+                <strong>{Math.round(Math.abs(skewSeconds) / 60)} minutes</strong>.
+                This causes security checks to fail and will trigger automatic logout (HTTP 429 Too Many Requests).
+              </p>
+            </div>
+            <div className="shrink-0 text-xs font-semibold bg-amber-100 dark:bg-amber-900/40 px-3 py-1.5 rounded-lg text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
+              Turn on "Set time automatically" in Date & Time Settings
+            </div>
+          </div>
+        )}
         {children}
       </main>
     </div>
