@@ -25,6 +25,8 @@ type BrowserProfile = {
   longitude: number | null;
   last_launched_at: string | null;
   launch_history: Json;
+  notes: string | null;
+  is_active: boolean;
 };
 
 type LeafletMapComp = ComponentType<{
@@ -35,7 +37,7 @@ type LeafletMapComp = ComponentType<{
   onMapClick?: (lat: number, lng: number) => void;
 }>;
 
-type MapRadiusMode = "daily" | "all";
+type MapRadiusMode = "daily" | "all" | "inactive" | "inactive_daily";
 
 function Page() {
   const auth = useAuth();
@@ -75,7 +77,7 @@ function Inner() {
   };
 
   const changeRadiusMode = (next: string) => {
-    const mode = next === "all" ? "all" : "daily";
+    const mode = next as MapRadiusMode;
     setRadiusMode(mode);
     localStorage.setItem("map.radiusMode", mode);
   };
@@ -86,7 +88,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("incogniton_profiles")
         .select(
-          "id, profile_name, account_area, latitude, longitude, last_launched_at, launch_history",
+          "id, profile_name, account_area, latitude, longitude, last_launched_at, launch_history, notes, is_active",
         )
         .order("last_launched_at", { ascending: false, nullsFirst: false })
         .limit(1000);
@@ -115,6 +117,8 @@ function Inner() {
           last_launched_at: profile.last_launched_at,
           launched_today: todayLaunchCount > 0,
           today_launch_count: todayLaunchCount,
+          notes: profile.notes,
+          is_active: profile.is_active,
         };
       });
   }, [profiles.data, todayKey]);
@@ -164,7 +168,13 @@ function Inner() {
                   Daily launches
                 </TabsTrigger>
                 <TabsTrigger value="all" className="h-7 text-[11.5px]">
-                  All added accounts
+                  All Accounts Added
+                </TabsTrigger>
+                <TabsTrigger value="inactive" className="h-7 text-[11.5px]">
+                  Inactive
+                </TabsTrigger>
+                <TabsTrigger value="inactive_daily" className="h-7 text-[11.5px]">
+                  Inactive Daily Launches
                 </TabsTrigger>
               </TabsList>
             </Tabs>

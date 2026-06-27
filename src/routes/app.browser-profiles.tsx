@@ -69,6 +69,8 @@ type Profile = {
   longitude: number | null;
   account_area: string | null;
   launch_history: LaunchHistoryEntry[] | null;
+  notes: string | null;
+  is_active: boolean;
 };
 
 type SortDirection = "asc" | "desc";
@@ -175,6 +177,7 @@ function Inner() {
   const [importOpen, setImportOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [historyFor, setHistoryFor] = useState<Profile | null>(null);
+  const [noteFor, setNoteFor] = useState<Profile | null>(null);
   const [howToOpen, setHowToOpen] = useState(false);
   const [selectedProfileIds, setSelectedProfileIds] = useState<Set<string>>(new Set());
 
@@ -184,7 +187,7 @@ function Inner() {
       const { data, error } = await supabase
         .from("incogniton_profiles")
         .select(
-          "id, profile_name, incogniton_profile_id, group_name, account_area, latitude, longitude, last_launched_at, launched_by_name, launched_by_email, created_at, launch_history",
+          "id, profile_name, incogniton_profile_id, group_name, account_area, latitude, longitude, last_launched_at, launched_by_name, launched_by_email, created_at, launch_history, notes, is_active",
         )
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -321,6 +324,22 @@ function Inner() {
   function statusOf(p: Profile) {
     if (!p.last_launched_at) return "Idle";
     return Date.now() - new Date(p.last_launched_at).getTime() < 30 * 60 * 1000 ? "Active" : "Idle";
+  }
+
+  async function toggleActive(p: Profile) {
+    const nextState = !p.is_active;
+    qc.setQueryData(["incog_profiles"], (old: Profile[] | undefined) => {
+      if (!old) return old;
+      return old.map(profile => profile.id === p.id ? { ...profile, is_active: nextState } : profile);
+    });
+    
+    const { error } = await supabase.from("incogniton_profiles").update({ is_active: nextState }).eq("id", p.id);
+    if (error) {
+      toast.error(error.message);
+      qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+    } else {
+      toast.success(nextState ? "Profile set to Active" : "Profile set to Inactive");
+    }
   }
 
   function dateKey(value: string) {
@@ -471,20 +490,22 @@ function Inner() {
                   onClick={() => toggleProfileSort("last_launched")}
                 />
               </th>
+              <th>Status</th>
+              <th>Notes</th>
               <th className="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {profiles.isLoading && !profiles.data && (
               <tr>
-                <td colSpan={9} className="text-center py-6 text-muted-foreground">
+                <td colSpan={11} className="text-center py-6 text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             )}
             {!profiles.isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center py-10 text-muted-foreground">
+                <td colSpan={11} className="text-center py-10 text-muted-foreground">
                   <Globe className="h-5 w-5 inline mr-2 opacity-50" />
                   No browser profiles added yet.
                 </td>
@@ -557,6 +578,17 @@ function Inner() {
                       </span>
                     )}
                   </td>
+                  <td>
+                    <Button variant="outline" size="sm" onClick={() => toggleActive(p)} className={cn("text-[11px] h-7 px-2", p.is_active ? "text-success border-success/30" : "text-muted-foreground border-border")}>
+                      {p.is_active ? "Active" : "Inactive"}
+                    </Button>
+                  </td>
+                  <td className="max-w-[120px]">
+                    <Button variant="ghost" size="sm" onClick={() => setNoteFor(p)} className="h-7 px-2 text-[11px]">
+                      {p.notes ? "Edit Note" : "Add Note"}
+                    </Button>
+                    {p.notes && <div className="text-[10px] text-muted-foreground truncate mt-0.5" title={p.notes}>{p.notes}</div>}
+                  </td>
                   <td className="text-right space-x-1.5 whitespace-nowrap">
                     <Button
                       size="sm"
@@ -602,6 +634,41 @@ function Inner() {
         groups={groups}
         onClose={() => setExportOpen(false)}
       />
+      {noteFor && (
+        <Dialog open onOpenChange={(o) => !o && setNoteFor(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Note · {noteFor.profile_name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <textarea
+                className="w-full min-h-[100px] text-sm p-3 rounded-md border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                defaultValue={noteFor.notes || ""}
+                id="note-input"
+                placeholder="Type your note here..."
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setNoteFor(null)}>Cancel</Button>
+                <Button onClick={async () => {
+                  const val = (document.getElementById("note-input") as HTMLTextAreaElement).value.trim();
+                  qc.setQueryData(["incog_profiles"], (old: Profile[] | undefined) => {
+                    if (!old) return old;
+                    return old.map(profile => profile.id === noteFor.id ? { ...profile, notes: val } : profile);
+                  });
+                  setNoteFor(null);
+                  const { error } = await supabase.from("incogniton_profiles").update({ notes: val }).eq("id", noteFor.id);
+                  if (error) {
+                    toast.error(error.message);
+                    qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+                  } else {
+                    toast.success("Note saved");
+                  }
+                }}>Save Note</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
       {historyFor && (
         <Dialog open onOpenChange={(o) => !o && setHistoryFor(null)}>
           <DialogContent className="max-w-md" aria-describedby={undefined}>
