@@ -92,39 +92,24 @@ function Inner() {
         };
       });
 
-      const countRaw = (start: string, end: string, category?: "forwarded" | "wrong") => {
-        let q = supabase
-          .from("raw_lead_cache")
-          .select("id", { count: "exact", head: true })
-          .gte("captured_at", start)
-          .lt("captured_at", end);
-        if (category) q = q.eq("category", category);
-        return q;
-      };
-      const countQualified = (start: string, end: string) =>
-        supabase
-          .from("qualified_leads")
-          .select("id", { count: "exact", head: true })
-          .gte("assigned_at", start)
-          .lt("assigned_at", end);
+      const { data, error } = await supabase.rpc("get_analytics_daily_stats", {
+        _start_date: range.since,
+        _end_date: range.until,
+      });
 
-      const results = await Promise.all(
-        days.flatMap((d) => [
-          countRaw(d.start, d.end),
-          countRaw(d.start, d.end, "forwarded"),
-          countRaw(d.start, d.end, "wrong"),
-          countQualified(d.start, d.end),
-        ]),
-      );
+      if (error) throw error;
 
-      results.forEach((result, index) => {
-        if (result.error) throw result.error;
-        const day = days[Math.floor(index / 4)];
-        const metric = index % 4;
-        if (metric === 0) day.captured = result.count ?? 0;
-        if (metric === 1) day.forwarded = result.count ?? 0;
-        if (metric === 2) day.wrong = result.count ?? 0;
-        if (metric === 3) day.sentToCS = result.count ?? 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const statsMap = new Map((data ?? []).map((row: any) => [row.day_key, row]));
+
+      days.forEach((day) => {
+        const dbRow = statsMap.get(day.key);
+        if (dbRow) {
+          day.captured = Number(dbRow.total_captured);
+          day.forwarded = Number(dbRow.forwarded_count);
+          day.wrong = Number(dbRow.wrong_count);
+          day.sentToCS = Number(dbRow.sent_to_cs_count);
+        }
       });
 
       const csResults = await Promise.all(

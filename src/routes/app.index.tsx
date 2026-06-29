@@ -82,58 +82,38 @@ function AdminDashboard() {
     queryKey: ["admin-dashboard-stats"],
     queryFn: async () => {
       const today = startOfDay(new Date()).toISOString();
-      const [rawNew, rawForwarded, rawNotFound, rawWrong, todayRaw, todayForwarded, ...csResults] =
-        await Promise.all([
-          supabase
-            .from("raw_lead_cache")
-            .select("id", { count: "exact", head: true })
-            .is("category", null),
-          supabase
-            .from("raw_lead_cache")
-            .select("id", { count: "exact", head: true })
-            .eq("category", "forwarded"),
-          supabase
-            .from("raw_lead_cache")
-            .select("id", { count: "exact", head: true })
-            .eq("category", "not_found"),
-          supabase
-            .from("raw_lead_cache")
-            .select("id", { count: "exact", head: true })
-            .eq("category", "wrong"),
-          supabase
-            .from("raw_lead_cache")
-            .select("id", { count: "exact", head: true })
-            .gte("captured_at", today),
-          supabase
-            .from("qualified_leads")
-            .select("id", { count: "exact", head: true })
-            .gte("assigned_at", today),
-          ...CS_STATUSES.map((status) =>
-            supabase
-              .from("qualified_leads")
-              .select("id", { count: "exact", head: true })
-              .eq("cs_status", status),
-          ),
-        ]);
+      const { data, error } = await supabase.rpc("get_admin_dashboard_stats", {
+        _today: today,
+      });
+      if (error) throw error;
 
+      // Cast the csCounts values from the database returned object
       const csCounts: Record<string, number> = {};
-      CS_STATUSES.forEach((status, index) => {
-        csCounts[status] = csResults[index]?.count ?? 0;
+      CS_STATUSES.forEach((status) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        csCounts[status] = Number((data as any)?.csCounts?.[status] ?? 0);
       });
 
       return {
         rawCounts: {
-          new: rawNew.count ?? 0,
-          forwarded: rawForwarded.count ?? 0,
-          notFound: rawNotFound.count ?? 0,
-          wrong: rawWrong.count ?? 0,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          new: Number((data as any)?.rawCounts?.new ?? 0),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          forwarded: Number((data as any)?.rawCounts?.forwarded ?? 0),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          notFound: Number((data as any)?.rawCounts?.notFound ?? 0),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          wrong: Number((data as any)?.rawCounts?.wrong ?? 0),
         },
         csCounts,
-        todayRaw: todayRaw.count ?? 0,
-        todayForwarded: todayForwarded.count ?? 0,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        todayRaw: Number((data as any)?.todayRaw ?? 0),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        todayForwarded: Number((data as any)?.todayForwarded ?? 0),
       };
     },
   });
+
 
   const tiles = [
     {
