@@ -149,8 +149,8 @@ function Inner() {
 
   return (
     <div className="grid lg:grid-cols-5 gap-4">
-      <div className="lg:col-span-3 glass-card p-5">
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+      <div className="lg:col-span-3 glass-card p-5 min-w-0">
+        <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between mb-4 gap-4">
           <div>
             <h3 className="text-sm font-semibold tracking-tight">
               {radiusMode === "all" ? "Added account radius" : "Daily profile coverage"}
@@ -161,14 +161,14 @@ function Inner() {
                 : "50-mile radius appears only for profiles launched today (PKT, resets at midnight PKT)."}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Tabs value={radiusMode} onValueChange={changeRadiusMode}>
-              <TabsList className="h-9">
+          <div className="flex flex-wrap items-center gap-3">
+            <Tabs value={radiusMode} onValueChange={changeRadiusMode} className="max-w-full overflow-x-auto pb-1 -mb-1">
+              <TabsList className="h-9 w-max flex-shrink-0">
                 <TabsTrigger value="daily" className="h-7 text-[11.5px]">
                   Daily launches
                 </TabsTrigger>
                 <TabsTrigger value="all" className="h-7 text-[11.5px]">
-                  All Accounts Added
+                  All Added Accounts
                 </TabsTrigger>
                 <TabsTrigger value="inactive" className="h-7 text-[11.5px]">
                   Inactive
@@ -178,21 +178,23 @@ function Inner() {
                 </TabsTrigger>
               </TabsList>
             </Tabs>
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-primary" />
-                Covered today
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-muted-foreground/60" />
-                Missing today
-              </span>
-            </div>
-            <div className="flex items-center gap-2 pl-3 border-l border-border">
-              <Label htmlFor="visuals" className="text-[12px] text-muted-foreground cursor-pointer">
-                Map visuals
-              </Label>
-              <Switch id="visuals" checked={visuals} onCheckedChange={toggle} />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground whitespace-nowrap">
+                <span className="inline-flex items-center gap-1.5 shrink-0">
+                  <span className="h-2 w-2 rounded-full bg-primary" />
+                  Covered today
+                </span>
+                <span className="inline-flex items-center gap-1.5 shrink-0">
+                  <span className="h-2 w-2 rounded-full bg-muted-foreground/60" />
+                  Missing today
+                </span>
+              </div>
+              <div className="flex items-center gap-2 pl-3 border-l border-border shrink-0">
+                <Label htmlFor="visuals" className="text-[12px] text-muted-foreground cursor-pointer whitespace-nowrap">
+                  Map visuals
+                </Label>
+                <Switch id="visuals" checked={visuals} onCheckedChange={toggle} />
+              </div>
             </div>
           </div>
         </div>
@@ -241,7 +243,7 @@ function Inner() {
         </p>
       </div>
 
-      <div className="lg:col-span-2 glass-card p-5">
+      <div className="lg:col-span-2 glass-card p-5 min-w-0">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div>
             <h3 className="text-sm font-semibold tracking-tight">Coverage by area</h3>

@@ -193,6 +193,8 @@ const PIPELINE_STATUSES = [
   "undeliver",
   "wrong_number",
   "wrong_lead",
+  "wrong_service",
+  "wrong_person",
   "already_got_someone",
   "service_provider_himself",
   "converted",

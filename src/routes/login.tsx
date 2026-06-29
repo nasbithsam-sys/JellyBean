@@ -80,7 +80,8 @@ function LoginPage() {
       }
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        toast.error(error.message);
+        const msg = error.message;
+        toast.error(msg && msg !== "{}" ? msg : "Invalid login credentials or server error");
         return;
       }
       const {
@@ -95,6 +96,10 @@ function LoginPage() {
         }
       }
       navigate({ to: "/app" });
+    } catch (err: any) {
+      console.error(err);
+      const msg = err?.message || String(err);
+      toast.error(msg === "{}" ? "An unexpected error occurred" : msg);
     } finally {
       setSubmitting(false);
     }

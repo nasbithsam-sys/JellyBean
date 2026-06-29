@@ -801,6 +801,8 @@ export const Constants = {
         "service_provider_himself",
         "need_follow_up",
         "wrong_lead",
+        "wrong_service",
+        "wrong_person",
       ],
       raw_lead_cancel_reason: [
         "not_a_lead",
