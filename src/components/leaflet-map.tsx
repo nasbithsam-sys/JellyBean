@@ -21,12 +21,14 @@ export type PlacedAccount = {
   last_launched_at: string | null;
   launched_today: boolean;
   today_launch_count: number;
+  notes: string | null;
+  is_active: boolean;
 };
 
 interface Props {
   placed: PlacedAccount[];
   visuals: boolean;
-  radiusMode: "daily" | "all";
+  radiusMode: "daily" | "all" | "inactive" | "inactive_daily";
   tempPin?: { lat: number; lng: number } | null;
   onMapClick?: (lat: number, lng: number) => void;
 }
@@ -46,15 +48,11 @@ export default function LeafletMap({ placed, visuals, radiusMode, tempPin, onMap
   const items: React.ReactNode[] = [];
 
   for (const account of placed) {
-    // In "daily" mode, hide both the circle AND the marker for accounts that
-    // have NOT been launched today. Resets at midnight (launched_today is
-    // computed from today's date).
-    if (radiusMode === "daily" && !account.launched_today) {
-      continue;
-    }
+    if (radiusMode === "daily" && !account.launched_today) continue;
+    if (radiusMode === "inactive" && account.is_active) continue;
+    if (radiusMode === "inactive_daily" && (account.is_active || !account.launched_today)) continue;
 
-    const showCircle =
-      visuals && (radiusMode === "all" || (radiusMode === "daily" && account.launched_today));
+    const showCircle = visuals;
 
     if (showCircle) {
       items.push(
@@ -141,6 +139,10 @@ function CoveragePopup({ account }: { account: PlacedAccount }) {
           <div className="text-slate-500">Launch count</div>
           <div className="font-medium tabular-nums">{account.today_launch_count}</div>
         </div>
+      </div>
+      <div className="mt-2 text-[11px]">
+        <div className="text-slate-500 mb-0.5">Note</div>
+        <div className="font-medium whitespace-pre-wrap">{account.notes || <span className="text-slate-400 italic font-normal">No note added</span>}</div>
       </div>
       {account.last_launched_at && (
         <div className="mt-2 text-[11px] text-slate-500">

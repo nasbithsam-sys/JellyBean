@@ -134,8 +134,10 @@ export type Database = {
           launched_by_name: string | null
           linked_lead_id: string | null
           longitude: number | null
+          notes: string | null
           platform: string | null
           profile_name: string
+          is_active: boolean
         }
         Insert: {
           account_area?: string | null
@@ -151,8 +153,10 @@ export type Database = {
           launched_by_name?: string | null
           linked_lead_id?: string | null
           longitude?: number | null
+          notes?: string | null
           platform?: string | null
           profile_name: string
+          is_active?: boolean
         }
         Update: {
           account_area?: string | null
@@ -168,8 +172,10 @@ export type Database = {
           launched_by_name?: string | null
           linked_lead_id?: string | null
           longitude?: number | null
+          notes?: string | null
           platform?: string | null
           profile_name?: string
+          is_active?: boolean
         }
         Relationships: [
           {
@@ -795,6 +801,8 @@ export const Constants = {
         "service_provider_himself",
         "need_follow_up",
         "wrong_lead",
+        "wrong_service",
+        "wrong_person",
       ],
       raw_lead_cancel_reason: [
         "not_a_lead",
