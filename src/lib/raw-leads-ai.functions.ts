@@ -312,26 +312,32 @@ export const rephraseLeadTemplateWithAi = createServerFn({ method: "POST" })
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret");
 
-    const defaultSystemPrompt = `You are a professional customer service assistant. Your goal is to fill in and rephrase a message template for a home service customer lead to make it sound completely natural, professional, and grammatically correct.
+    const defaultSystemPrompt = `You are an expert customer service assistant. Your goal is to clean, extract, and normalize three parts of a customer lead request to prepare them for an outbound message.
 
-You will be given:
-- Template: A message draft containing placeholders like "(Person first name)", "(Service Context)", "(Requirement)", etc.
-- Customer Name: The name of the customer (should be used to replace the "(Person first name)" placeholder or addressed at the beginning).
-- Context: The service context entered by the lead forwarder. Use only this field as the "Service Context".
-- Requirement 1 (optional): A specific detail/question we need to ask or verify.
-- Requirement 2 (optional): Another specific detail/question we need to ask or verify.
+You must output a JSON object containing exactly three fields:
+1. "serviceContext": A very short, clean name of the service (e.g. "garage door repair", "lawn care", "plumbing leak"). It must be concise and lowercase. Never use "service", "seeking", "repair or replacement", or "damaged or non-functioning".
+2. "requirement1": The first requirement or question normalized as an action-oriented phrase starting with a lowercase verb.
+3. "requirement2": The second requirement or question normalized as an action-oriented phrase starting with a lowercase verb.
 
-Instructions:
-1. Use the Context field as the Service Context. Do not infer it from exact customer text or requirements. Make it flow naturally in the sentence.
-2. Replace "(Person first name)" with the customer's name.
-3. Integrate Requirement 1 and Requirement 2 into the template. Do not just blindly insert them; rewrite the sentence around them so it is elegant, polite, flows beautifully, and is grammatically correct.
-4. Output ONLY the rephrased message. Do not include any brackets, placeholders, quotes, introductory or concluding text.`;
+Normalization Rules for Requirements (both requirement1 and requirement2):
+- If the requirement refers to address, location, or where to go, normalize it to: "share your complete address"
+- If the requirement refers to availability, time, or when they are available, normalize it to: "let me know your availability"
+- If the requirement refers to a photo, picture, image, or snapshot, normalize it to: "send me a picture of it"
+- Otherwise, rephrase to start with a verb (e.g. "confirm whether you have the spring on hand").
+- Requirement text must not be capitalized or end with punctuation.
+
+Forbidden Phrases (do not use in any field):
+- "I understand"
+- "seeking"
+- "repair or replacement"
+- "damaged or non-functioning"
+- "provide the service address"
+- "our schedule"
+- "arrange a visit"`;
 
     const systemPrompt = data.systemPrompt || defaultSystemPrompt;
 
     const userContent = JSON.stringify({
-      template: data.template,
-      customerName: data.customerName,
       context: data.contextText || "",
       requirement1: data.requirement1 || "",
       requirement2: data.requirement2 || "",
@@ -349,6 +355,23 @@ Instructions:
           { role: "system", content: systemPrompt },
           { role: "user", content: userContent },
         ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "lead_rephrase",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                serviceContext: { type: "string" },
+                requirement1: { type: "string" },
+                requirement2: { type: "string" },
+              },
+              required: ["serviceContext", "requirement1", "requirement2"],
+            },
+          },
+        },
       }),
     });
 
@@ -358,5 +381,131 @@ Instructions:
     }
 
     const rephrased = extractOutputText(responseBody);
-    return { rephrased: rephrased.trim() };
+    
+    // Parse the JSON output from AI
+    let serviceContext = "";
+    let req1 = "";
+    let req2 = "";
+
+    try {
+      const parsed = JSON.parse(rephrased.trim());
+      serviceContext = parsed.serviceContext || "";
+      req1 = parsed.requirement1 || "";
+      req2 = parsed.requirement2 || "";
+    } catch (e) {
+      // Fallback in case JSON parsing fails
+      serviceContext = data.contextText || "";
+      req1 = data.requirement1 || "";
+      req2 = data.requirement2 || "";
+    }
+
+    // Helper functions for sanitization & normalization
+    const extractFirstName = (fullName: string): string => {
+      const name = fullName.trim().split(/\s+/)[0];
+      return name || "there";
+    };
+
+    const extractSenderName = (templateText: string): string => {
+      const match = templateText.match(/this is\s+([A-Za-z0-9_'\-\s]+?)(?:[\.,\r\n]|$)/i);
+      if (match) {
+        return match[1].trim();
+      }
+      const match2 = templateText.match(/this is\s+(\w+)/i);
+      if (match2) {
+        return match2[1].trim();
+      }
+      return "Alex";
+    };
+
+    const sanitizeForbiddenPhrases = (text: string): string => {
+      if (!text) return "";
+      let clean = text;
+      const replacements: Array<[RegExp, string]> = [
+        [/I understand/gi, ""],
+        [/seeking/gi, "looking for"],
+        [/repair or replacement/gi, "repair"],
+        [/damaged or non-functioning/gi, ""],
+        [/provide the service address/gi, "share your complete address"],
+        [/our schedule/gi, "the schedule"],
+        [/arrange a visit/gi, "check the schedule for a visit"]
+      ];
+      for (const [regex, rep] of replacements) {
+        clean = clean.replace(regex, rep);
+      }
+      return clean.replace(/\s+/g, " ").trim();
+    };
+
+    const normalizeRequirement = (req: string): string => {
+      if (!req) return "";
+      let clean = req.trim();
+      const lower = clean.toLowerCase();
+      
+      if (lower.includes("address")) {
+        return "share your complete address";
+      }
+      if (lower.includes("availability") || lower.includes("available") || lower.includes("time") || lower.includes("when")) {
+        return "let me know your availability";
+      }
+      if (lower.includes("photo") || lower.includes("picture") || lower.includes("image") || lower.includes("pic")) {
+        return "send me a picture of it";
+      }
+      
+      clean = sanitizeForbiddenPhrases(clean);
+      if (clean.length > 0) {
+        clean = clean.charAt(0).toLowerCase() + clean.slice(1);
+        clean = clean.replace(/[\.\?,;!]$/, "");
+      }
+      return clean.trim();
+    };
+
+    const normalizeServiceContext = (ctx: string): string => {
+      if (!ctx) return "your service";
+      let clean = ctx.trim();
+      clean = sanitizeForbiddenPhrases(clean);
+      // Remove trailing/leading "service"
+      clean = clean.replace(/\b(service)\b/gi, "");
+      
+      // If there is a "for [noun]" or "to [verb]" that repeats words present earlier in the string, strip it.
+      const forIndex = clean.toLowerCase().indexOf(" for ");
+      if (forIndex !== -1) {
+        const firstPart = clean.substring(0, forIndex).trim();
+        const secondPart = clean.substring(forIndex + 5).trim();
+        const firstWords = firstPart.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        const secondWords = secondPart.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        const overlap = firstWords.some(w => secondWords.includes(w));
+        if (overlap) {
+          clean = firstPart;
+        }
+      }
+
+      clean = clean.replace(/\s+/g, " ").trim();
+      if (clean.length > 0) {
+        clean = clean.charAt(0).toLowerCase() + clean.slice(1);
+      }
+      return clean || "your service";
+    };
+
+    // Apply sanitization and normalization
+    const finalFirstName = extractFirstName(data.customerName);
+    const finalSenderName = extractSenderName(data.template);
+    const finalServiceContext = normalizeServiceContext(serviceContext);
+    const finalReq1 = normalizeRequirement(req1);
+    const finalReq2 = normalizeRequirement(req2);
+
+    // Build requirements part: join with " and " if both are present
+    let requirementsPart = "";
+    if (finalReq1 && finalReq2) {
+      requirementsPart = `${finalReq1} and ${finalReq2}`;
+    } else if (finalReq1) {
+      requirementsPart = finalReq1;
+    } else if (finalReq2) {
+      requirementsPart = finalReq2;
+    } else {
+      requirementsPart = "confirm the details";
+    }
+
+    // Build the final strict SMS format
+    const finalSms = `Hi ${finalFirstName}, this is ${finalSenderName}. I saw that you are looking for ${finalServiceContext}. Could you kindly ${requirementsPart}, so I can check the schedule for a visit?`;
+
+    return { rephrased: finalSms };
   });

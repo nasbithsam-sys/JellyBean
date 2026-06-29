@@ -76,20 +76,28 @@ import { rephraseLeadTemplateWithAi } from "@/lib/raw-leads-ai.functions";
 
 import { cn } from "@/lib/utils";
 
-export const DEFAULT_REPHRASE_PROMPT = `You are a professional customer service assistant. Your goal is to fill in and rephrase a message template for a home service customer lead to make it sound completely natural, professional, and grammatically correct.
+export const DEFAULT_REPHRASE_PROMPT = `You are an expert customer service assistant. Your goal is to clean, extract, and normalize three parts of a customer lead request to prepare them for an outbound message.
 
-You will be given:
-- Template: A message draft containing placeholders like "(Person first name)", "(Service Context)", "(Requirement)", etc.
-- Customer Name: The name of the customer (should be used to replace the "(Person first name)" placeholder or addressed at the beginning).
-- Context: The service context entered by the lead forwarder. Use only this field as the "Service Context".
-- Requirement 1 (optional): A specific detail/question we need to ask or verify.
-- Requirement 2 (optional): Another specific detail/question we need to ask or verify.
+You must output a JSON object containing exactly three fields:
+1. "serviceContext": A very short, clean name of the service (e.g. "garage door repair", "lawn care", "plumbing leak"). It must be concise and lowercase. Never use "service", "seeking", "repair or replacement", or "damaged or non-functioning".
+2. "requirement1": The first requirement or question normalized as an action-oriented phrase starting with a lowercase verb.
+3. "requirement2": The second requirement or question normalized as an action-oriented phrase starting with a lowercase verb.
 
-Instructions:
-1. Use the Context field as the Service Context. Do not infer it from exact customer text or requirements. Make it flow naturally in the sentence.
-2. Replace "(Person first name)" with the customer's name.
-3. Integrate Requirement 1 and Requirement 2 into the template. Do not just blindly insert them; rewrite the sentence around them so it is elegant, polite, flows beautifully, and is grammatically correct.
-4. Output ONLY the rephrased message. Do not include any brackets, placeholders, quotes, introductory or concluding text.`;
+Normalization Rules for Requirements (both requirement1 and requirement2):
+- If the requirement refers to address, location, or where to go, normalize it to: "share your complete address"
+- If the requirement refers to availability, time, or when they are available, normalize it to: "let me know your availability"
+- If the requirement refers to a photo, picture, image, or snapshot, normalize it to: "send me a picture of it"
+- Otherwise, rephrase to start with a verb (e.g. "confirm whether you have the spring on hand").
+- Requirement text must not be capitalized or end with punctuation.
+
+Forbidden Phrases (do not use in any field):
+- "I understand"
+- "seeking"
+- "repair or replacement"
+- "damaged or non-functioning"
+- "provide the service address"
+- "our schedule"
+- "arrange a visit"`;
 
 export const Route = createFileRoute("/app/cs-leads")({ component: Page });
 

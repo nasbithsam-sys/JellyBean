@@ -1,26 +1,26 @@
 export const CS_COMPOSE_TEMPLATE_KEY = "cs_compose_template";
 
 export const DEFAULT_CS_COMPOSE_TEMPLATE =
-  "Hi (Person first name) This is Alex, Saw that you are looking for (Service Context), Can you tell me (Requirement) so I can check schedule visit ?";
+  "Hi (Person first name), this is Alex. I saw that you are looking for (Service Context). Could you kindly (Requirement), so I can check the schedule for a visit?";
 
 export const COMPOSE_TEMPLATES = [
   {
     id: "schedule_visit",
     name: "Schedule Visit",
     template:
-      "Hi (Person first name), this is Alex. Saw that you are looking for (Service Context). Can you tell me more about what you need so I can check our schedule for a visit?",
+      "Hi (Person first name), this is Alex. I saw that you are looking for (Service Context). Could you kindly (Requirement), so I can check the schedule for a visit?",
   },
   {
     id: "price_estimate",
     name: "Request Estimate Details",
     template:
-      "Hello (Person first name), I saw your post looking for (Service Context). We can definitely help you with that! Could you share a few details so we can get you a price estimate?",
+      "Hello (Person first name), I saw your request for (Service Context). Could you kindly share your details so we can get you a price estimate?",
   },
   {
     id: "call_request",
     name: "Call Request",
     template:
-      "Hi (Person first name), saw your request for (Service Context). What is the best number or time to call you to discuss details and schedule?",
+      "Hi (Person first name), this is Alex. I saw that you are looking for (Service Context). What is the best number or time to call you to discuss details and check the schedule?",
   },
   {
     id: "follow_up",
