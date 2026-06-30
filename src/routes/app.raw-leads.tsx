@@ -709,12 +709,9 @@ function Inner() {
         return;
       }
       const now = new Date().toISOString();
-      // Optimistic: update assignment in current tab cache
-      updateCachedEntries((e) =>
-        e.row_key === entry.row_key
-          ? { ...e, assigned_to: currentUserId, assigned_myself_at: now }
-          : e,
-      );
+      // Optimistic: immediately remove from the current tab (e.g. New) so the
+      // lead moves to Assigned Myself without needing a full page refresh.
+      removeCachedEntries((e) => e.row_key === entry.row_key);
       const { error } = await supabase
         .from(TABLE)
         // Only claim if still unassigned — race-safe.
@@ -730,10 +727,10 @@ function Inner() {
         return;
       }
       toast.success("Lead assigned to you");
-      // Invalidate both the current tab (New) and Assigned Myself tab caches
+      // Invalidate all tab caches so counts and Assigned Myself tab refresh.
       qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
     },
-    [cacheQuery, currentUserId, qc, updateCachedEntries],
+    [cacheQuery, currentUserId, qc, removeCachedEntries],
   );
 
   const unassignFromSelf = useCallback(

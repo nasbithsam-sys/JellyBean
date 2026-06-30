@@ -77,11 +77,20 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const columns =
       "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to, assigned_myself_at";
 
-    const applyCategory = <T extends { is: (...a: never[]) => T; eq: (...a: never[]) => T }>(
+    const applyCategory = <T extends {
+      is: (...a: never[]) => T;
+      eq: (...a: never[]) => T;
+      not: (...a: never[]) => T;
+    }>(
       query: T,
       category: CategoryFilter,
     ): T => {
-      if (category === "new") return query.is("category" as never, null as never);
+      if (category === "new") {
+        // Exclude categorised rows AND self-assigned rows (they belong in Assigned Myself).
+        return query
+          .is("category" as never, null as never)
+          .is("assigned_myself_at" as never, null as never);
+      }
       if (
         category === "forwarded" ||
         category === "not_found" ||
