@@ -38,7 +38,7 @@ function normalizeData(value: unknown): Record<string, string> {
   );
 }
 
-const CATEGORY_FILTERS = ["all", "new", "forwarded", "not_found", "wrong", "duplicate"] as const;
+const CATEGORY_FILTERS = ["all", "new", "forwarded", "not_found", "wrong", "duplicate", "assigned_myself"] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
 const DUPLICATE_LOOKBACK_HOURS = 72;
 
@@ -91,8 +91,15 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       return query;
     };
 
-    const applyAssignment = <T extends { or: (...a: never[]) => T }>(query: T): T => {
+    const applyAssignment = <T extends { or: (...a: never[]) => T; eq: (...a: never[]) => T }>(
+      query: T,
+      category: CategoryFilter,
+    ): T => {
+      // "Assigned Myself" tab: show only leads assigned to the current user.
+      if (category === "assigned_myself")
+        return query.eq("assigned_to" as never, context.userId as never);
       if (isAdmin) return query;
+      // For other tabs, non-admins see unassigned + their own leads.
       return query.or(`assigned_to.is.null,assigned_to.eq.${context.userId}` as never);
     };
 
@@ -102,8 +109,11 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       .select(columns)
       .order("captured_at", { ascending: false, nullsFirst: false })
       .range(data.offset, data.offset + data.limit - 1);
-    dataQuery = applyCategory(dataQuery as never, data.category) as typeof dataQuery;
-    dataQuery = applyAssignment(dataQuery as never) as typeof dataQuery;
+    // For assigned_myself tab: filter by assigned_to only (no category filter)
+    if (data.category !== "assigned_myself") {
+      dataQuery = applyCategory(dataQuery as never, data.category) as typeof dataQuery;
+    }
+    dataQuery = applyAssignment(dataQuery as never, data.category) as typeof dataQuery;
     const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
 
@@ -133,6 +143,14 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const totalWrong = counts.wrong ?? 0;
     const totalDuplicate = counts.duplicate ?? 0;
 
+    // Count leads assigned to the current user (across all categories)
+    const { count: assignedMyselfCount, error: assignedCountError } = await supabaseAdmin
+      .from("raw_lead_cache")
+      .select("row_key", { count: "exact", head: true })
+      .eq("assigned_to", context.userId);
+    if (assignedCountError) throw new Error(assignedCountError.message);
+    const totalAssignedMyself = assignedMyselfCount ?? 0;
+
     const totalForCategory =
       data.category === "new"
         ? totalNew
@@ -144,7 +162,9 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
               ? totalWrong
               : data.category === "duplicate"
                 ? totalDuplicate
-                : totalNew + totalForwarded + totalNotFound + totalWrong + totalDuplicate;
+                : data.category === "assigned_myself"
+                  ? totalAssignedMyself
+                  : totalNew + totalForwarded + totalNotFound + totalWrong + totalDuplicate;
 
     const entries: RawLeadCacheRow[] = (rows ?? []).map((entry) => ({
       row_key: entry.row_key,
@@ -167,6 +187,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
         not_found: totalNotFound,
         wrong: totalWrong,
         duplicate: totalDuplicate,
+        assigned_myself: totalAssignedMyself,
       },
       pageSize: data.limit,
       offset: data.offset,

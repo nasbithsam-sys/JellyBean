@@ -101,7 +101,7 @@ type CacheEntry = {
 type RawLeadPage = {
   entries: CacheEntry[];
   totalCount: number;
-  counts: { new: number; forwarded: number; not_found: number; wrong: number; duplicate: number };
+  counts: { new: number; forwarded: number; not_found: number; wrong: number; duplicate: number; assigned_myself: number };
   pageSize: number;
   offset: number;
   hasMore: boolean;
@@ -387,7 +387,7 @@ function Inner() {
     typeof window === "undefined" ? "" : `${window.location.origin}/api/public/nextdoor-leads`;
 
   const [tab, setTab] = useState<
-    "new" | "review" | "forwarded" | "not_found" | "wrong" | "duplicate"
+    "new" | "review" | "forwarded" | "not_found" | "wrong" | "duplicate" | "assigned_myself"
   >("new");
   const [query, setQuery] = useState("");
   const [leadFilter, setLeadFilter] = useState("all");
@@ -489,6 +489,8 @@ function Inner() {
         data: {
           limit: pageSize,
           offset: pageIndex * pageSize,
+          // "review" is a client-side filter on top of the "new" category
+          // "assigned_myself" is its own server-side filter
           category: tab === "review" ? "new" : tab,
         },
       })) as RawLeadPage,
@@ -609,6 +611,7 @@ function Inner() {
     not_found: 0,
     wrong: 0,
     duplicate: 0,
+    assigned_myself: 0,
   };
   const reviewCount = useMemo(() => {
     return entries.filter((e) => effectiveLead(e.data, actions[e.row_key]) === "review").length;
@@ -632,6 +635,8 @@ function Inner() {
     if (tab === "review") {
       list = list.filter((e) => effectiveLead(e.data, actions[e.row_key]) === "review");
     }
+    // "Assigned Myself" tab: server already returned only the current user's leads,
+    // so no extra client-side filter needed beyond search/area.
     const q = query.trim().toLowerCase();
     if (q) {
       list = list.filter((e) =>
@@ -702,7 +707,7 @@ function Inner() {
         toast.error("Already claimed by another user.");
         return;
       }
-      // Optimistic
+      // Optimistic: update assignment in current tab cache
       updateCachedEntries((e) =>
         e.row_key === entry.row_key ? { ...e, assigned_to: currentUserId } : e,
       );
@@ -718,8 +723,10 @@ function Inner() {
         return;
       }
       toast.success("Lead assigned to you");
+      // Invalidate both the current tab (New) and Assigned Myself tab caches
+      qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
     },
-    [cacheQuery, currentUserId, updateCachedEntries],
+    [cacheQuery, currentUserId, qc, updateCachedEntries],
   );
 
   const unassignFromSelf = useCallback(
@@ -744,8 +751,10 @@ function Inner() {
         return;
       }
       toast.success("Lead unassigned");
+      // Refresh both assigned_myself and new tab caches
+      qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
     },
-    [cacheQuery, currentUserId, updateCachedEntries],
+    [cacheQuery, currentUserId, qc, updateCachedEntries],
   );
 
   async function runAiLeadCheck() {
@@ -824,6 +833,7 @@ function Inner() {
               ["not_found", "Number not found", tabCounts.not_found],
               ["duplicate", "Duplicate", tabCounts.duplicate],
               ["wrong", "Wrong posts", tabCounts.wrong],
+              ["assigned_myself", "Assigned Myself", tabCounts.assigned_myself],
             ] as const
           ).map(([k, label, n]) => (
             <button
