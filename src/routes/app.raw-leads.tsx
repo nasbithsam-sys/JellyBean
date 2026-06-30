@@ -97,6 +97,7 @@ type CacheEntry = {
   lead_link: string | null;
   sheet_row: number | null;
   assigned_to: string | null;
+  assigned_myself_at: string | null;
 };
 type RawLeadPage = {
   entries: CacheEntry[];
@@ -707,14 +708,20 @@ function Inner() {
         toast.error("Already claimed by another user.");
         return;
       }
+      const now = new Date().toISOString();
       // Optimistic: update assignment in current tab cache
       updateCachedEntries((e) =>
-        e.row_key === entry.row_key ? { ...e, assigned_to: currentUserId } : e,
+        e.row_key === entry.row_key
+          ? { ...e, assigned_to: currentUserId, assigned_myself_at: now }
+          : e,
       );
       const { error } = await supabase
         .from(TABLE)
         // Only claim if still unassigned — race-safe.
-        .update({ assigned_to: currentUserId } as RawLeadCacheUpdate)
+        .update({
+          assigned_to: currentUserId,
+          assigned_myself_at: now,
+        } as RawLeadCacheUpdate)
         .eq("row_key", entry.row_key)
         .is("assigned_to", null);
       if (error) {
@@ -739,10 +746,12 @@ function Inner() {
         toast.error("Only your own claimed leads can be unassigned.");
         return;
       }
-      updateCachedEntries((e) => (e.row_key === entry.row_key ? { ...e, assigned_to: null } : e));
+      updateCachedEntries((e) =>
+        e.row_key === entry.row_key ? { ...e, assigned_to: null, assigned_myself_at: null } : e,
+      );
       const { error } = await supabase
         .from(TABLE)
-        .update({ assigned_to: null } as RawLeadCacheUpdate)
+        .update({ assigned_to: null, assigned_myself_at: null } as RawLeadCacheUpdate)
         .eq("row_key", entry.row_key)
         .eq("assigned_to", currentUserId);
       if (error) {

@@ -16,6 +16,7 @@ type RawLeadCacheRow = {
   lead_link: string | null;
   sheet_row: number | null;
   assigned_to: string | null;
+  assigned_myself_at: string | null;
 };
 
 function normalizeLead(value: string | null): "yes" | "no" | null {
@@ -74,7 +75,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
 
     const isAdmin = roles.includes("admin") || roles.includes("sub_admin");
     const columns =
-      "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to";
+      "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to, assigned_myself_at";
 
     const applyCategory = <T extends { is: (...a: never[]) => T; eq: (...a: never[]) => T }>(
       query: T,
@@ -109,11 +110,17 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       .select(columns)
       .order("captured_at", { ascending: false, nullsFirst: false })
       .range(data.offset, data.offset + data.limit - 1);
-    // For assigned_myself tab: filter by assigned_to only (no category filter)
-    if (data.category !== "assigned_myself") {
+    // For assigned_myself tab: show leads self-assigned by the user that are
+    // still active (category IS NULL = not yet forwarded/wrong/etc.).
+    if (data.category === "assigned_myself") {
+      dataQuery = dataQuery
+        .eq("assigned_to" as never, context.userId as never)
+        .not("assigned_myself_at" as never, "is" as never, null as never)
+        .is("category" as never, null as never) as typeof dataQuery;
+    } else {
       dataQuery = applyCategory(dataQuery as never, data.category) as typeof dataQuery;
+      dataQuery = applyAssignment(dataQuery as never, data.category) as typeof dataQuery;
     }
-    dataQuery = applyAssignment(dataQuery as never, data.category) as typeof dataQuery;
     const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
 
@@ -143,11 +150,15 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const totalWrong = counts.wrong ?? 0;
     const totalDuplicate = counts.duplicate ?? 0;
 
-    // Count leads assigned to the current user (across all categories)
+    // Count self-assigned leads that are still active (not yet categorized).
+    // Only count rows where assigned_myself_at IS NOT NULL so old pre-feature
+    // assignments are excluded.
     const { count: assignedMyselfCount, error: assignedCountError } = await supabaseAdmin
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
-      .eq("assigned_to", context.userId);
+      .eq("assigned_to", context.userId)
+      .not("assigned_myself_at", "is", null)
+      .is("category", null);
     if (assignedCountError) throw new Error(assignedCountError.message);
     const totalAssignedMyself = assignedMyselfCount ?? 0;
 
@@ -176,6 +187,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       lead_link: entry.lead_link,
       sheet_row: entry.sheet_row,
       assigned_to: entry.assigned_to,
+      assigned_myself_at: (entry as Record<string, unknown>).assigned_myself_at as string | null ?? null,
     }));
 
     return {
