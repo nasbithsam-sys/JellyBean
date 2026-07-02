@@ -98,6 +98,7 @@ export function LeadForm({
   onDirtyChange,
   onCancel,
   onSubmit,
+  disableDuplicateCheck = false,
 }: {
   title?: string;
   submitLabel?: string;
@@ -110,6 +111,7 @@ export function LeadForm({
   onDirtyChange?: (isDirty: boolean) => void;
   onCancel: () => void;
   onSubmit: (values: LeadFormValues) => Promise<void>;
+  disableDuplicateCheck?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [customerName, setCustomerName] = useState(initialValues?.customerName ?? "");
