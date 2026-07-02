@@ -1625,7 +1625,7 @@ function LeadDetailDialog({
       return;
     }
     if (hasDuplicate) {
-      toast.error("Duplicate phone number detected in the last 72 hours.");
+      toast.error("Duplicate phone number detected in the last 48 hours.");
       return;
     }
     setBusy(true);
@@ -1716,7 +1716,7 @@ function LeadDetailDialog({
               )}
               {hasDuplicate && (
                 <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
-                  Duplicate phone number detected in the last 72 hours
+                  Duplicate phone number detected in the last 48 hours
                   {duplicateMatches[0]?.customer_name
                     ? `: ${duplicateMatches[0].customer_name}`
                     : ""}
@@ -1755,7 +1755,7 @@ function LeadDetailDialog({
                 )}
                 {secondDuplicateMatches.length > 0 && (
                   <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11.5px] text-destructive">
-                    Duplicate second phone number detected in the last 72 hours
+                    Duplicate second phone number detected in the last 48 hours
                     {secondDuplicateMatches[0]?.customer_name
                       ? `: ${secondDuplicateMatches[0].customer_name}`
                       : ""}
