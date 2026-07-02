@@ -310,7 +310,7 @@ function Inner() {
               <BarChart
                 data={csBuckets}
                 layout="vertical"
-                margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
               >
                 <CartesianGrid
                   stroke="var(--color-border)"
@@ -330,7 +330,7 @@ function Inner() {
                   tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
-                  width={180}
+                  width={135}
                   interval={0}
                 />
                 <Tooltip
