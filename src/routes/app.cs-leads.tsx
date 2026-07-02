@@ -56,6 +56,8 @@ import {
   Pin,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -1504,6 +1506,16 @@ function Inner() {
           <Button
             variant="outline"
             size="sm"
+            className="h-8 px-2"
+            onClick={() => setPage(1)}
+            disabled={page <= 1 || list.isFetching}
+            title="First Page"
+          >
+            <ChevronsLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             className="h-8 px-3 text-[12px]"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1 || list.isFetching}
@@ -1526,6 +1538,16 @@ function Inner() {
           >
             Next
             <ChevronRight className="h-3.5 w-3.5 ml-1" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2"
+            onClick={() => setPage(totalPages)}
+            disabled={page >= totalPages || list.isFetching}
+            title="Last Page"
+          >
+            <ChevronsRight className="h-3.5 w-3.5" />
           </Button>
         </div>
       )}
