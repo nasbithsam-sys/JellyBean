@@ -54,6 +54,8 @@ import {
   Copy,
   Check,
   Pin,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -400,7 +402,9 @@ function Inner() {
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [visibleLimit, setVisibleLimit] = useState(60);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
+  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__" | "templates">("__all__");
   const [opened, setOpened] = useState<Lead | null>(null);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -590,21 +594,115 @@ function Inner() {
     await bulkAssign(bulkAssignee === UNASSIGNED_VALUE ? null : bulkAssignee);
   }
 
+  // ── Date filter values pushed to DB ──────────────────────────────────────
+  // assigned_at is indexed (idx_qualified_leads_assigned_at DESC) so these
+  // range filters are efficient. We compute the ISO strings in a memo so
+  // they're stable across renders and don't cause spurious query key changes.
+  const dbDateFrom = useMemo(
+    () => (dateRange?.from ? startOfDay(dateRange.from).toISOString() : null),
+    [dateRange?.from],
+  );
+  const dbDateTo = useMemo(
+    () =>
+      dateRange?.to
+        ? endOfDay(dateRange.to).toISOString()
+        : dateRange?.from
+          ? endOfDay(dateRange.from).toISOString()
+          : null,
+    [dateRange?.from, dateRange?.to],
+  );
+
+  // ── Owner filter value for DB (indexed on assigned_to) ───────────────────
+  const dbOwner = useMemo(() => {
+    if (ownerFilter === "mine") return auth.user?.id ?? null;
+    if (ownerFilter === "unassigned") return "__unassigned__";
+    if (ownerFilter !== "all") return ownerFilter; // specific user ID
+    return null; // all
+  }, [ownerFilter, auth.user?.id]);
+
+  // ── Status filter for DB (cs_status indexed via idx_qualified_leads_status_created) ──
+  const dbStatus = useMemo(
+    () =>
+      activeStatus === "__all__" || activeStatus === "templates" ? null : (activeStatus as CsStatus),
+    [activeStatus],
+  );
+
+  // ── Reset page to 1 whenever any server-side filter changes ──────────────
+  useEffect(() => {
+    setPage(1);
+  }, [dbDateFrom, dbDateTo, dbOwner, dbStatus, query, areaFilter]);
+
   const list = useQuery({
-    queryKey: ["cs_leads"],
+    queryKey: [
+      "cs_leads",
+      { page, dbDateFrom, dbDateTo, dbOwner, dbStatus },
+    ],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const from = (page - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      let q = supabase
         .from("qualified_leads")
         .select(
           "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, assigned_by, created_by, is_important, pinned_important, service, reference, images, submitted_by_role",
         )
+        .order("pinned_important", { ascending: false })
         .order("assigned_at", { ascending: false })
-        .limit(500);
+        .range(from, to);
+
+      // Date range — pushed to DB (assigned_at is indexed)
+      if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
+      if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
+
+      // Owner filter — pushed to DB (assigned_to is indexed)
+      if (dbOwner === "__unassigned__") {
+        q = q.is("assigned_to", null);
+      } else if (dbOwner !== null) {
+        q = q.eq("assigned_to", dbOwner);
+      }
+
+      // Status filter — pushed to DB (cs_status+created_at is indexed)
+      if (dbStatus) q = q.eq("cs_status", dbStatus);
+
+      const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as Lead[];
     },
     placeholderData: keepPreviousData,
   });
+
+  // ── Lightweight count query — runs only when indexed filter params change ──
+  // Uses { count: "exact", head: true } — fetches NO rows. Runs on the same
+  // indexed columns (assigned_at, assigned_to, cs_status) so cost is low.
+  // Search (ilike) and area (unindexed) are intentionally excluded from the
+  // count to keep it fast. Count is therefore a "filtered dataset size" for
+  // paginating, not an absolute match count.
+  const totalCount = useQuery({
+    queryKey: ["cs_leads_count", { dbDateFrom, dbDateTo, dbOwner, dbStatus }],
+    queryFn: async () => {
+      let q = supabase
+        .from("qualified_leads")
+        .select("id", { count: "exact", head: true });
+
+      if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
+      if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
+
+      if (dbOwner === "__unassigned__") {
+        q = q.is("assigned_to", null);
+      } else if (dbOwner !== null) {
+        q = q.eq("assigned_to", dbOwner);
+      }
+
+      if (dbStatus) q = q.eq("cs_status", dbStatus);
+
+      const { count, error } = await q;
+      if (error) throw error;
+      return count ?? 0;
+    },
+    placeholderData: keepPreviousData,
+  });
+
+  const totalPages = Math.max(1, Math.ceil((totalCount.data ?? 0) / PAGE_SIZE));
 
   const todayStart = useMemo(() => {
     const d = new Date();
@@ -761,17 +859,15 @@ function Inner() {
     }
   };
 
-  const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__" | "templates">("__all__");
-
+  // Note: activeStatus state is defined above the DB query memos so that
+  // dbStatus can reference it. The `filtered` memo below only handles
+  // client-side refinements (search text and area) on the current page's
+  // 50-row result. Date / owner / status filters are already applied by DB.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rFrom = dateRange?.from ? startOfDay(dateRange.from).getTime() : null;
-    const rTo = dateRange?.to
-      ? endOfDay(dateRange.to).getTime()
-      : dateRange?.from
-        ? endOfDay(dateRange.from).getTime()
-        : null;
     return (list.data ?? []).filter((l) => {
+      // Full text search — applied client-side on the 50-row page result.
+      // Searches all the same fields as before: name, phone, area, requirements.
       if (
         q &&
         ![
@@ -788,27 +884,18 @@ function Inner() {
       ) {
         return false;
       }
-      if (ownerFilter === "mine" && l.assigned_to !== auth.user?.id) return false;
-      if (ownerFilter === "unassigned" && l.assigned_to) return false;
-      if (
-        ownerFilter !== "all" &&
-        ownerFilter !== "mine" &&
-        ownerFilter !== "unassigned" &&
-        l.assigned_to !== ownerFilter
-      ) {
-        return false;
-      }
+      // Area filter — main_area is unindexed so kept client-side on current page.
       if (areaFilter !== "all" && l.main_area !== areaFilter && l.sub_area !== areaFilter) {
         return false;
       }
-      if (rFrom !== null && rTo !== null) {
-        const t = new Date(l.assigned_at).getTime();
-        if (t < rFrom || t > rTo) return false;
-      }
       return true;
     });
-  }, [areaFilter, auth.user?.id, list.data, ownerFilter, query, dateRange]);
+  }, [areaFilter, list.data, query]);
 
+  // Status tab counts — computed from the current page's filtered result.
+  // DB-level filters (date, owner, status) narrow the dataset; counts here
+  // reflect what is visible on this page after client-side area/search.
+  // This avoids a per-status heavy count query while keeping counts honest.
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const s of PIPELINE_STATUSES) c[s] = 0;
@@ -816,17 +903,20 @@ function Inner() {
     return c;
   }, [filtered]);
 
+  // All leads on the current page after client-side filtering, sorted with
+  // pinned-important leads first (DB also orders pinned first, so this is
+  // a stable secondary sort for any ties within the 50-row page).
   const visibleLeads = useMemo(() => {
-    const leads =
-      activeStatus === "__all__" ? filtered : filtered.filter((l) => l.cs_status === activeStatus);
-    return [...leads].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const aPinned = a.pinned_important && a.cs_status === "new";
       const bPinned = b.pinned_important && b.cs_status === "new";
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
       return new Date(b.assigned_at).getTime() - new Date(a.assigned_at).getTime();
     });
-  }, [filtered, activeStatus]);
-  const shownLeads = visibleLeads.slice(0, visibleLimit);
+  }, [filtered]);
+  // shownLeads = all leads on current page (no slicing needed — DB paginates).
+  const shownLeads = visibleLeads;
+
 
   function exportLeads() {
     downloadCsv(
@@ -1384,10 +1474,33 @@ function Inner() {
         </>
       )}
 
-      {visibleLeads.length > shownLeads.length && (
-        <div className="flex justify-center">
-          <Button variant="outline" onClick={() => setVisibleLimit((n) => n + 60)}>
-            Load more ({visibleLeads.length - shownLeads.length} remaining)
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 py-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-[12px]"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1 || list.isFetching}
+          >
+            <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+            Previous
+          </Button>
+          <span className="text-[12px] text-muted-foreground tabular-nums px-2">
+            Page {page} of {totalPages}
+            {totalCount.data != null && (
+              <span className="ml-1 text-[11px]">({totalCount.data} total)</span>
+            )}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-[12px]"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages || list.isFetching}
+          >
+            Next
+            <ChevronRight className="h-3.5 w-3.5 ml-1" />
           </Button>
         </div>
       )}
