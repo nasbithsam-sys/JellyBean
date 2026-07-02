@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
 import { useAuth } from "@/hooks/use-auth";
@@ -61,13 +62,17 @@ import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import { downloadCsv, formatPhone, normalizePhone } from "@/lib/crm-lite";
 import { analyzeRawLeadsWithAi, FROZEN_LEAD_PROMPT } from "@/lib/raw-leads-ai.functions";
-import { checkDuplicatePhone, fetchRawLeadCache } from "@/lib/raw-leads.functions";
+import {
+  checkDuplicatePhone,
+  fetchRawLeadCache,
+  fetchRawLeadCounts,
+} from "@/lib/raw-leads.functions";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
 const TABLE = "raw_lead_cache";
-const PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
-const DEFAULT_PAGE_SIZE = 100;
+const PAGE_SIZE_OPTIONS = [50, 100, 200, 500] as const;
+const DEFAULT_PAGE_SIZE = 500;
 type RawLeadCacheUpdate = Database["public"]["Tables"]["raw_lead_cache"]["Update"];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -109,6 +114,7 @@ type RawLeadPage = {
   nextOffset: number | null;
 };
 const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
+const SEARCH_DEBOUNCE_MS = 500;
 type SortDirection = "asc" | "desc";
 type RawLeadSortKey =
   | "row"
@@ -130,6 +136,11 @@ type DuplicatePhoneMatch = {
   customer_number: string;
   customer_number_2: string | null;
   assigned_at: string;
+  service: string | null;
+  context: string | null;
+  main_area: string | null;
+  sub_area: string | null;
+  original_lead_link: string | null;
 };
 
 const AI_LOCK_KEY = "raw_leads.ai_lock";
@@ -382,6 +393,7 @@ function Inner() {
   const qc = useQueryClient();
   const analyzeWithAi = useServerFn(analyzeRawLeadsWithAi);
   const fetchRawLeads = useServerFn(fetchRawLeadCache);
+  const fetchCounts = useServerFn(fetchRawLeadCounts);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const nextdoorWebhookUrl =
@@ -390,6 +402,7 @@ function Inner() {
   const [tab, setTab] = useState<
     "new" | "review" | "forwarded" | "not_found" | "wrong" | "duplicate" | "assigned_myself"
   >("new");
+  const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [leadFilter, setLeadFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
@@ -482,17 +495,25 @@ function Inner() {
     auth.primaryRole === "sub_admin" ||
     auth.primaryRole === "maturing";
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setQuery(queryInput.trim());
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [queryInput]);
+
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", tab === "review" ? "new" : tab, pageIndex, pageSize],
+    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter],
     queryFn: async () =>
       (await fetchRawLeads({
         data: {
           limit: pageSize,
           offset: pageIndex * pageSize,
-          // "review" is a client-side filter on top of the "new" category
-          // "assigned_myself" is its own server-side filter
-          category: tab === "review" ? "new" : tab,
+          category: tab,
+          query,
+          leadFilter,
+          areaFilter,
         },
       })) as RawLeadPage,
     placeholderData: keepPreviousData,
@@ -501,9 +522,26 @@ function Inner() {
   });
 
   const cacheKey = useMemo(
-    () => ["raw-lead-cache", tab === "review" ? "new" : tab, pageIndex, pageSize] as const,
-    [tab, pageIndex, pageSize],
+    () => ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter] as const,
+    [tab, pageIndex, pageSize, query, leadFilter, areaFilter],
   );
+
+  const countsQuery = useQuery({
+    queryKey: ["raw-lead-counts"],
+    queryFn: async () =>
+      (await fetchCounts({ data: {} })) as {
+        new: number;
+        review: number;
+        forwarded: number;
+        not_found: number;
+        wrong: number;
+        duplicate: number;
+        assigned_myself: number;
+      },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
+  });
 
   const updateCachedEntries = useCallback(
     (updater: (entry: CacheEntry) => CacheEntry) => {
@@ -593,6 +631,7 @@ function Inner() {
           });
           // Refresh counts / pagination since the row may have moved categories.
           qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+          qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
         }
       } catch (e) {
         toast.error(friendlyError(e));
@@ -606,17 +645,15 @@ function Inner() {
   const error = cacheQuery.error as Error | null;
 
   // Server-side category counts (for tab badges + pagination total)
-  const tabCounts = cacheQuery.data?.counts ?? {
+  const tabCounts = countsQuery.data ?? {
     new: 0,
+    review: 0,
     forwarded: 0,
     not_found: 0,
     wrong: 0,
     duplicate: 0,
     assigned_myself: 0,
   };
-  const reviewCount = useMemo(() => {
-    return entries.filter((e) => effectiveLead(e.data, actions[e.row_key]) === "review").length;
-  }, [entries, actions]);
   const totalCount = cacheQuery.data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -629,40 +666,13 @@ function Inner() {
     return Array.from(areas).sort();
   }, [entries]);
 
-  // Entries are already filtered by category server-side; apply in-page filters/sort.
+  // Entries are filtered server-side for category, search, lead state, and area.
   const visible = useMemo(() => {
     let list = entries;
-    // "AI Review" tab filters client-side — review is a lead value, not a category
-    if (tab === "review") {
-      list = list.filter((e) => effectiveLead(e.data, actions[e.row_key]) === "review");
-    }
-    // "Assigned Myself" tab: server already returned only the current user's leads,
-    // so no extra client-side filter needed beyond search/area.
-    const q = query.trim().toLowerCase();
-    if (q) {
-      list = list.filter((e) =>
-        [
-          e.data["Account Name"],
-          e.data["Sub Area / Neighborhood"],
-          e.data["Post Text"],
-          e.data["Account Area"],
-          e.data.Lead,
-        ].some((v) => (v ?? "").toString().toLowerCase().includes(q)),
-      );
-    }
-    if (leadFilter !== "all") {
-      list = list.filter((e) => effectiveLead(e.data, actions[e.row_key]) === leadFilter);
-    }
-    if (areaFilter !== "all") {
-      list = list.filter(
-        (e) =>
-          e.data["Account Area"] === areaFilter || e.data["Sub Area / Neighborhood"] === areaFilter,
-      );
-    }
     return [...list].sort((a, b) =>
       compareRawLeadEntries(a, b, rawLeadSort, actions, currentUserId),
     );
-  }, [actions, areaFilter, currentUserId, entries, leadFilter, query, rawLeadSort, tab]);
+  }, [actions, currentUserId, entries, rawLeadSort]);
 
   const shownRows = visible;
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
@@ -695,6 +705,7 @@ function Inner() {
 
   function handleRefresh() {
     cacheQuery.refetch();
+    countsQuery.refetch();
     aiLockQuery.refetch();
   }
 
@@ -729,6 +740,7 @@ function Inner() {
       toast.success("Lead assigned to you");
       // Invalidate all tab caches so counts and Assigned Myself tab refresh.
       qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+      qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
     },
     [cacheQuery, currentUserId, qc, removeCachedEntries],
   );
@@ -759,6 +771,7 @@ function Inner() {
       toast.success("Lead unassigned");
       // Refresh both assigned_myself and new tab caches
       qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+      qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
     },
     [cacheQuery, currentUserId, qc, updateCachedEntries],
   );
@@ -834,7 +847,7 @@ function Inner() {
           {(
             [
               ["new", "New", tabCounts.new],
-              ["review", "AI Review", reviewCount],
+              ["review", "AI Review", tabCounts.review],
               ["forwarded", "Forwarded", tabCounts.forwarded],
               ["not_found", "Number not found", tabCounts.not_found],
               ["duplicate", "Duplicate", tabCounts.duplicate],
@@ -864,9 +877,9 @@ function Inner() {
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
-            value={query}
+            value={queryInput}
             onChange={(e) => {
-              setQuery(e.target.value);
+              setQueryInput(e.target.value);
               setPageIndex(0);
             }}
             placeholder="Search…"
@@ -1574,6 +1587,7 @@ function LeadDetailDialog({
   const [secondPhone, setSecondPhone] = useState("");
   const [showSecondPhone, setShowSecondPhone] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false);
   const checkDuplicate = useServerFn(checkDuplicatePhone);
   const phoneDigits = normalizePhone(phone);
   const secondPhoneDigits = normalizePhone(secondPhone);
@@ -1593,6 +1607,10 @@ function LeadDetailDialog({
   const secondDuplicateMatches = (secondDuplicateQuery.data?.matches ??
     []) as DuplicatePhoneMatch[];
   const hasDuplicate = duplicateMatches.length > 0 || secondDuplicateMatches.length > 0;
+  const duplicatePreview = [
+    ...duplicateMatches.map((match) => ({ source: "Primary number" as const, match })),
+    ...secondDuplicateMatches.map((match) => ({ source: "Second number" as const, match })),
+  ];
 
   async function handleNotFound() {
     setBusy(true);
@@ -1625,7 +1643,7 @@ function LeadDetailDialog({
       return;
     }
     if (hasDuplicate) {
-      toast.error("Duplicate phone number detected in the last 48 hours.");
+      setDuplicateConfirmOpen(true);
       return;
     }
     setBusy(true);
@@ -1637,6 +1655,17 @@ function LeadDetailDialog({
   }
 
   const isDirty = phone.trim() !== "" || secondPhone.trim() !== "";
+
+  async function continueDespiteDuplicate() {
+    const p = phone.trim();
+    setDuplicateConfirmOpen(false);
+    setBusy(true);
+    try {
+      await onForward(p, secondPhone.trim());
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <Dialog open onOpenChange={(o) => {
@@ -1798,7 +1827,7 @@ function LeadDetailDialog({
             }} disabled={busy}>
               Close
             </Button>
-            <Button onClick={handleForward} disabled={busy || hasDuplicate}>
+            <Button onClick={handleForward} disabled={busy}>
               {busy ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
@@ -1809,6 +1838,68 @@ function LeadDetailDialog({
           </div>
         </DialogFooter>
       </DialogContent>
+
+      <AlertDialog open={duplicateConfirmOpen} onOpenChange={setDuplicateConfirmOpen}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>This number already exists. Do you still want to continue?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The phone number you entered matches recent qualified leads. Review the previous lead details below before you continue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 max-h-[50vh] overflow-y-auto text-[12.5px]">
+            {duplicatePreview.map(({ source, match }) => (
+              <div key={`${source}-${match.id}`} className="rounded-lg border border-destructive/25 bg-destructive/5 p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold text-destructive">{source} duplicate</div>
+                  <div className="text-muted-foreground">
+                    {format(new Date(match.assigned_at), "MMM d, yyyy h:mm a")}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <DetailField label="Customer" value={match.customer_name} />
+                  <DetailField label="Primary Number" value={formatPhone(match.customer_number)} />
+                  <DetailField label="Second Number" value={formatPhone(match.customer_number_2)} />
+                  <DetailField
+                    label="Area"
+                    value={match.main_area || match.sub_area || "—"}
+                  />
+                  <DetailField label="Service" value={match.service || "—"} />
+                  <DetailField label="Lead ID" value={match.id} />
+                </div>
+                <div>
+                  <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                    Context
+                  </Label>
+                  <div className="rounded-md border bg-background/70 px-3 py-2 whitespace-pre-wrap">
+                    {match.context || "—"}
+                  </div>
+                </div>
+                {match.original_lead_link && (
+                  <a
+                    href={match.original_lead_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open previous lead link
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel / Go back</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => {
+              e.preventDefault();
+              void continueDespiteDuplicate();
+            }} disabled={busy}>
+              Continue anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

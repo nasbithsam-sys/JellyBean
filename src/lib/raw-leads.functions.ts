@@ -9,7 +9,7 @@ type RawLeadRole = (typeof ALLOWED_RAW_LEAD_ROLES)[number];
 type RawLeadCacheRow = {
   row_key: string;
   data: Record<string, string>;
-  lead: "yes" | "no" | null;
+  lead: "yes" | "no" | "review" | null;
   phone: string | null;
   category: "forwarded" | "not_found" | "wrong" | "duplicate" | null;
   captured_at: string | null;
@@ -19,8 +19,8 @@ type RawLeadCacheRow = {
   assigned_myself_at: string | null;
 };
 
-function normalizeLead(value: string | null): "yes" | "no" | null {
-  return value === "yes" || value === "no" ? value : null;
+function normalizeLead(value: string | null): "yes" | "no" | "review" | null {
+  return value === "yes" || value === "no" || value === "review" ? value : null;
 }
 
 function normalizeCategory(value: string | null): RawLeadCacheRow["category"] {
@@ -39,9 +39,57 @@ function normalizeData(value: unknown): Record<string, string> {
   );
 }
 
-const CATEGORY_FILTERS = ["all", "new", "forwarded", "not_found", "wrong", "duplicate", "assigned_myself"] as const;
+const CATEGORY_FILTERS = [
+  "all",
+  "new",
+  "review",
+  "forwarded",
+  "not_found",
+  "wrong",
+  "duplicate",
+  "assigned_myself",
+] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
 const DUPLICATE_LOOKBACK_HOURS = 48;
+
+const LEAD_FILTERS = ["all", "yes", "no", "review"] as const;
+type LeadFilter = (typeof LEAD_FILTERS)[number];
+
+function escapeIlikeValue(value: string) {
+  return value.replace(/[%_]/g, "\\$&").replace(/,/g, " ");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applySearchAndFilters<T extends { eq: (...a: never[]) => T; or: (...a: never[]) => T }>(
+  query: T,
+  filters: { query: string; leadFilter: LeadFilter; areaFilter: string },
+): T {
+  let next = query;
+  const trimmedQuery = filters.query.trim();
+  if (trimmedQuery) {
+    const pattern = `%${escapeIlikeValue(trimmedQuery)}%`;
+    next = next.or(
+      [
+        `phone.ilike.${pattern}`,
+        `lead_link.ilike.${pattern}`,
+        `data->>Account Name.ilike.${pattern}`,
+        `data->>Post Text.ilike.${pattern}`,
+        `data->>Account Area.ilike.${pattern}`,
+        `data->>Sub Area / Neighborhood.ilike.${pattern}`,
+        `data->>Incog Account.ilike.${pattern}`,
+      ].join(",") as never,
+    );
+  }
+  if (filters.leadFilter !== "all") {
+    next = next.eq("lead" as never, filters.leadFilter as never);
+  }
+  if (filters.areaFilter !== "all") {
+    next = next.or(
+      `data->>Account Area.eq.${filters.areaFilter},data->>Sub Area / Neighborhood.eq.${filters.areaFilter}` as never,
+    );
+  }
+  return next;
+}
 
 function normalizePhoneDigits(value: string | null | undefined): string {
   const digits = (value ?? "").replace(/\D/g, "");
@@ -53,9 +101,12 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
   .inputValidator((input) =>
     z
       .object({
-        limit: z.number().int().min(1).max(500).default(100),
+        limit: z.number().int().min(1).max(500).default(500),
         offset: z.number().int().min(0).default(0),
         category: z.enum(CATEGORY_FILTERS).default("all"),
+        query: z.string().max(120).default(""),
+        leadFilter: z.enum(LEAD_FILTERS).default("all"),
+        areaFilter: z.string().max(120).default("all"),
       })
       .parse(input ?? {}),
   )
@@ -86,10 +137,17 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       category: CategoryFilter,
     ): T => {
       if (category === "new") {
-        // Exclude categorised rows AND self-assigned rows (they belong in Assigned Myself).
+        // "New" excludes categorised rows, self-assigned rows, and AI-review rows.
         return query
           .is("category" as never, null as never)
-          .is("assigned_myself_at" as never, null as never);
+          .is("assigned_myself_at" as never, null as never)
+          .not("lead" as never, "eq" as never, "review" as never);
+      }
+      if (category === "review") {
+        return query
+          .is("category" as never, null as never)
+          .is("assigned_myself_at" as never, null as never)
+          .eq("lead" as never, "review" as never);
       }
       if (
         category === "forwarded" ||
@@ -130,61 +188,34 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       dataQuery = applyCategory(dataQuery as never, data.category) as typeof dataQuery;
       dataQuery = applyAssignment(dataQuery as never, data.category) as typeof dataQuery;
     }
+    dataQuery = applySearchAndFilters(dataQuery as never, {
+      query: data.query,
+      leadFilter: data.leadFilter,
+      areaFilter: data.areaFilter,
+    }) as typeof dataQuery;
     const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
 
-    const { data: countRows, error: countError } = await supabaseAdmin.rpc(
-      "raw_lead_cache_category_counts" as never,
-      { _user_id: context.userId, _is_admin: isAdmin } as never,
-    );
-    if (countError) throw new Error(countError.message);
-    const counts = (
-      countRows as unknown as Array<{
-        new: number | null;
-        forwarded: number | null;
-        not_found: number | null;
-        wrong: number | null;
-        duplicate: number | null;
-      }> | null
-    )?.[0] ?? {
-      new: 0,
-      forwarded: 0,
-      not_found: 0,
-      wrong: 0,
-      duplicate: 0,
-    };
-    const totalNew = counts.new ?? 0;
-    const totalForwarded = counts.forwarded ?? 0;
-    const totalNotFound = counts.not_found ?? 0;
-    const totalWrong = counts.wrong ?? 0;
-    const totalDuplicate = counts.duplicate ?? 0;
-
-    // Count self-assigned leads that are still active (not yet categorized).
-    // Only count rows where assigned_myself_at IS NOT NULL so old pre-feature
-    // assignments are excluded.
-    const { count: assignedMyselfCount, error: assignedCountError } = await supabaseAdmin
+    let totalCountQuery = supabaseAdmin
       .from("raw_lead_cache")
-      .select("row_key", { count: "exact", head: true })
-      .eq("assigned_to", context.userId)
-      .not("assigned_myself_at", "is", null)
-      .is("category", null);
-    if (assignedCountError) throw new Error(assignedCountError.message);
-    const totalAssignedMyself = assignedMyselfCount ?? 0;
-
-    const totalForCategory =
-      data.category === "new"
-        ? totalNew
-        : data.category === "forwarded"
-          ? totalForwarded
-          : data.category === "not_found"
-            ? totalNotFound
-            : data.category === "wrong"
-              ? totalWrong
-              : data.category === "duplicate"
-                ? totalDuplicate
-                : data.category === "assigned_myself"
-                  ? totalAssignedMyself
-                  : totalNew + totalForwarded + totalNotFound + totalWrong + totalDuplicate;
+      .select("row_key", { count: "exact", head: true });
+    if (data.category === "assigned_myself") {
+      totalCountQuery = totalCountQuery
+        .eq("assigned_to" as never, context.userId as never)
+        .not("assigned_myself_at" as never, "is" as never, null as never)
+        .is("category" as never, null as never) as typeof totalCountQuery;
+    } else {
+      totalCountQuery = applyCategory(totalCountQuery as never, data.category) as typeof totalCountQuery;
+      totalCountQuery = applyAssignment(totalCountQuery as never, data.category) as typeof totalCountQuery;
+    }
+    totalCountQuery = applySearchAndFilters(totalCountQuery as never, {
+      query: data.query,
+      leadFilter: data.leadFilter,
+      areaFilter: data.areaFilter,
+    }) as typeof totalCountQuery;
+    const { count: totalForCategoryRaw, error: totalForCategoryError } = await totalCountQuery;
+    if (totalForCategoryError) throw new Error(totalForCategoryError.message);
+    const totalForCategory = totalForCategoryRaw ?? 0;
 
     const entries: RawLeadCacheRow[] = (rows ?? []).map((entry) => ({
       row_key: entry.row_key,
@@ -203,17 +234,105 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       entries,
       totalCount: totalForCategory,
       counts: {
-        new: totalNew,
-        forwarded: totalForwarded,
-        not_found: totalNotFound,
-        wrong: totalWrong,
-        duplicate: totalDuplicate,
-        assigned_myself: totalAssignedMyself,
+        new: 0,
+        forwarded: 0,
+        not_found: 0,
+        wrong: 0,
+        duplicate: 0,
+        assigned_myself: 0,
       },
       pageSize: data.limit,
       offset: data.offset,
       hasMore: data.offset + entries.length < totalForCategory,
       nextOffset: data.offset + entries.length < totalForCategory ? data.offset + data.limit : null,
+    };
+  });
+
+export const fetchRawLeadCounts = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({}).parse(input ?? {}))
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rolesData, error: rolesError } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId);
+    if (rolesError) throw new Error(rolesError.message);
+
+    const roles = (rolesData ?? []).map((row) => row.role as string);
+    const hasAllowedRole = roles.some((role): role is RawLeadRole =>
+      ALLOWED_RAW_LEAD_ROLES.includes(role as RawLeadRole),
+    );
+    if (!hasAllowedRole) throw new Error("Forbidden: raw leads access required");
+
+    const isAdmin = roles.includes("admin") || roles.includes("sub_admin");
+
+    const { data: countRows, error: countError } = await supabaseAdmin.rpc(
+      "raw_lead_cache_category_counts" as never,
+      { _user_id: context.userId, _is_admin: isAdmin } as never,
+    );
+    if (countError) throw new Error(countError.message);
+
+    const baseCounts = (
+      countRows as unknown as Array<{
+        new: number | null;
+        forwarded: number | null;
+        not_found: number | null;
+        wrong: number | null;
+        duplicate: number | null;
+      }> | null
+    )?.[0] ?? {
+      new: 0,
+      forwarded: 0,
+      not_found: 0,
+      wrong: 0,
+      duplicate: 0,
+    };
+
+    let reviewQuery = supabaseAdmin
+      .from("raw_lead_cache")
+      .select("row_key", { count: "exact", head: true })
+      .eq("lead", "review")
+      .is("category", null)
+      .is("assigned_myself_at", null);
+    let newAdjustedQuery = supabaseAdmin
+      .from("raw_lead_cache")
+      .select("row_key", { count: "exact", head: true })
+      .is("category", null)
+      .is("assigned_myself_at", null)
+      .not("lead", "eq", "review");
+    let assignedMyselfQuery = supabaseAdmin
+      .from("raw_lead_cache")
+      .select("row_key", { count: "exact", head: true })
+      .eq("assigned_to", context.userId)
+      .not("assigned_myself_at", "is", null)
+      .is("category", null);
+
+    if (!isAdmin) {
+      reviewQuery = reviewQuery.or(`assigned_to.is.null,assigned_to.eq.${context.userId}` as never);
+      newAdjustedQuery = newAdjustedQuery.or(
+        `assigned_to.is.null,assigned_to.eq.${context.userId}` as never,
+      );
+    }
+
+    const [
+      { count: reviewCount, error: reviewCountError },
+      { count: adjustedNewCount, error: adjustedNewCountError },
+      { count: assignedMyselfCount, error: assignedMyselfCountError },
+    ] = await Promise.all([reviewQuery, newAdjustedQuery, assignedMyselfQuery]);
+
+    if (reviewCountError) throw new Error(reviewCountError.message);
+    if (adjustedNewCountError) throw new Error(adjustedNewCountError.message);
+    if (assignedMyselfCountError) throw new Error(assignedMyselfCountError.message);
+
+    return {
+      new: adjustedNewCount ?? 0,
+      review: reviewCount ?? 0,
+      forwarded: baseCounts.forwarded ?? 0,
+      not_found: baseCounts.not_found ?? 0,
+      wrong: baseCounts.wrong ?? 0,
+      duplicate: baseCounts.duplicate ?? 0,
+      assigned_myself: assignedMyselfCount ?? 0,
     };
   });
 
@@ -252,13 +371,50 @@ export const checkDuplicatePhone = createServerFn({ method: "GET" })
         customer_number_2: string | null;
         assigned_at: string;
       }> | null) ?? []
-    ).map((row) => ({
-      id: row.id,
-      customer_name: row.customer_name,
-      customer_number: row.customer_number,
-      customer_number_2: row.customer_number_2,
-      assigned_at: row.assigned_at,
-    }));
+    )
+      .slice(0, 10)
+      .map((row) => ({
+        id: row.id,
+        customer_name: row.customer_name,
+        customer_number: row.customer_number,
+        customer_number_2: row.customer_number_2,
+        assigned_at: row.assigned_at,
+      }));
 
-    return { duplicate: matches.length > 0, matches };
+    const ids = matches.map((row) => row.id);
+    const { data: details, error: detailsError } =
+      ids.length === 0
+        ? { data: [], error: null }
+        : await context.supabase
+            .from("qualified_leads")
+            .select("id, service, context, main_area, sub_area, original_lead_link")
+            .in("id", ids);
+    if (detailsError) throw new Error(detailsError.message);
+
+    const detailsById = new Map(
+      ((details as Array<{
+        id: string;
+        service: string | null;
+        context: string | null;
+        main_area: string | null;
+        sub_area: string | null;
+        original_lead_link: string | null;
+      }> | null) ?? []
+      ).map((detail) => [detail.id, detail]),
+    );
+
+    return {
+      duplicate: matches.length > 0,
+      matches: matches.map((match) => {
+        const detail = detailsById.get(match.id);
+        return {
+          ...match,
+          service: detail?.service ?? null,
+          context: detail?.context ?? null,
+          main_area: detail?.main_area ?? null,
+          sub_area: detail?.sub_area ?? null,
+          original_lead_link: detail?.original_lead_link ?? null,
+        };
+      }),
+    };
   });
