@@ -259,7 +259,7 @@ export function LeadForm({
       return;
     }
     if (hasDuplicate) {
-      toast.error("Duplicate phone number detected in the last 72 hours.");
+      toast.error("Duplicate phone number detected in the last 48 hours.");
       return;
     }
 
@@ -471,7 +471,7 @@ export function LeadForm({
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-[12.5px]">
           <div className="flex items-center gap-2 font-semibold text-destructive">
             <AlertTriangle className="h-4 w-4" />
-            Duplicate phone number detected (last 72 hours)
+            Duplicate phone number detected (last 48 hours)
           </div>
           <ul className="mt-2 space-y-1 text-foreground/80">
             {uniqueDuplicates.slice(0, 5).map((m) => (

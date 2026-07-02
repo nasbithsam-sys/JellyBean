@@ -41,7 +41,7 @@ function normalizeData(value: unknown): Record<string, string> {
 
 const CATEGORY_FILTERS = ["all", "new", "forwarded", "not_found", "wrong", "duplicate", "assigned_myself"] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
-const DUPLICATE_LOOKBACK_HOURS = 72;
+const DUPLICATE_LOOKBACK_HOURS = 48;
 
 function normalizePhoneDigits(value: string | null | undefined): string {
   const digits = (value ?? "").replace(/\D/g, "");

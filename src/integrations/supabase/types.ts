@@ -127,6 +127,7 @@ export type Database = {
           group_name: string | null
           id: string
           incogniton_profile_id: string
+          is_active: boolean
           last_launched_at: string | null
           latitude: number | null
           launch_history: Json
@@ -137,7 +138,6 @@ export type Database = {
           notes: string | null
           platform: string | null
           profile_name: string
-          is_active: boolean
         }
         Insert: {
           account_area?: string | null
@@ -146,6 +146,7 @@ export type Database = {
           group_name?: string | null
           id?: string
           incogniton_profile_id: string
+          is_active?: boolean
           last_launched_at?: string | null
           latitude?: number | null
           launch_history?: Json
@@ -156,7 +157,6 @@ export type Database = {
           notes?: string | null
           platform?: string | null
           profile_name: string
-          is_active?: boolean
         }
         Update: {
           account_area?: string | null
@@ -165,6 +165,7 @@ export type Database = {
           group_name?: string | null
           id?: string
           incogniton_profile_id?: string
+          is_active?: boolean
           last_launched_at?: string | null
           latitude?: number | null
           launch_history?: Json
@@ -175,7 +176,6 @@ export type Database = {
           notes?: string | null
           platform?: string | null
           profile_name?: string
-          is_active?: boolean
         }
         Relationships: [
           {
@@ -377,6 +377,7 @@ export type Database = {
       }
       raw_lead_cache: {
         Row: {
+          assigned_myself_at: string | null
           assigned_to: string | null
           captured_at: string | null
           categorized_at: string | null
@@ -393,6 +394,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_myself_at?: string | null
           assigned_to?: string | null
           captured_at?: string | null
           categorized_at?: string | null
@@ -409,6 +411,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_myself_at?: string | null
           assigned_to?: string | null
           captured_at?: string | null
           categorized_at?: string | null
@@ -553,6 +556,17 @@ export type Database = {
       current_user_has_role_text: { Args: { _role: string }; Returns: boolean }
       email_for_username: { Args: { _username: string }; Returns: string }
       generate_login_otp: { Args: never; Returns: string }
+      get_admin_dashboard_stats: { Args: { _today: string }; Returns: Json }
+      get_analytics_daily_stats: {
+        Args: { _end_date: string; _start_date: string }
+        Returns: {
+          day_key: string
+          forwarded_count: number
+          sent_to_cs_count: number
+          total_captured: number
+          wrong_count: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -638,6 +652,8 @@ export type Database = {
         | "service_provider_himself"
         | "need_follow_up"
         | "wrong_lead"
+        | "wrong_service"
+        | "wrong_person"
       raw_lead_cancel_reason:
         | "not_a_lead"
         | "general_post"
