@@ -98,6 +98,7 @@ export function LeadForm({
   onDirtyChange,
   onCancel,
   onSubmit,
+  disableDuplicateCheck = false,
 }: {
   title?: string;
   submitLabel?: string;
@@ -110,6 +111,7 @@ export function LeadForm({
   onDirtyChange?: (isDirty: boolean) => void;
   onCancel: () => void;
   onSubmit: (values: LeadFormValues) => Promise<void>;
+  disableDuplicateCheck?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [customerName, setCustomerName] = useState(initialValues?.customerName ?? "");
@@ -146,7 +148,7 @@ export function LeadForm({
   };
   const duplicateQuery = useQuery({
     queryKey: ["lead-form-duplicate-phone", phoneDigits.join(",")],
-    enabled: phoneDigits.length > 0,
+    enabled: !disableDuplicateCheck && phoneDigits.length > 0,
     queryFn: async () => {
       const results = await Promise.all(
         phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } })),
@@ -159,11 +161,13 @@ export function LeadForm({
   if (initialValues?.id) {
     seenDup.add(initialValues.id);
   }
-  const uniqueDuplicates = (duplicateQuery.data ?? []).filter((m) => {
-    if (seenDup.has(m.id)) return false;
-    seenDup.add(m.id);
-    return true;
-  });
+  const uniqueDuplicates = disableDuplicateCheck
+    ? []
+    : (duplicateQuery.data ?? []).filter((m) => {
+        if (seenDup.has(m.id)) return false;
+        seenDup.add(m.id);
+        return true;
+      });
   const hasDuplicate = uniqueDuplicates.length > 0;
 
   const isDirty =
