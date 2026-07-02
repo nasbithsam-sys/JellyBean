@@ -148,7 +148,7 @@ export function LeadForm({
   };
   const duplicateQuery = useQuery({
     queryKey: ["lead-form-duplicate-phone", phoneDigits.join(",")],
-    enabled: phoneDigits.length > 0,
+    enabled: !disableDuplicateCheck && phoneDigits.length > 0,
     queryFn: async () => {
       const results = await Promise.all(
         phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } })),
