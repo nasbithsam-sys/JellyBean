@@ -305,7 +305,7 @@ function Inner() {
         </Card>
 
         <Card title="CS pipeline" subtitle="Distribution by status">
-          <div className="h-64">
+          <div className="h-[300px]">
             <ResponsiveContainer>
               <BarChart
                 data={csBuckets}
@@ -331,6 +331,7 @@ function Inner() {
                   axisLine={false}
                   tickLine={false}
                   width={180}
+                  interval={0}
                 />
                 <Tooltip
                   contentStyle={{
