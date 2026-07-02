@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { formatDistanceToNow, startOfDay, endOfDay } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
 import { useAuth } from "@/hooks/use-auth";
@@ -101,6 +101,31 @@ function Inner() {
   const [editing, setEditing] = useState<Row | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 400);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const dbSearch = useMemo(() => {
+    return debouncedQuery.replace(/[,"'%\\]/g, ""); // Strip characters that break postgrest .or()
+  }, [debouncedQuery]);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 500;
+
+  const dbDateFrom = useMemo(() => {
+    return dateFrom ? startOfDay(new Date(dateFrom)).toISOString() : null;
+  }, [dateFrom]);
+
+  const dbDateTo = useMemo(() => {
+    return dateTo ? endOfDay(new Date(dateTo)).toISOString() : null;
+  }, [dateTo]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [dbDateFrom, dbDateTo, forwardedByFilter, outcomeFilter, dbSearch]);
+
   const todayStart = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -158,52 +183,87 @@ function Inner() {
   }, [allProfiles.data]);
 
   const list = useQuery({
-    queryKey: ["forwarded-leads", auth.user?.id, isAdmin],
+    queryKey: ["forwarded-leads", auth.user?.id, isAdmin, { page, dbDateFrom, dbDateTo, forwardedByFilter, outcomeFilter, dbSearch }],
     enabled: !!auth.user?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const from = (page - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      let q = supabase
         .from("qualified_leads")
         .select(
           "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, post_text, pass_it_to, main_area, sub_area, original_lead_link, reference, is_important, pinned_important, images, submitted_by_role, cs_status, assigned_at, assigned_by, updated_at, created_by",
         )
         .order("updated_at", { ascending: false })
-        .limit(500);
+        .range(from, to);
+
+      if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
+      if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
+
+      if (outcomeFilter === "pending") {
+        q = q.eq("cs_status", "new");
+      } else if (outcomeFilter !== "all") {
+        q = q.eq("cs_status", outcomeFilter);
+      }
+
+      if (forwardedByFilter !== "all") {
+        q = q.or(`created_by.eq.${forwardedByFilter},assigned_by.eq.${forwardedByFilter}`);
+      }
+
+      if (dbSearch) {
+        const s = `%${dbSearch}%`;
+        q = q.or(
+          `customer_name.ilike.${s},customer_number.ilike.${s},service.ilike.${s},context.ilike.${s},pass_it_to.ilike.${s},main_area.ilike.${s},sub_area.ilike.${s}`,
+        );
+      }
+
+      const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as Row[];
     },
     placeholderData: keepPreviousData,
   });
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
-    const toTime = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
-    return (list.data ?? []).filter((r) => {
-      if (outcomeFilter === "pending" && r.cs_status !== "new") return false;
-      if (outcomeFilter !== "all" && outcomeFilter !== "pending" && r.cs_status !== outcomeFilter)
-        return false;
-      if (
-        q &&
-        ![
-          r.customer_name,
-          r.customer_number,
-          r.service,
-          r.context,
-          r.pass_it_to,
-          r.main_area,
-          r.sub_area,
-        ].some((f) => f?.toLowerCase().includes(q))
-      ) {
-        return false;
+  const totalCount = useQuery({
+    queryKey: ["forwarded-leads-count", auth.user?.id, isAdmin, { dbDateFrom, dbDateTo, forwardedByFilter, outcomeFilter, dbSearch }],
+    enabled: !!auth.user?.id,
+    queryFn: async () => {
+      let q = supabase
+        .from("qualified_leads")
+        .select("id", { count: "exact", head: true });
+
+      if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
+      if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
+
+      if (outcomeFilter === "pending") {
+        q = q.eq("cs_status", "new");
+      } else if (outcomeFilter !== "all") {
+        q = q.eq("cs_status", outcomeFilter);
       }
-      const forwarderId = r.created_by ?? r.assigned_by;
-      if (forwardedByFilter !== "all" && forwarderId !== forwardedByFilter) return false;
-      const forwardedAt = new Date(r.assigned_at).getTime();
-      if (fromTime !== null && forwardedAt < fromTime) return false;
-      if (toTime !== null && forwardedAt > toTime) return false;
-      return true;
-    });
-  }, [dateFrom, dateTo, forwardedByFilter, list.data, query, outcomeFilter]);
+
+      if (forwardedByFilter !== "all") {
+        q = q.or(`created_by.eq.${forwardedByFilter},assigned_by.eq.${forwardedByFilter}`);
+      }
+
+      if (dbSearch) {
+        const s = `%${dbSearch}%`;
+        q = q.or(
+          `customer_name.ilike.${s},customer_number.ilike.${s},service.ilike.${s},context.ilike.${s},pass_it_to.ilike.${s},main_area.ilike.${s},sub_area.ilike.${s}`,
+        );
+      }
+
+      const { count, error } = await q;
+      if (error) throw error;
+      return count ?? 0;
+    },
+    placeholderData: keepPreviousData,
+  });
+
+  const totalPages = Math.max(1, Math.ceil((totalCount.data ?? 0) / PAGE_SIZE));
+
+  const filtered = useMemo(() => {
+    return list.data ?? [];
+  }, [list.data]);
 
   return (
     <div className="space-y-4">
@@ -337,14 +397,66 @@ function Inner() {
           No forwarded leads found for the current filter.
         </div>
       ) : (
-        <ForwardedTable
-          rows={filtered}
-          onEdit={setEditing}
-          auth={auth}
-          qc={qc}
-          profilesById={profilesById}
-          isAdmin={isAdmin}
-        />
+        <>
+          <ForwardedTable
+            rows={filtered}
+            onEdit={setEditing}
+            auth={auth}
+            qc={qc}
+            profilesById={profilesById}
+            isAdmin={isAdmin}
+          />
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 py-4">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => setPage(1)}
+                disabled={page <= 1 || list.isFetching}
+                title="First Page"
+              >
+                <ChevronsLeft className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 text-[12px]"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || list.isFetching}
+              >
+                <ChevronLeft className="h-3.5 w-3.5 mr-1" />
+                Previous
+              </Button>
+              <span className="text-[12px] text-muted-foreground tabular-nums px-2">
+                Page {page} of {totalPages}
+                {totalCount.data != null && (
+                  <span className="ml-1 text-[11px]">({totalCount.data} total)</span>
+                )}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 text-[12px]"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || list.isFetching}
+              >
+                Next
+                <ChevronRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => setPage(totalPages)}
+                disabled={page >= totalPages || list.isFetching}
+                title="Last Page"
+              >
+                <ChevronsRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <Dialog open={!!editing} onOpenChange={(open) => {
