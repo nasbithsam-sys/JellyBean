@@ -330,7 +330,7 @@ function Inner() {
                   tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
-                  width={110}
+                  width={180}
                 />
                 <Tooltip
                   contentStyle={{
