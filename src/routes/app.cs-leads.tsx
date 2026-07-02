@@ -399,6 +399,16 @@ function Inner() {
   const qc = useQueryClient();
   const { newLeadCount, clearAlert } = useNewLeadAlert();
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 400);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const dbSearch = useMemo(() => {
+    return debouncedQuery.replace(/[,"'%\\]/g, ""); // Strip characters that break postgrest .or()
+  }, [debouncedQuery]);
+
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
@@ -630,12 +640,12 @@ function Inner() {
   // ── Reset page to 1 whenever any server-side filter changes ──────────────
   useEffect(() => {
     setPage(1);
-  }, [dbDateFrom, dbDateTo, dbOwner, dbStatus, query, areaFilter]);
+  }, [dbDateFrom, dbDateTo, dbOwner, dbStatus, areaFilter, dbSearch]);
 
   const list = useQuery({
     queryKey: [
       "cs_leads",
-      { page, dbDateFrom, dbDateTo, dbOwner, dbStatus },
+      { page, dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch },
     ],
     queryFn: async () => {
       const from = (page - 1) * PAGE_SIZE;
@@ -664,6 +674,14 @@ function Inner() {
       // Status filter — pushed to DB (cs_status+created_at is indexed)
       if (dbStatus) q = q.eq("cs_status", dbStatus);
 
+      // Search text filter — pushed to DB across all pages
+      if (dbSearch) {
+        const s = `%${dbSearch}%`;
+        q = q.or(
+          `customer_name.ilike.${s},customer_number.ilike.${s},customer_number_2.ilike.${s},number_name.ilike.${s},main_area.ilike.${s},sub_area.ilike.${s},pass_it_to.ilike.${s},requirement_1.ilike.${s},requirement_2.ilike.${s}`,
+        );
+      }
+
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as Lead[];
@@ -678,7 +696,7 @@ function Inner() {
   // count to keep it fast. Count is therefore a "filtered dataset size" for
   // paginating, not an absolute match count.
   const totalCount = useQuery({
-    queryKey: ["cs_leads_count", { dbDateFrom, dbDateTo, dbOwner, dbStatus }],
+    queryKey: ["cs_leads_count", { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch }],
     queryFn: async () => {
       let q = supabase
         .from("qualified_leads")
@@ -694,6 +712,13 @@ function Inner() {
       }
 
       if (dbStatus) q = q.eq("cs_status", dbStatus);
+
+      if (dbSearch) {
+        const s = `%${dbSearch}%`;
+        q = q.or(
+          `customer_name.ilike.${s},customer_number.ilike.${s},customer_number_2.ilike.${s},number_name.ilike.${s},main_area.ilike.${s},sub_area.ilike.${s},pass_it_to.ilike.${s},requirement_1.ilike.${s},requirement_2.ilike.${s}`,
+        );
+      }
 
       const { count, error } = await q;
       if (error) throw error;
