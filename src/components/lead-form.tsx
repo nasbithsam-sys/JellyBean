@@ -161,11 +161,13 @@ export function LeadForm({
   if (initialValues?.id) {
     seenDup.add(initialValues.id);
   }
-  const uniqueDuplicates = (duplicateQuery.data ?? []).filter((m) => {
-    if (seenDup.has(m.id)) return false;
-    seenDup.add(m.id);
-    return true;
-  });
+  const uniqueDuplicates = disableDuplicateCheck
+    ? []
+    : (duplicateQuery.data ?? []).filter((m) => {
+        if (seenDup.has(m.id)) return false;
+        seenDup.add(m.id);
+        return true;
+      });
   const hasDuplicate = uniqueDuplicates.length > 0;
 
   const isDirty =
