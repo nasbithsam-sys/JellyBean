@@ -171,6 +171,28 @@ function Inner() {
           variant="outline"
           className="h-9"
           onClick={() => {
+            setFromDate(today);
+            setToDate(today);
+          }}
+        >
+          Today
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-9"
+          onClick={() => {
+            setFromDate(format(subDays(new Date(), 6), "yyyy-MM-dd"));
+            setToDate(today);
+          }}
+        >
+          Last 7 days
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-9"
+          onClick={() => {
             setFromDate(defaultFrom);
             setToDate(today);
           }}
