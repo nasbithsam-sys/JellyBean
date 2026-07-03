@@ -166,9 +166,22 @@ function Inner() {
     queryKey: ["all_profiles"],
     enabled: isAdmin,
     queryFn: async () => {
+      const { data: rolesData, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .neq("role", "cs");
+
+      if (rolesError) throw rolesError;
+
+      const nonCsUserIds = rolesData.map((r) => r.user_id);
+
+      if (nonCsUserIds.length === 0) return [];
+
       const { data, error } = await supabase
         .from("profiles")
-        .select("user_id, full_name, email");
+        .select("user_id, full_name, email")
+        .in("user_id", nonCsUserIds);
+
       if (error) throw error;
       return data ?? [];
     },
