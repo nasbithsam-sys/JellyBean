@@ -111,8 +111,8 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       .parse(input ?? {}),
   )
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: rolesData, error: rolesError } = await supabaseAdmin
+    
+    const { data: rolesData, error: rolesError } = await context.supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", context.userId);
@@ -172,7 +172,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     };
 
     // Paged data
-    let dataQuery = supabaseAdmin
+    let dataQuery = context.supabase
       .from("raw_lead_cache")
       .select(columns)
       .order("captured_at", { ascending: false, nullsFirst: false })
@@ -196,7 +196,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
 
-    let totalCountQuery = supabaseAdmin
+    let totalCountQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true });
     if (data.category === "assigned_myself") {
@@ -252,8 +252,8 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({}).parse(input ?? {}))
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: rolesData, error: rolesError } = await supabaseAdmin
+    
+    const { data: rolesData, error: rolesError } = await context.supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", context.userId);
@@ -267,7 +267,7 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
 
     const isAdmin = roles.includes("admin") || roles.includes("sub_admin");
 
-    const { data: countRows, error: countError } = await supabaseAdmin.rpc(
+    const { data: countRows, error: countError } = await context.supabase.rpc(
       "raw_lead_cache_category_counts" as never,
       { _user_id: context.userId, _is_admin: isAdmin } as never,
     );
@@ -289,19 +289,19 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
       duplicate: 0,
     };
 
-    let reviewQuery = supabaseAdmin
+    let reviewQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
       .eq("lead", "review")
       .is("category", null)
       .is("assigned_myself_at", null);
-    let newAdjustedQuery = supabaseAdmin
+    let newAdjustedQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
       .is("category", null)
       .is("assigned_myself_at", null)
       .not("lead", "eq", "review");
-    let assignedMyselfQuery = supabaseAdmin
+    let assignedMyselfQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
       .eq("assigned_to", context.userId)
