@@ -264,7 +264,8 @@ function Inner() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="crm-toolbar-panel">
+        <div className="flex flex-wrap items-center gap-2">
         {(
           [
             ["all", "All time"],
@@ -305,6 +306,7 @@ function Inner() {
           <Download className="h-3.5 w-3.5 mr-1.5" />
           Export counts
         </Button>
+        </div>
       </div>
       <Section title="Raw leads by status">
         <Grid>
@@ -326,7 +328,7 @@ function Inner() {
         </Grid>
       </Section>
       <Section title="Leads by account">
-        <div className="bg-card border rounded-lg overflow-hidden">
+        <div className="crm-surface-card overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b">
             <div className="flex flex-wrap items-center gap-1">
               {(
@@ -382,7 +384,7 @@ function Inner() {
           </div>
 
           <div className="max-h-[560px] overflow-auto">
-            <table className="w-full text-sm">
+            <table className="crm-data-table">
               <thead className="bg-muted/40 sticky top-0">
                 <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-2 font-medium">Account</th>
@@ -443,11 +445,11 @@ function Inner() {
       </Section>
 
       <Section title="Leads forwarded per maturing">
-        <div className="bg-card border rounded-lg overflow-hidden">
+        <div className="crm-surface-card overflow-hidden">
           <div className="px-4 py-3 border-b text-xs text-muted-foreground">
             Uses the same range controls above: Today, Yesterday, Weekly, Monthly, or Custom.
           </div>
-          <table className="w-full text-sm">
+          <table className="crm-data-table">
             <thead className="bg-muted/40">
               <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-2 font-medium">Maturing</th>
@@ -485,12 +487,12 @@ function Inner() {
       </Section>
 
       <Section title="Number-not-found checks per user">
-        <div className="bg-card border rounded-lg overflow-hidden">
+        <div className="crm-surface-card overflow-hidden">
           <div className="px-4 py-3 border-b text-xs text-muted-foreground">
             Counts raw leads marked as “Number not found”. Uses the same date range as above. Only
             marks made after this report was added are attributed to a user.
           </div>
-          <table className="w-full text-sm">
+          <table className="crm-data-table">
             <thead className="bg-muted/40">
               <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-2 font-medium">User</th>
@@ -532,10 +534,8 @@ function Inner() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-        {title}
-      </h2>
+    <div className="crm-section-panel">
+      <h2 className="crm-section-title mb-3">{title}</h2>
       {children}
     </div>
   );
@@ -545,11 +545,9 @@ function Grid({ children }: { children: React.ReactNode }) {
 }
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-card border rounded-lg p-4">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground capitalize">
-        {label}
-      </div>
-      <div className="text-3xl font-semibold mt-1">{value}</div>
+    <div className="crm-surface-card p-4">
+      <div className="crm-card-label capitalize">{label}</div>
+      <div className="crm-card-value mt-1">{value}</div>
     </div>
   );
 }

@@ -113,26 +113,30 @@ function Inner() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <SummaryCard
-          icon={Database}
-          label="Raw cursor"
-          value={health.data?.cursorValue ? `Row ${health.data.cursorValue}` : "Not set"}
-        />
-        <SummaryCard icon={Users} label="Access" value="Password only" />
-        <SummaryCard icon={CheckCircle2} label="Exports" value="Browser CSV only" />
+      <div className="crm-section-panel">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <SummaryCard
+            icon={Database}
+            label="Raw cursor"
+            value={health.data?.cursorValue ? `Row ${health.data.cursorValue}` : "Not set"}
+          />
+          <SummaryCard icon={Users} label="Access" value="Password only" />
+          <SummaryCard icon={CheckCircle2} label="Exports" value="Browser CSV only" />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {health.data?.checks.map((check) => (
-          <div key={check.label} className="bg-card border rounded-lg p-4 flex items-start gap-3">
-            <StatusIcon status={check.status} />
-            <div className="min-w-0">
-              <div className="font-medium text-[13px]">{check.label}</div>
-              <div className="text-[12px] text-muted-foreground mt-1">{check.value}</div>
+      <div className="crm-section-panel">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {health.data?.checks.map((check) => (
+            <div key={check.label} className="crm-surface-card p-4 flex items-start gap-3">
+              <StatusIcon status={check.status} />
+              <div className="min-w-0">
+                <div className="font-medium text-[13px]">{check.label}</div>
+                <div className="text-[12px] text-muted-foreground mt-1">{check.value}</div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -165,7 +169,7 @@ function SummaryCard({
   value: string;
 }) {
   return (
-    <div className="bg-card border rounded-lg p-4">
+    <div className="crm-surface-card p-4">
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground">
         <Icon className="h-3.5 w-3.5" />
         {label}

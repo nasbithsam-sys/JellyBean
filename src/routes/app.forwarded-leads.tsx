@@ -280,25 +280,28 @@ function Inner() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat
-          label="Sent to CS today"
-          value={sentToday.data}
-          sub={isAdmin ? "All users" : "By you"}
-        />
-        <Stat label="Total forwarded" value={list.data?.length} />
-        <Stat
-          label="Pending outcome"
-          value={(list.data ?? []).filter((r) => r.cs_status === "new").length}
-        />
-        <Stat
-          label="Number not found"
-          value={notFoundCount.data}
-          sub={isAdmin ? "All users" : "Checked by you"}
-        />
+      <div className="crm-section-panel">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <Stat
+            label="Sent to CS today"
+            value={sentToday.data}
+            sub={isAdmin ? "All users" : "By you"}
+          />
+          <Stat label="Total forwarded" value={list.data?.length} />
+          <Stat
+            label="Pending outcome"
+            value={(list.data ?? []).filter((r) => r.cs_status === "new").length}
+          />
+          <Stat
+            label="Number not found"
+            value={notFoundCount.data}
+            sub={isAdmin ? "All users" : "Checked by you"}
+          />
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="crm-toolbar-panel">
+        <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[240px] max-w-md">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
@@ -392,6 +395,7 @@ function Inner() {
           )}
           Refresh
         </Button>
+        </div>
       </div>
 
       {list.error && (
@@ -401,24 +405,30 @@ function Inner() {
       )}
 
       {list.isLoading && !list.data ? (
-        <div className="glass-card p-16 text-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...
+        <div className="crm-section-panel">
+          <div className="glass-card p-16 text-center text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading...
+          </div>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">
-          <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
-          No forwarded leads found for the current filter.
+        <div className="crm-section-panel">
+          <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">
+            <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
+            No forwarded leads found for the current filter.
+          </div>
         </div>
       ) : (
         <>
-          <ForwardedTable
-            rows={filtered}
-            onEdit={setEditing}
-            auth={auth}
-            qc={qc}
-            profilesById={profilesById}
-            isAdmin={isAdmin}
-          />
+          <div className="crm-section-panel">
+            <ForwardedTable
+              rows={filtered}
+              onEdit={setEditing}
+              auth={auth}
+              qc={qc}
+              profilesById={profilesById}
+              isAdmin={isAdmin}
+            />
+          </div>
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 py-4">
               <Button
@@ -508,12 +518,10 @@ function Inner() {
 
 function Stat({ label, value, sub }: { label: string; value?: number | null; sub?: string }) {
   return (
-    <div className="glass-card p-4">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">
-        {label}
-      </div>
-      <div className="text-2xl font-bold mt-1 tabular-nums">{value ?? "-"}</div>
-      {sub && <div className="text-[11px] text-muted-foreground mt-0.5">{sub}</div>}
+    <div className="crm-surface-card p-5">
+      <div className="crm-kicker">{label}</div>
+      <div className="crm-card-value mt-1 tabular-nums">{value ?? "-"}</div>
+      {sub && <div className="crm-card-label mt-1">{sub}</div>}
     </div>
   );
 }
@@ -535,7 +543,7 @@ function ForwardedTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-md border border-border">
-      <table className="w-full text-[12.5px]">
+      <table className="crm-data-table">
         <thead className="bg-surface text-muted-foreground">
           <tr>
             <th className="text-left px-3 py-2 font-medium">Customer</th>
@@ -551,8 +559,8 @@ function ForwardedTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className="border-t border-border hover:bg-surface/50">
-              <td className="px-3 py-2 font-medium">{r.customer_name}</td>
+            <tr key={r.id} className="crm-data-row border-t border-border">
+              <td className="px-3 py-2 font-semibold text-slate-900">{r.customer_name}</td>
               <td className="px-3 py-2">
                 <a
                   href={`tel:${r.customer_number}`}
@@ -573,15 +581,17 @@ function ForwardedTable({
                 <div className="truncate">
                   {[r.service, r.pass_it_to].filter(Boolean).join(" / ")}
                 </div>
-                {r.context && <div className="truncate text-[11px]">{r.context}</div>}
+                {r.context && <div className="truncate text-[11.5px] crm-muted-text">{r.context}</div>}
               </td>
               <td className="px-3 py-2">
                 {r.cs_status === "new" ? (
-                  <span className="text-muted-foreground italic">Pending</span>
+                  <span className="text-[10.5px] px-2.5 py-1 rounded-full border font-medium bg-[#ece9f8] text-[#50469B] border-[#c8c1e6] shadow-sm">
+                    Pending
+                  </span>
                 ) : (
                   <span
                     className={cn(
-                      "text-[10.5px] px-2 py-0.5 rounded-full border font-medium",
+                      "text-[10.5px] px-2.5 py-1 rounded-full border font-medium shadow-sm",
                       STATUS_TONE[r.cs_status] ?? "bg-muted text-muted-foreground border-border",
                     )}
                   >
@@ -1004,7 +1014,7 @@ function ForwardedLeadForm({
                   onClick={() => {
                     setExistingImages((prev) => prev.filter((_, i) => i !== idx));
                   }}
-                  className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                  className="crm-motion absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -1026,7 +1036,7 @@ function ForwardedLeadForm({
                   onClick={() => {
                     setFiles((prev) => prev.filter((_, i) => i !== idx));
                   }}
-                  className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                  className="crm-motion absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -1036,7 +1046,7 @@ function ForwardedLeadForm({
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="h-20 w-20 rounded-md border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors grid place-items-center text-muted-foreground hover:text-primary"
+                className="crm-motion h-20 w-20 rounded-md border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 grid place-items-center text-muted-foreground hover:text-primary"
               >
                 <div className="flex flex-col items-center gap-1 text-[11px]">
                   <ImagePlus className="h-4 w-4" />

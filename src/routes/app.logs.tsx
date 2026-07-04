@@ -132,7 +132,8 @@ function Inner() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="crm-toolbar-panel">
+        <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
@@ -158,6 +159,7 @@ function Inner() {
           <Download className="h-3.5 w-3.5 mr-1.5" />
           Export
         </Button>
+        </div>
       </div>
 
       {logs.error && (
@@ -166,8 +168,9 @@ function Inner() {
         </div>
       )}
 
-      <div className="bg-card border rounded-lg overflow-hidden">
-        <table className="crm-table">
+      <div className="crm-section-panel">
+        <div className="crm-surface-card overflow-hidden">
+          <table className="crm-table">
           <thead>
             <tr>
               <th>When</th>
@@ -212,7 +215,8 @@ function Inner() {
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {totalPages > 1 && (

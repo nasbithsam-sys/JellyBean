@@ -15,15 +15,14 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4 px-8 pt-6 pb-5 border-b border-border/70",
-        "bg-slate-950 text-white backdrop-blur-xl sticky top-0 z-30 shadow-sm",
+        "crm-page-header crm-enter flex items-center justify-between gap-4 px-6 md:px-8 py-5 mx-3 md:mx-4 rounded-[28px]",
         className,
       )}
     >
       <div className="min-w-0">
-        <h1 className="text-[24px] leading-tight font-semibold text-white">{title}</h1>
+        <h1 className="crm-page-title">{title}</h1>
         {description && (
-          <p className="text-[14px] text-slate-300 mt-1.5 max-w-3xl">{description}</p>
+          <p className="crm-page-subtitle mt-1.5 max-w-3xl">{description}</p>
         )}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -38,7 +37,11 @@ export function PageBody({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={cn("px-8 py-7 animate-fade-in-up", className)}>{children}</div>;
+  return (
+    <div className={cn("crm-page-body crm-enter px-3 md:px-4 pb-4 pt-4", className)}>
+      <div className="rounded-[32px] px-4 py-5 md:px-6 md:py-6">{children}</div>
+    </div>
+  );
 }
 
 type Role =

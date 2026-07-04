@@ -990,7 +990,7 @@ function Inner() {
             qc.invalidateQueries({ queryKey: ["cs_leads"] });
             clearAlert();
           }}
-          className="w-full text-[13px] bg-primary/10 border border-primary/20 text-primary py-2.5 px-4 rounded-xl flex items-center justify-between hover:bg-primary/15 transition-all animate-pulse duration-[2000ms]"
+          className="crm-motion w-full text-[13px] bg-primary/10 border border-primary/20 text-primary py-2.5 px-4 rounded-xl flex items-center justify-between hover:bg-primary/15 animate-pulse duration-[2000ms]"
         >
           <span className="font-semibold text-left">
             🔔 New lead{newLeadCount === 1 ? "" : "s"} available — click to refresh
@@ -1000,7 +1000,8 @@ function Inner() {
           </span>
         </button>
       )}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="crm-toolbar-panel">
+        <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[240px] max-w-md">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
@@ -1108,7 +1109,7 @@ function Inner() {
           </Popover>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px]">
+          <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-[#ece9f8] border border-[#c8c1e6] text-[12px] shadow-sm">
             <span className="text-muted-foreground">Sent today</span>
             <span className="font-semibold tabular-nums">{sentToday.data ?? "—"}</span>
           </div>
@@ -1151,106 +1152,109 @@ function Inner() {
             Export
           </Button>
         </div>
+        </div>
       </div>
 
       {canManagePrompt && (
-        <div className="glass-card p-5 space-y-4">
-          <div className="flex items-center gap-2 border-b border-border pb-3 justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">AI Rephrase Assistant</h3>
-            </div>
-            {selectedIds.size > 0 && (
-              <span className="text-xs bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-full font-medium">
-                {selectedIds.size} lead(s) selected
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {/* Prompt section */}
-            <div className="lg:col-span-2 space-y-2">
-              <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium block">
-                System Prompt / Instructions
-              </Label>
-              <Textarea
-                value={aiPrompt}
-                onChange={(e) => {
-                  setAiPrompt(e.target.value);
-                  setPromptDirty(true);
-                }}
-                rows={5}
-                className="text-[12.5px] min-h-[120px]"
-                placeholder="Instructions for rephrasing customer templates..."
-              />
-              <div className="flex justify-between items-center text-[11px] text-muted-foreground">
-                <span>Saved prompt syncs to all CS agents and admins in real time.</span>
-                <Button
-                  size="sm"
-                  variant={promptDirty ? "default" : "outline"}
-                  className="h-7"
-                  onClick={savePrompt}
-                  disabled={!promptDirty || savingPrompt}
-                >
-                  {savingPrompt && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-                  {promptDirty ? "Save prompt" : "Saved"}
-                </Button>
+        <div className="crm-section-panel">
+          <div className="glass-card p-5 space-y-4">
+            <div className="flex items-center gap-2 border-b border-border pb-3 justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">AI Rephrase Assistant</h3>
               </div>
+              {selectedIds.size > 0 && (
+                <span className="text-xs bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-full font-medium">
+                  {selectedIds.size} lead(s) selected
+                </span>
+              )}
             </div>
 
-            {/* Bulk Rephrase controls */}
-            <div className="lg:col-span-1 border border-border rounded-lg p-4 bg-muted/10 flex flex-col justify-between space-y-4">
-              <div className="space-y-3">
-                <h4 className="text-[12px] font-semibold text-foreground/90 uppercase tracking-wide">
-                  Bulk AI Rephrase
-                </h4>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Select Base Template
-                  </Label>
-                  <Select value={bulkTemplateId} onValueChange={setBulkTemplateId}>
-                    <SelectTrigger className="h-8 text-[12px]">
-                      <SelectValue placeholder="Select template..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {finalTemplates.map((t) => (
-                        <SelectItem key={t.id} value={t.id} className="text-[11.5px]">
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              {/* Prompt section */}
+              <div className="lg:col-span-2 space-y-2">
+                <Label className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium block">
+                  System Prompt / Instructions
+                </Label>
+                <Textarea
+                  value={aiPrompt}
+                  onChange={(e) => {
+                    setAiPrompt(e.target.value);
+                    setPromptDirty(true);
+                  }}
+                  rows={5}
+                  className="text-[12.5px] min-h-[120px]"
+                  placeholder="Instructions for rephrasing customer templates..."
+                />
+                <div className="flex justify-between items-center text-[11px] text-muted-foreground">
+                  <span>Saved prompt syncs to all CS agents and admins in real time.</span>
+                  <Button
+                    size="sm"
+                    variant={promptDirty ? "default" : "outline"}
+                    className="h-7"
+                    onClick={savePrompt}
+                    disabled={!promptDirty || savingPrompt}
+                  >
+                    {savingPrompt && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                    {promptDirty ? "Save prompt" : "Saved"}
+                  </Button>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Button
-                  className="w-full h-10"
-                  onClick={runBulkRephrase}
-                  disabled={selectedIds.size === 0 || bulkRephrasing}
-                >
-                  {bulkRephrasing ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4 mr-2" />
-                  )}
-                  Rephrase {selectedIds.size > 0 ? selectedIds.size : ""} Selected
-                </Button>
-                {selectedIds.size > 0 && (
-                  <div className="text-[11px] text-muted-foreground text-center">
-                    Eligible:{" "}
-                    {
-                      (list.data ?? []).filter(
-                        (l) =>
-                          selectedIds.has(l.id) &&
-                          l.post_text?.trim() &&
-                          (l.requirement_1?.trim() || l.requirement_2?.trim()),
-                      ).length
-                    }{" "}
-                    of {selectedIds.size} selected (requires exact post text and at least one
-                    requirement).
+              {/* Bulk Rephrase controls */}
+              <div className="crm-surface-card p-4 flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <h4 className="text-[12px] font-semibold text-foreground/90 uppercase tracking-wide">
+                    Bulk AI Rephrase
+                  </h4>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Select Base Template
+                    </Label>
+                    <Select value={bulkTemplateId} onValueChange={setBulkTemplateId}>
+                      <SelectTrigger className="h-8 text-[12px]">
+                        <SelectValue placeholder="Select template..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {finalTemplates.map((t) => (
+                          <SelectItem key={t.id} value={t.id} className="text-[11.5px]">
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
+                </div>
+
+                <div className="space-y-2">
+                  <Button
+                    className="w-full h-10"
+                    onClick={runBulkRephrase}
+                    disabled={selectedIds.size === 0 || bulkRephrasing}
+                  >
+                    {bulkRephrasing ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 mr-2" />
+                    )}
+                    Rephrase {selectedIds.size > 0 ? selectedIds.size : ""} Selected
+                  </Button>
+                  {selectedIds.size > 0 && (
+                    <div className="text-[11px] text-muted-foreground text-center">
+                      Eligible:{" "}
+                      {
+                        (list.data ?? []).filter(
+                          (l) =>
+                            selectedIds.has(l.id) &&
+                            l.post_text?.trim() &&
+                            (l.requirement_1?.trim() || l.requirement_2?.trim()),
+                        ).length
+                      }{" "}
+                      of {selectedIds.size} selected (requires exact post text and at least one
+                      requirement).
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1258,21 +1262,22 @@ function Inner() {
       )}
 
       {/* Status tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+      <div className="crm-toolbar-panel">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-[#c8c1e6] bg-linear-to-r from-white via-[#ece9f8] to-[#f2eef9] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
           <button
             type="button"
             onClick={() => setActiveStatus("__all__")}
             className={cn(
-              "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+              "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
               activeStatus === "__all__"
-                ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-                : "text-muted-foreground hover:text-foreground",
+                ? "bg-linear-to-r from-[#50469B] to-[#6a61b4] text-white shadow-md"
+                : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
+            <span className={cn("h-1.5 w-1.5 rounded-full", activeStatus === "__all__" ? "bg-white" : "bg-foreground")} />
             All Leads
-            <span className="text-[10.5px] text-muted-foreground tabular-nums">
+            <span className={cn("text-[10.5px] tabular-nums", activeStatus === "__all__" ? "text-white/85" : "text-muted-foreground")}>
               {filtered.length}
             </span>
           </button>
@@ -1282,17 +1287,17 @@ function Inner() {
               type="button"
               onClick={() => setActiveStatus(s)}
               className={cn(
-                "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+                "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
                 activeStatus === s
-                  ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? cn("shadow-sm ring-1", STATUS_TONE[s] ?? "bg-[#ece9f8] text-[#50469B] border-[#c8c1e6]")
+                  : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
               )}
             >
               <span
-                className={cn("h-1.5 w-1.5 rounded-full", STATUS_TONE[s] ?? "bg-muted-foreground")}
+                className={cn("h-1.5 w-1.5 rounded-full", statusDotTone(s))}
               />
               {STATUS_LABEL[s] ?? s}
-              <span className="text-[10.5px] text-muted-foreground tabular-nums">
+              <span className={cn("text-[10.5px] tabular-nums", activeStatus === s ? "text-current/80" : "text-muted-foreground")}>
                 {counts[s] ?? 0}
               </span>
             </button>
@@ -1301,25 +1306,25 @@ function Inner() {
             type="button"
             onClick={() => setActiveStatus("templates")}
             className={cn(
-              "px-3 h-8 text-[12px] font-medium rounded-md transition-all inline-flex items-center gap-1.5",
+              "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
               activeStatus === "templates"
-                ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-                : "text-muted-foreground hover:text-foreground",
+                ? "bg-linear-to-r from-[#50469B] to-[#6a61b4] text-white shadow-md"
+                : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
             <MessageSquarePlus className="h-3.5 w-3.5" />
             Templates
           </button>
         </div>
-        <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+        <div className="inline-flex items-center gap-1 rounded-xl border border-[#b7dae0] bg-linear-to-r from-white via-[#e3f2f4] to-[#ece9f8] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
           <button
             type="button"
             onClick={() => setViewMode("cards")}
             className={cn(
-              "h-8 px-3 rounded-md text-[12px] font-medium inline-flex items-center gap-1.5",
+              "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
               viewMode === "cards"
-                ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-                : "text-muted-foreground hover:text-foreground",
+                ? "bg-[#ece9f8] text-[#50469B] ring-1 ring-[#c8c1e6] shadow-sm"
+                : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
             <LayoutGrid className="h-3.5 w-3.5" />
@@ -1329,15 +1334,16 @@ function Inner() {
             type="button"
             onClick={() => setViewMode("table")}
             className={cn(
-              "h-8 px-3 rounded-md text-[12px] font-medium inline-flex items-center gap-1.5",
+              "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
               viewMode === "table"
-                ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-                : "text-muted-foreground hover:text-foreground",
+                ? "bg-[#ece9f8] text-[#50469B] ring-1 ring-[#c8c1e6] shadow-sm"
+                : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
             <Table2 className="h-3.5 w-3.5" />
             Table
           </button>
+        </div>
         </div>
       </div>
 
@@ -1350,18 +1356,22 @@ function Inner() {
       {activeStatus === "templates" ? (
         <ComposeTemplatesManager userId={auth.user?.id} />
       ) : list.isLoading && !list.data ? (
-        <div className="glass-card p-16 text-center text-muted-foreground">
+        <div className="crm-section-panel">
+          <div className="glass-card p-16 text-center text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
+          </div>
         </div>
       ) : visibleLeads.length === 0 ? (
-        <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">
-          <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
-          No leads yet. New leads will appear here when forwarded from the pipeline.
+        <div className="crm-section-panel">
+          <div className="glass-card p-10 text-center text-[12.5px] text-muted-foreground">
+            <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
+            No leads yet. New leads will appear here when forwarded from the pipeline.
+          </div>
         </div>
       ) : (
-        <>
+        <div className="crm-section-panel space-y-4">
           {(isCs || isAdmin) && selectedIds.size > 0 && (
-            <div className="sticky top-[96px] z-20 px-4 py-2 -mx-4 mb-4 flex items-center justify-between gap-3 border-b border-border bg-surface/95 backdrop-blur shadow-md supports-[backdrop-filter]:bg-surface/85 text-[12px] rounded-lg">
+            <div className="sticky top-[96px] z-20 -mx-4 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#c8c1e6] bg-white/92 px-4 py-2 text-[12px] shadow-md backdrop-blur supports-[backdrop-filter]:bg-white/86">
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">{selectedIds.size} selected</span>
                 <button
@@ -1429,13 +1439,13 @@ function Inner() {
             </div>
           )}
           {dueLeads.length > 0 && (
-            <div className="glass-card p-4 border-sky-500/40 bg-sky-500/5 rounded-xl space-y-3 mb-4">
+            <div className="glass-card crm-accent-amber p-4 rounded-xl space-y-3 mb-4 border-[#f0d27b]">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-sky-600 flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+                <h3 className="text-sm font-semibold text-[#8f6a00] flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-[#FFD670] animate-pulse" />
                   Follow-ups due today
                 </h3>
-                <span className="text-xs font-medium bg-sky-500/15 text-sky-600 px-2.5 py-0.5 rounded-full border border-sky-500/20">
+                <span className="text-xs font-medium bg-white/88 text-[#8f6a00] px-2.5 py-0.5 rounded-full border border-[#f0d27b] shadow-sm">
                   {dueLeads.length} lead{dueLeads.length === 1 ? "" : "s"} need follow-up
                 </span>
               </div>
@@ -1498,7 +1508,7 @@ function Inner() {
           ) : (
             <CsLeadsTable leads={shownLeads} teamById={teamById} onOpen={setOpened} />
           )}
-        </>
+        </div>
       )}
 
       {totalPages > 1 && (
@@ -1726,7 +1736,7 @@ function CsLeadsTable({
               <tr
                 id={`lead-${lead.id}`}
                 key={lead.id}
-                className="border-t border-border hover:bg-surface/50 cursor-pointer"
+                className="crm-data-row border-t border-border cursor-pointer"
                 onClick={() => onOpen(lead)}
               >
                 <td className="px-3 py-2 font-medium">
@@ -1999,18 +2009,59 @@ function LeadCard({
     setShowDeleteConfirm(true);
   }
 
+  const cardAccent =
+    important
+      ? "from-[#e5bc57] via-[#FFD670] to-[#ffe39a]"
+      : status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged"
+        ? "from-[#4c9fac] via-[#5EB1BF] to-[#84c9d3]"
+        : status === "converted" || status === "closed_won"
+          ? "from-[#07B053] via-[#14bc60] to-[#37c978]"
+          : status === "undeliver" ||
+              status === "wrong_number" ||
+              status === "wrong_lead" ||
+              status === "wrong_service" ||
+              status === "wrong_person" ||
+              status === "not_interested" ||
+              status === "already_done" ||
+              status === "closed_lost"
+            ? "from-[#d24e52] via-[#C1292E] to-[#ae1f24]"
+            : status === "already_got_someone" || status === "service_provider_himself"
+            ? "from-[#9b9d95] via-[#74766B] to-[#64665d]"
+              : "from-[#5c53a8] via-[#50469B] to-[#6a61b4]";
+  const cardSurface =
+    important
+      ? "crm-accent-amber"
+      : status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged"
+        ? "crm-accent-sky"
+        : status === "converted" || status === "closed_won"
+          ? "crm-accent-mint"
+          : status === "undeliver" ||
+              status === "wrong_number" ||
+              status === "wrong_lead" ||
+              status === "wrong_service" ||
+              status === "wrong_person" ||
+              status === "not_interested" ||
+              status === "already_done" ||
+              status === "closed_lost"
+            ? "crm-accent-rose"
+            : status === "already_got_someone" || status === "service_provider_himself"
+              ? "crm-accent-slate"
+              : "crm-accent-indigo";
+
   return (
     <div
       id={`lead-${lead.id}`}
       className={cn(
-        "glass-card p-4 group hover:border-border-strong hover:-translate-y-0.5 transition-all duration-200 cursor-pointer animate-fade-in-up",
+        "crm-lead-card crm-motion-lift crm-enter relative overflow-hidden p-4.5 group hover:border-border-strong hover:-translate-y-0.5 cursor-pointer",
+        cardSurface,
         selected && "ring-2 ring-primary border-primary",
-        important && "border-warning/60 bg-warning/5",
+        important && "border-warning/55",
       )}
       onClick={onOpen}
     >
+      <div className={cn("absolute inset-x-0 top-0 h-1.5 bg-linear-to-r", cardAccent)} />
       {important && (
-        <div className="-mt-1 mb-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/40 text-[10.5px] font-semibold uppercase tracking-wide">
+        <div className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#fff4cf] text-[#8f6a00] border border-[#e8cb73] crm-pill-text shadow-sm">
           {lead.pinned_important && lead.cs_status === "new" ? (
             <Pin className="h-3 w-3 fill-warning/20 rotate-45" />
           ) : (
@@ -2019,7 +2070,7 @@ function LeadCard({
           {lead.pinned_important && lead.cs_status === "new" ? "Pinned Important" : "Important job"}
         </div>
       )}
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3.5">
         {showSelect && (
           <input
             type="checkbox"
@@ -2034,7 +2085,7 @@ function LeadCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
-              <h3 className="text-[13.5px] font-semibold truncate">{lead.customer_name}</h3>
+              <h3 className="crm-lead-title truncate">{lead.customer_name}</h3>
               <button
                 type="button"
                 title="Copy name"
@@ -2046,11 +2097,11 @@ function LeadCard({
             </div>
             <StatusBadge status={status} />
           </div>
-          <div className="mt-1 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <PhoneCopyLink phone={lead.customer_number} compact />
           </div>
           {lead.customer_number_2 && (
-            <div className="mt-1 flex flex-wrap gap-2">
+            <div className="mt-1.5 flex flex-wrap gap-2">
               <PhoneCopyLink phone={lead.customer_number_2} compact />
             </div>
           )}
@@ -2058,11 +2109,11 @@ function LeadCard({
       </div>
 
       {lead.sub_area && (
-        <div className="mt-3 flex items-center gap-1.5 text-[12px]">
+        <div className="mt-3.5 flex items-center gap-1.5 crm-lead-meta">
           <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
           <div className="min-w-0 flex items-center gap-1.5">
-            <span className="text-muted-foreground">Area: </span>
-            <span className="text-foreground/90 font-medium">{lead.sub_area}</span>
+            <span className="crm-muted-text">Area:</span>
+            <span className="font-semibold text-slate-800">{lead.sub_area}</span>
             <button
               type="button"
               title="Copy area"
@@ -2076,60 +2127,60 @@ function LeadCard({
       )}
 
       {lead.service && (
-        <div className="mt-2 flex items-start gap-1.5 text-[12px]">
+        <div className="mt-2.5 flex items-start gap-1.5 crm-lead-meta">
           <ArrowRightCircle className="h-3 w-3 mt-0.5 text-primary shrink-0" />
           <div className="min-w-0">
-            <span className="text-muted-foreground">Service: </span>
-            <span className="text-foreground/90 font-medium">{lead.service}</span>
+            <span className="crm-muted-text">Service:</span>{" "}
+            <span className="font-semibold text-slate-800">{lead.service}</span>
           </div>
         </div>
       )}
 
-      <div className="mt-2 flex items-start gap-1.5 text-[12px]">
+      <div className="mt-2.5 flex items-start gap-1.5 crm-lead-meta">
         <div className="min-w-0">
-          <span className="text-muted-foreground">Reference: </span>
-          <span className="text-foreground/90 font-medium">{lead.reference || "-"}</span>
+          <span className="crm-muted-text">Reference:</span>{" "}
+          <span className="font-semibold text-slate-800">{lead.reference || "-"}</span>
         </div>
       </div>
 
       {lead.context && (
-        <div className="mt-3">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+        <div className="mt-4 rounded-2xl border border-border/70 bg-white/72 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
+          <div className="crm-lead-label mb-1.5">
             Context
           </div>
-          <p className="text-[12.5px] text-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
+          <p className="crm-lead-body line-clamp-3 whitespace-pre-wrap text-slate-700">
             {lead.context}
           </p>
         </div>
       )}
 
       {lead.post_text && (
-        <div className="mt-2">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+        <div className="mt-3 rounded-2xl border border-border/70 bg-white/68 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+          <div className="crm-lead-label mb-1.5">
             Exact customer requirement
           </div>
-          <p className="text-[12.5px] text-muted-foreground/90 leading-relaxed line-clamp-3 whitespace-pre-wrap">
+          <p className="crm-lead-body line-clamp-3 whitespace-pre-wrap">
             {lead.post_text}
           </p>
         </div>
       )}
 
       {lead.submitted_by_role && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/40 text-accent-foreground border border-border uppercase font-semibold tracking-wide">
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <span className="px-2.5 py-1 rounded-full bg-accent/45 text-accent-foreground border border-border crm-pill-text uppercase tracking-[0.08em]">
             via {lead.submitted_by_role}
           </span>
         </div>
       )}
 
       {isAdmin && forwardedByText && (
-        <div className="mt-2.5 text-[11px] text-muted-foreground flex items-center gap-1.5">
-          <span>Forwarded by:</span>
-          <span className="font-medium text-foreground">{forwardedByText}</span>
+        <div className="mt-3.5 flex items-center gap-1.5 text-[11.5px] crm-muted-text">
+          <span className="crm-lead-label !text-[10px] !tracking-[0.08em] !font-bold !text-slate-500">Forwarded by</span>
+          <span className="font-semibold text-slate-800">{forwardedByText}</span>
         </div>
       )}
 
-      <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-4" onClick={(e) => e.stopPropagation()}>
         <StatusPicker
           value={status}
           onChange={changeStatus}
@@ -2139,14 +2190,14 @@ function LeadCard({
       </div>
 
       {/* Manual field filled by CS */}
-      <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="mt-4 rounded-2xl border border-border/70 bg-white/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
+        <Label className="crm-lead-label">
           Number Name
         </Label>
         <NumberNameSelect
           value={numberName}
           size="sm"
-          className="mt-0.5"
+          className="mt-1.5"
           onChange={(v) => setNumberName(v)}
           onCommit={async (v) => {
             if (v !== (lead.number_name ?? "")) {
@@ -2157,13 +2208,13 @@ function LeadCard({
           }}
         />
       </div>
-      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="mt-3 rounded-2xl border border-border/70 bg-white/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
+        <Label className="crm-lead-label">
           Requirement 1
         </Label>
         <Textarea
           value={requirement1}
-          rows={2}
+          rows={1}
           onChange={(e) => setRequirement1(e.target.value)}
           onBlur={async () => {
             if ((requirement1 || "") !== (lead.requirement_1 ?? "")) {
@@ -2172,17 +2223,17 @@ function LeadCard({
               }
             }
           }}
-          className="text-[12px] mt-0.5 resize-none"
+          className="text-[12.5px] mt-1.5 h-10 min-h-[40px] resize-none leading-relaxed py-2.5"
           placeholder="Requirement 1"
         />
       </div>
-      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="mt-3 rounded-2xl border border-border/70 bg-white/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
+        <Label className="crm-lead-label">
           Requirement 2
         </Label>
         <Textarea
           value={requirement2}
-          rows={2}
+          rows={1}
           onChange={(e) => setRequirement2(e.target.value)}
           onBlur={async () => {
             if ((requirement2 || "") !== (lead.requirement_2 ?? "")) {
@@ -2191,13 +2242,13 @@ function LeadCard({
               }
             }
           }}
-          className="text-[12px] mt-0.5 resize-none"
+          className="text-[12.5px] mt-1.5 h-10 min-h-[40px] resize-none leading-relaxed py-2.5"
           placeholder="Requirement 2"
         />
       </div>
-      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-3 rounded-2xl border border-border/70 bg-white/72 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-1">
-          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <Label className="crm-lead-label">
             Compose
           </Label>
           <div className="flex items-center gap-1.5">
@@ -2245,7 +2296,7 @@ function LeadCard({
         </div>
         <Textarea
           value={compose}
-          rows={2}
+          rows={1}
           onChange={(e) => setCompose(e.target.value)}
           onBlur={async () => {
             if ((compose || "") !== (lead.marketing_notes ?? "")) {
@@ -2254,7 +2305,7 @@ function LeadCard({
               }
             }
           }}
-          className="text-[12px] mt-0.5 resize-none"
+          className="text-[12.5px] mt-1.5 h-10 min-h-[40px] resize-none leading-relaxed py-2.5"
           placeholder="Compose a message or note for this lead…"
         />
         {composeSuggestion && (
@@ -2271,14 +2322,14 @@ function LeadCard({
       </div>
 
       {/* Assignment row */}
-      <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-3 rounded-2xl border border-border/65 bg-white/68 px-3.5 py-3" onClick={(e) => e.stopPropagation()}>
         {isAdmin ? (
           <Select
             value={assignedTo ?? UNASSIGNED_VALUE}
             onValueChange={changeAssignee}
             disabled={assigning}
           >
-            <SelectTrigger className="h-8 text-[12px]">
+            <SelectTrigger className="h-9 text-[12.5px]">
               <div className="inline-flex items-center gap-1.5 truncate">
                 <UserPlus className="h-3 w-3 text-muted-foreground" />
                 <SelectValue placeholder="Assign to…" />
@@ -2294,8 +2345,8 @@ function LeadCard({
             </SelectContent>
           </Select>
         ) : (
-          <div className="flex items-center justify-between gap-2 text-[12px]">
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground truncate">
+          <div className="flex items-center justify-between gap-2 text-[12.5px]">
+            <span className="inline-flex items-center gap-1.5 crm-muted-text truncate">
               <UserCheck className="h-3 w-3" />
               {assignee ? (
                 <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
@@ -2325,7 +2376,7 @@ function LeadCard({
         )}
       </div>
 
-      <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-[11.5px] text-muted-foreground">
+      <div className="mt-4 pt-3.5 border-t border-border/60 flex items-center justify-between text-[11.5px] crm-muted-text">
         <span className="tabular-nums">
           {formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}
         </span>
@@ -2411,35 +2462,40 @@ function LeadCard({
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const tone =
-    status === "converted" || status === "closed_won"
-      ? "bg-success/15 text-success border-success/30"
-      : status === "undeliver" ||
-          status === "wrong_number" ||
-          status === "wrong_lead" ||
-          status === "already_got_someone" ||
-          status === "service_provider_himself" ||
-          status === "closed_lost" ||
-          status === "not_interested" ||
-          status === "already_done"
-        ? "bg-destructive/15 text-destructive border-destructive/30"
-        : status === "need_follow_up" || status === "follow_up"
-          ? "bg-sky-500/15 text-sky-600 border-sky-500/30"
-          : status === "interested"
-            ? "bg-primary/15 text-primary border-primary/30"
-            : status === "called" || status === "messaged"
-              ? "bg-sky-500/15 text-sky-600 border-sky-500/30"
-              : "bg-muted text-muted-foreground border-border";
+  const tone = STATUS_TONE[status] ?? "bg-[#efefec] text-[#74766B] border-[#d5d6cf]";
   return (
     <span
       className={cn(
-        "text-[10.5px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap",
+        "crm-pill-text px-3 py-1.5 rounded-full border whitespace-nowrap shadow-sm",
         tone,
       )}
     >
       {STATUS_LABEL[status] ?? status.replace(/_/g, " ")}
     </span>
   );
+}
+
+function statusDotTone(status: string) {
+  if (status === "converted" || status === "closed_won") return "bg-[#07B053]";
+  if (status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged") {
+    return "bg-[#5EB1BF]";
+  }
+  if (
+    status === "undeliver" ||
+    status === "wrong_number" ||
+    status === "wrong_lead" ||
+    status === "wrong_service" ||
+    status === "wrong_person" ||
+    status === "not_interested" ||
+    status === "already_done" ||
+    status === "closed_lost"
+  ) {
+    return "bg-[#C1292E]";
+  }
+  if (status === "already_got_someone" || status === "service_provider_himself") {
+    return "bg-[#74766B]";
+  }
+  return "bg-[#50469B]";
 }
 
 function PhoneCopyLink({
@@ -2451,7 +2507,7 @@ function PhoneCopyLink({
 }) {
   if (!phone) return null;
   return (
-    <div className={cn("inline-flex items-center gap-1.5", compact ? "text-[12px]" : "text-sm")}>
+    <div className={cn("inline-flex items-center gap-1.5", compact ? "crm-lead-meta" : "text-sm")}>
       <button
         type="button"
         onClick={(e) => {
@@ -2489,7 +2545,7 @@ function StatusPicker({
 }) {
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {PIPELINE_STATUSES.map((statusOption) => {
           const active = value === statusOption;
           return (
@@ -2499,7 +2555,7 @@ function StatusPicker({
               onClick={() => onChange(statusOption)}
               disabled={disabled}
               className={cn(
-                "inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                "inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 crm-pill-text transition-colors",
                 active
                   ? (STATUS_TONE[statusOption] ?? "bg-muted text-foreground border-border")
                   : "border-border bg-surface/70 text-muted-foreground hover:text-foreground hover:border-border/80",

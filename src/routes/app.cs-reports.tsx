@@ -186,7 +186,8 @@ function Inner() {
   return (
     <div className="space-y-6">
       {/* ── Filters ── */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="crm-toolbar-panel">
+        <div className="flex flex-wrap items-center gap-2">
         {(
           [
             ["all", "All time"],
@@ -251,10 +252,12 @@ function Inner() {
           <Download className="h-3.5 w-3.5 mr-1.5" />
           Export CSV
         </Button>
+        </div>
       </div>
 
       {/* ── Summary stat cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="crm-section-panel">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <SummaryCard
           icon={<Users className="h-4 w-4" />}
           label="CS agents"
@@ -281,16 +284,18 @@ function Inner() {
           color="text-orange-500"
           tooltip="Leads marked 'Need Follow-Up' — CS contacted them but needs to call back."
         />
+        </div>
       </div>
 
       {/* ── Per-user table ── */}
-      <div className="bg-card border rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <span className="text-sm font-semibold">Per CS agent breakdown</span>
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      <div className="crm-section-panel">
+        <div className="crm-surface-card overflow-hidden">
+          <div className="px-4 py-3 border-b flex items-center justify-between">
+            <span className="crm-section-title">Per CS agent breakdown</span>
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </div>
+          <div className="overflow-x-auto">
+          <table className="crm-data-table">
             <thead className="bg-muted/40 sticky top-0">
               <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-2.5 font-medium">CS Agent</th>
@@ -326,8 +331,8 @@ function Inner() {
                 return (
                   <tr key={s.user_id} className="border-t hover:bg-muted/30">
                     <td className="px-4 py-3">
-                      <div className="font-medium">{s.name}</div>
-                      <div className="text-xs text-muted-foreground">{s.email}</div>
+                      <div className="font-semibold text-slate-900">{s.name}</div>
+                      <div className="text-[12px] crm-muted-text">{s.email}</div>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-semibold">
                       {s.total}
@@ -374,7 +379,7 @@ function Inner() {
               {stats.length > 1 && (
                 <tr className="border-t bg-muted/20 font-semibold">
                   <td className="px-4 py-3">
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <span className="crm-kicker">
                       Total
                     </span>
                   </td>
@@ -404,6 +409,7 @@ function Inner() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>
@@ -424,13 +430,13 @@ function SummaryCard({
   tooltip?: string;
 }) {
   return (
-    <div className="bg-card border rounded-lg p-4 flex flex-col gap-2" title={tooltip}>
-      <div className={cn("flex items-center gap-2 text-xs uppercase tracking-wide font-medium text-muted-foreground")}>
+    <div className="crm-surface-card p-4 flex flex-col gap-2" title={tooltip}>
+      <div className={cn("flex items-center gap-2 crm-kicker")}>
         <span className={color}>{icon}</span>
         {label}
         {tooltip && <span className="ml-auto text-[11px] normal-case font-normal text-muted-foreground/60 cursor-help">ⓘ</span>}
       </div>
-      <div className="text-3xl font-bold tabular-nums">{value}</div>
+      <div className="crm-card-value tabular-nums">{value}</div>
     </div>
   );
 }

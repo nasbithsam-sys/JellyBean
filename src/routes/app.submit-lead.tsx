@@ -175,26 +175,29 @@ function Dashboard() {
         }
       />
       <PageBody className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Today" value={stats.today} icon={<Send className="h-4 w-4" />} />
-          <StatCard
-            label="This week"
-            value={stats.week}
-            icon={<CalendarDays className="h-4 w-4" />}
-          />
-          <StatCard
-            label="This month"
-            value={stats.month}
-            icon={<TrendingUp className="h-4 w-4" />}
-          />
-          <StatCard
-            label="All time"
-            value={leads.length}
-            icon={<CheckCircle2 className="h-4 w-4" />}
-          />
+        <div className="crm-section-panel">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <StatCard label="Today" value={stats.today} icon={<Send className="h-4 w-4 text-[#50469B]" />} />
+            <StatCard
+              label="This week"
+              value={stats.week}
+              icon={<CalendarDays className="h-4 w-4 text-[#5EB1BF]" />}
+            />
+            <StatCard
+              label="This month"
+              value={stats.month}
+              icon={<TrendingUp className="h-4 w-4 text-[#07B053]" />}
+            />
+            <StatCard
+              label="All time"
+              value={leads.length}
+              icon={<CheckCircle2 className="h-4 w-4 text-[#d4ae48]" />}
+            />
+          </div>
         </div>
 
-        <div className="glass-card p-5 space-y-4">
+        <div className="crm-section-panel">
+          <div className="glass-card p-5 space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <div className="text-sm font-semibold">Leads in range</div>
@@ -283,9 +286,10 @@ function Dashboard() {
               ))}
             </div>
           )}
+          </div>
         </div>
 
-        <div>
+        <div className="crm-section-panel">
           <h2 className="text-sm font-semibold mb-3">Recent submissions</h2>
           {all.isLoading ? (
             <div className="text-sm text-muted-foreground">Loading...</div>
@@ -336,7 +340,7 @@ function Dashboard() {
 
 function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   return (
-    <div className="glass-card p-4">
+    <div className="crm-surface-card p-4">
       <div className="flex items-center justify-between text-muted-foreground">
         <span className="text-[10px] uppercase tracking-[0.18em] font-mono">{label}</span>
         {icon}

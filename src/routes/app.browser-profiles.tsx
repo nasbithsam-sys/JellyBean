@@ -514,7 +514,7 @@ function Inner() {
             {filtered.map((p) => {
               const status = statusOf(p);
               return (
-                <tr key={p.id}>
+                <tr key={p.id} className="crm-data-row">
                   <td>
                     <Checkbox
                       checked={selectedProfileIds.has(p.id)}

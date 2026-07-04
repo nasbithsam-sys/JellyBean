@@ -153,7 +153,8 @@ function Inner() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="crm-toolbar-panel">
+        <div className="flex flex-wrap items-center gap-2">
         <Input
           type="date"
           value={fromDate}
@@ -199,15 +200,18 @@ function Inner() {
         >
           Last 30 days
         </Button>
+        </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Metric label="Total captured" value={totals.captured} sub="selected range" />
-        <Metric
-          label="Forwarded"
-          value={totals.forwarded}
-          sub={`${totals.captured ? Math.round((totals.forwarded / totals.captured) * 100) : 0}% of captured`}
-        />
-        <Metric label="Sent to CS" value={totals.sentToCS} sub="handoffs" />
+      <div className="crm-section-panel">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Metric label="Total captured" value={totals.captured} sub="selected range" />
+          <Metric
+            label="Forwarded"
+            value={totals.forwarded}
+            sub={`${totals.captured ? Math.round((totals.forwarded / totals.captured) * 100) : 0}% of captured`}
+          />
+          <Metric label="Sent to CS" value={totals.sentToCS} sub="handoffs" />
+        </div>
       </div>
 
       <Card title="Lead flow" subtitle="Captured / forwarded / wrong posts by day">
@@ -353,12 +357,10 @@ function Inner() {
 
 function Metric({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
-    <div className="glass-card p-5">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground font-medium">
-        {label}
-      </div>
-      <div className="text-[34px] font-semibold tracking-tight mt-2 tabular-nums">{value}</div>
-      {sub && <div className="text-[12px] text-muted-foreground mt-1">{sub}</div>}
+    <div className="crm-surface-card p-5">
+      <div className="crm-kicker">{label}</div>
+      <div className="crm-card-value mt-2 tabular-nums">{value}</div>
+      {sub && <div className="crm-card-label mt-1">{sub}</div>}
     </div>
   );
 }
@@ -373,10 +375,10 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="glass-card p-5">
+    <div className="crm-surface-card p-5">
       <div className="mb-4">
-        <h3 className="text-[13px] font-semibold tracking-tight">{title}</h3>
-        {subtitle && <p className="text-[11.5px] text-muted-foreground mt-0.5">{subtitle}</p>}
+        <h3 className="crm-section-title">{title}</h3>
+        {subtitle && <p className="crm-card-label mt-1">{subtitle}</p>}
       </div>
       {children}
     </div>

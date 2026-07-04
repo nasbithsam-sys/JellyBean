@@ -842,8 +842,9 @@ function Inner() {
   return (
     <div className="space-y-4">
       {/* Tabs + search bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+      <div className="crm-toolbar-panel">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
           {(
             [
               ["new", "New", tabCounts.new],
@@ -862,9 +863,19 @@ function Inner() {
                 setPageIndex(0);
               }}
               className={cn(
-                "px-3 h-8 text-[12px] font-medium rounded-md transition-all",
+                "crm-motion px-3 h-8 text-[12px] font-medium rounded-md",
                 tab === k
-                  ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+                  ? k === "forwarded"
+                    ? "bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-200"
+                    : k === "review"
+                      ? "bg-sky-50 text-sky-700 shadow-sm ring-1 ring-sky-200"
+                      : k === "not_found"
+                        ? "bg-amber-50 text-amber-700 shadow-sm ring-1 ring-amber-200"
+                        : k === "wrong" || k === "duplicate"
+                          ? "bg-rose-50 text-rose-700 shadow-sm ring-1 ring-rose-200"
+                          : k === "assigned_myself"
+                            ? "bg-violet-50 text-violet-700 shadow-sm ring-1 ring-violet-200"
+                            : "bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -872,9 +883,9 @@ function Inner() {
               <span className="ml-1.5 text-[10.5px] text-muted-foreground tabular-nums">{n}</span>
             </button>
           ))}
-        </div>
+          </div>
 
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             value={queryInput}
@@ -885,9 +896,9 @@ function Inner() {
             placeholder="Search…"
             className="h-9 pl-9"
           />
-        </div>
+          </div>
 
-        <Select
+          <Select
           value={leadFilter}
           onValueChange={(value) => {
             setLeadFilter(value);
@@ -903,9 +914,9 @@ function Inner() {
             <SelectItem value="no">Lead no</SelectItem>
             <SelectItem value="review">Lead review</SelectItem>
           </SelectContent>
-        </Select>
+          </Select>
 
-        <Select
+          <Select
           value={areaFilter}
           onValueChange={(value) => {
             setAreaFilter(value);
@@ -923,9 +934,9 @@ function Inner() {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
+          </Select>
 
-        {tab === "new" && (
+          {tab === "new" && (
           <Button
             size="sm"
             variant="outline"
@@ -972,9 +983,9 @@ function Inner() {
             <PhoneOff className="h-3.5 w-3.5 mr-1.5" />
             Move "No" → Wrong posts
           </Button>
-        )}
+          )}
 
-        <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -1002,11 +1013,12 @@ function Inner() {
             <Download className="h-3.5 w-3.5 mr-1.5" />
             Export
           </Button>
+          </div>
         </div>
       </div>
 
       {isAdmin && selected.size > 0 && (
-        <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-[12.5px]">
+        <div className="crm-toolbar-panel flex items-center gap-2 text-[12.5px]">
           <span className="font-medium">{selected.size} selected</span>
           <Button size="sm" variant="ghost" className="h-7" onClick={() => setSelected(new Set())}>
             Clear
@@ -1025,7 +1037,7 @@ function Inner() {
       )}
 
       {canRunAi && (
-        <div className="space-y-1">
+        <div className="crm-section-panel space-y-1">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
             <div className="space-y-1">
               <Textarea
@@ -1103,8 +1115,9 @@ function Inner() {
       )}
 
       {/* Table */}
-      <div className="glass-card overflow-hidden">
-        <div className="max-h-[calc(100vh-340px)] overflow-auto">
+      <div className="crm-section-panel">
+        <div className="glass-card overflow-hidden">
+          <div className="max-h-[calc(100vh-340px)] overflow-auto">
           <table
             className="text-[12px] border-separate border-spacing-0 table-fixed w-full"
             style={{ minWidth: 1240 }}
@@ -1199,14 +1212,14 @@ function Inner() {
                   <tr
                     key={k}
                     className={cn(
-                      "transition-colors align-top cursor-pointer",
+                      "crm-data-row crm-motion align-top cursor-pointer",
                       isSelected
-                        ? "bg-primary/15 hover:bg-primary/20"
+                        ? "crm-data-row-active"
                         : mine
-                          ? "bg-primary/10 hover:bg-primary/15"
+                          ? "crm-data-row-active"
                           : claimedByOther
-                            ? "bg-muted/40 hover:bg-muted/60 opacity-80"
-                            : "hover:bg-accent/40",
+                            ? "crm-data-row-muted"
+                            : "",
                     )}
                     onClick={() => setDetailFor(e)}
                   >
@@ -1365,10 +1378,11 @@ function Inner() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2">
+      <div className="crm-toolbar-panel flex flex-wrap items-center justify-between gap-3">
         <div className="text-[11.5px] text-muted-foreground">
           {totalCount === 0
             ? "No leads in this category"

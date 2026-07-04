@@ -81,28 +81,30 @@ function Page() {
       <PageHeader title="Settings" description="System-wide preferences and team management." />
       <PageBody>
         <RoleGate allow={["admin"]} current={auth.primaryRole}>
-          <div className="flex gap-1 p-1 rounded-lg bg-surface border border-border inline-flex mb-5">
-            <TabBtn
-              active={tab === "general"}
-              onClick={() => setTab("general")}
-              icon={<SettingsIcon className="h-3.5 w-3.5" />}
-            >
-              General
-            </TabBtn>
-            <TabBtn
-              active={tab === "updates"}
-              onClick={() => setTab("updates")}
-              icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-            >
-              Updates
-            </TabBtn>
-            <TabBtn
-              active={tab === "users"}
-              onClick={() => setTab("users")}
-              icon={<UsersIcon className="h-3.5 w-3.5" />}
-            >
-              Users
-            </TabBtn>
+          <div className="crm-toolbar-panel inline-flex mb-5">
+            <div className="flex gap-1">
+              <TabBtn
+                active={tab === "general"}
+                onClick={() => setTab("general")}
+                icon={<SettingsIcon className="h-3.5 w-3.5" />}
+              >
+                General
+              </TabBtn>
+              <TabBtn
+                active={tab === "updates"}
+                onClick={() => setTab("updates")}
+                icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+              >
+                Updates
+              </TabBtn>
+              <TabBtn
+                active={tab === "users"}
+                onClick={() => setTab("users")}
+                icon={<UsersIcon className="h-3.5 w-3.5" />}
+              >
+                Users
+              </TabBtn>
+            </div>
           </div>
           {tab === "general" && <GeneralTab />}
           {tab === "updates" && <UpdatesTab />}
@@ -128,9 +130,9 @@ function TabBtn({
     <button
       onClick={onClick}
       className={cn(
-        "h-8 px-3 rounded-md text-[12.5px] font-medium flex items-center gap-1.5 transition-all",
+        "crm-motion h-8 px-3 rounded-md text-[12.5px] font-medium flex items-center gap-1.5",
         active
-          ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+          ? "bg-linear-to-r from-indigo-600 to-violet-500 text-white shadow-md"
           : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -142,12 +144,14 @@ function TabBtn({
 function GeneralTab() {
   return (
     <div className="space-y-4 max-w-2xl">
-      <div className="bg-card border rounded-lg p-5">
+      <div className="crm-section-panel">
+        <div className="crm-surface-card p-5">
         <h3 className="text-sm font-semibold mb-1">Authentication</h3>
         <p className="text-xs text-muted-foreground">
           Login codes and OTP prompts are disabled for every role. Users sign in with their
           provisioned username or email and password only.
         </p>
+        </div>
       </div>
     </div>
   );
