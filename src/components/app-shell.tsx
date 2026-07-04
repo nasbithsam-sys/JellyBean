@@ -119,7 +119,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         <div className="px-6 pt-6 pb-5">
           <div className="relative flex items-center gap-3 overflow-hidden rounded-[20px] border border-[#c8c1e6] bg-linear-to-br from-white via-[#ece9f8] to-[#f3effb] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_20px_36px_-22px_rgba(80,70,155,0.42)] backdrop-blur-sm">
             <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[#b8b0de] to-transparent" />
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-linear-to-br from-[#50469B] via-[#5b52a7] to-[#6b61b6] text-white shadow-[0_18px_30px_-18px_rgba(80,70,155,0.78)] ring-1 ring-white/80">
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-linear-to-br from-[#7c6bb0] via-[#5b52a7] to-[#6b61b6] text-white shadow-[0_18px_30px_-18px_rgba(80,70,155,0.78)] ring-1 ring-white/80">
               <span className="text-[13px] font-bold tracking-[0.01em]">LG</span>
             </div>
             <div className="leading-tight">
@@ -154,8 +154,8 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                   className={cn(
                     "h-[17px] w-[17px] crm-motion",
                     active
-                      ? "text-[#50469B]"
-                      : "text-slate-600 group-hover:text-[#50469B]",
+                      ? "text-[#7c6bb0]"
+                      : "text-slate-600 group-hover:text-[#7c6bb0]",
                   )}
                 />
                 <span className="flex-1 truncate">{item.label}</span>
@@ -172,7 +172,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                   </kbd>
                 )}
                 {active && (
-                  <span className="absolute left-1.5 top-1/2 h-8 w-1 -translate-y-1/2 rounded-full bg-linear-to-b from-[#50469B] to-[#6b61b6]" />
+                  <span className="absolute left-1.5 top-1/2 h-8 w-1 -translate-y-1/2 rounded-full bg-linear-to-b from-[#7c6bb0] to-[#6b61b6]" />
                 )}
               </Link>
             );
@@ -182,13 +182,13 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         <div className="mt-auto border-t border-sidebar-border/80 p-4">
           <div className="relative flex items-center gap-3 overflow-hidden rounded-[22px] border border-[#bdb4e0] bg-linear-to-br from-white via-[#ece7f8] to-[#f2edf9] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_22px_34px_-22px_rgba(80,70,155,0.42)]">
             <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[#b8b0de] to-transparent" />
-            <div className="h-10 w-10 rounded-full bg-linear-to-br from-[#50469B] via-[#5b52a7] to-[#6b61b6] grid place-items-center text-[12px] font-bold text-white ring-1 ring-white/90 shadow-[0_14px_24px_-14px_rgba(80,70,155,0.7)]">
+            <div className="h-10 w-10 rounded-full bg-linear-to-br from-[#7c6bb0] via-[#5b52a7] to-[#6b61b6] grid place-items-center text-[12px] font-bold text-white ring-1 ring-white/90 shadow-[0_14px_24px_-14px_rgba(80,70,155,0.7)]">
               {initials(auth.profile?.full_name, auth.user?.email)}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[13.5px] font-bold tracking-[-0.015em] truncate text-slate-900">{displayName}</div>
               <div className="text-[11.5px] font-medium tracking-[-0.01em] text-slate-600 capitalize flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#5EB1BF]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#9987c7]" />
                 {roleLabel(auth.primaryRole)}
               </div>
             </div>
@@ -197,7 +197,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                 <button
                   type="button"
                   title="Account options"
-                  className="crm-motion h-8 w-8 grid place-items-center rounded-xl border border-[#cdc5e8] bg-white/88 text-[#50469B] shadow-sm hover:bg-white hover:text-[#3d357a] hover:shadow-md"
+                  className="crm-motion h-8 w-8 grid place-items-center rounded-xl border border-[#cdc5e8] bg-white/88 text-[#7c6bb0] shadow-sm hover:bg-white hover:text-[#3d357a] hover:shadow-md"
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
@@ -208,9 +208,9 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
               >
                 <DropdownMenuItem
                   onSelect={() => setPasswordDialogOpen(true)}
-                  className="crm-motion rounded-xl px-3 py-2 text-[13px] font-medium text-slate-700 focus:bg-[#ebe8f8] focus:text-[#50469B]"
+                  className="crm-motion rounded-xl px-3 py-2 text-[13px] font-medium text-slate-700 focus:bg-[#ebe8f8] focus:text-[#7c6bb0]"
                 >
-                  <KeyRound className="h-4 w-4 text-[#50469B]" />
+                  <KeyRound className="h-4 w-4 text-[#7c6bb0]" />
                   Change Password
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -218,7 +218,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
             <button
               onClick={() => void auth.signOut()}
               title="Sign out"
-              className="crm-motion h-8 w-8 grid place-items-center rounded-xl border border-[#cdc5e8] bg-white/88 text-[#50469B] shadow-sm hover:bg-white hover:text-[#3d357a] hover:shadow-md"
+              className="crm-motion h-8 w-8 grid place-items-center rounded-xl border border-[#cdc5e8] bg-white/88 text-[#7c6bb0] shadow-sm hover:bg-white hover:text-[#3d357a] hover:shadow-md"
             >
               <LogOut className="h-4 w-4" />
             </button>

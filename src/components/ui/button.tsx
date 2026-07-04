@@ -10,14 +10,14 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-linear-to-r from-[#50469B] via-[#5a50a8] to-[#6a61b4] text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_16px_30px_-16px_rgba(80,70,155,0.72)] hover:from-[#453c88] hover:via-[#50469B] hover:to-[#6258ab] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.24),0_20px_38px_-18px_rgba(80,70,155,0.82)]",
+          "bg-linear-to-r from-[#7c6bb0] via-[#8a79bb] to-[#9987c7] text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_16px_30px_-16px_rgba(124,107,176,0.72)] hover:from-[#6d5c9e] hover:via-[#7c6bb0] hover:to-[#8f7dbe] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.24),0_20px_38px_-18px_rgba(124,107,176,0.82)]",
         destructive:
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 hover:shadow-md",
         outline:
-          "border border-input bg-linear-to-b from-white to-[#f1f2ee] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_10px_24px_-18px_rgba(15,23,42,0.28)] hover:bg-[#ebe8f5] hover:text-[#50469B] hover:border-[#bcb6df]",
+          "border border-input bg-linear-to-b from-white to-[#f1f2ee] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_10px_24px_-18px_rgba(15,23,42,0.28)] hover:bg-[#e8dff5] hover:text-[#7c6bb0] hover:border-[#d9cfe4]",
         secondary:
           "bg-linear-to-b from-white to-[#e4f2f4] text-[#2c5260] border border-[#b9dde3] shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_10px_24px_-18px_rgba(94,177,191,0.24)] hover:bg-[#d9eef1] hover:text-[#244651] hover:border-[#9ccbd3]",
-        ghost: "hover:bg-[#ebe8f5] hover:text-[#50469B]",
+        ghost: "hover:bg-[#e8dff5] hover:text-[#7c6bb0]",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

@@ -122,7 +122,7 @@ function AdminDashboard() {
       icon: Inbox,
       tone: "primary",
       cardClass: "crm-accent-indigo",
-      iconClass: "bg-[#d8d2ef] text-[#50469B] border-[#bdb5de]",
+      iconClass: "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4]",
     },
     {
       label: "Forwarded to CS",
@@ -170,7 +170,7 @@ function AdminDashboard() {
       icon: CheckCircle2,
       tone: "primary",
       cardClass: "crm-accent-indigo",
-      iconClass: "bg-[#d8d2ef] text-[#50469B] border-[#bdb5de]",
+      iconClass: "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4]",
     },
   ];
 
@@ -188,10 +188,10 @@ function AdminDashboard() {
                 <div
                   className={cn(
                     "absolute inset-x-0 top-0 h-1.5",
-                    t.tone === "primary" && "bg-linear-to-r from-[#50469B] via-[#5a50a8] to-[#6a61b4]",
+                    t.tone === "primary" && "bg-linear-to-r from-[#7c6bb0] via-[#8a79bb] to-[#9987c7]",
                     t.tone === "success" && "bg-linear-to-r from-[#07B053] via-[#15bb60] to-[#31c878]",
                     t.tone === "warning" && "bg-linear-to-r from-[#d4ae48] via-[#FFD670] to-[#ffe39c]",
-                    t.tone === "accent" && "bg-linear-to-r from-[#4c9fac] via-[#5EB1BF] to-[#86cbd6]",
+                    t.tone === "accent" && "bg-linear-to-r from-[#4c9fac] via-[#9987c7] to-[#a9a0d4]",
                     t.tone === "muted" && "bg-linear-to-r from-[#74766B] via-[#8a8c82] to-[#b2b4ad]",
                   )}
                 />
@@ -205,7 +205,7 @@ function AdminDashboard() {
                     <t.icon
                       className={cn(
                         "h-4.5 w-4.5",
-                        t.tone === "primary" && "text-[#50469B]",
+                        t.tone === "primary" && "text-[#7c6bb0]",
                         t.tone === "success" && "text-[#07B053]",
                         t.tone === "warning" && "text-[#9b7718]",
                         t.tone === "accent" && "text-[#2d5c67]",
@@ -234,7 +234,7 @@ function AdminDashboard() {
                     {stats.data?.todayRaw ?? 0}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#c8c1e6] bg-white/78 px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#d9cfe4] bg-white/78 px-4 py-3 shadow-sm">
                   <span>Leads forwarded to CS</span>
                   <span className="text-base font-semibold text-foreground tabular-nums">
                     {stats.data?.todayForwarded ?? 0}
