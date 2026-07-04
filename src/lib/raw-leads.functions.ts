@@ -132,6 +132,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       is: (...a: never[]) => T;
       eq: (...a: never[]) => T;
       not: (...a: never[]) => T;
+      or: (...a: never[]) => T;
     }>(
       query: T,
       category: CategoryFilter,
