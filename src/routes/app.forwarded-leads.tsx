@@ -585,7 +585,7 @@ function ForwardedTable({
               </td>
               <td className="px-3 py-2">
                 {r.cs_status === "new" ? (
-                  <span className="text-[10.5px] px-2.5 py-1 rounded-full border font-medium bg-[#ece9f8] text-[#50469B] border-[#c8c1e6] shadow-sm">
+                  <span className="text-[10.5px] px-2.5 py-1 rounded-full border font-medium bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4] shadow-sm">
                     Pending
                   </span>
                 ) : (

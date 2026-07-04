@@ -150,11 +150,11 @@ export function ChangePasswordDialog({ open, onOpenChange, userEmail }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md rounded-[24px] border-[#c8c1e6] bg-linear-to-br from-white via-[#f8f7fc] to-[#f1eef9] p-0 shadow-[0_28px_70px_-40px_rgba(80,70,155,0.46)]">
+      <DialogContent className="max-w-md rounded-[24px] border-[#d9cfe4] bg-linear-to-br from-white via-[#f8f7fc] to-[#f1eef9] p-0 shadow-[0_28px_70px_-40px_rgba(124,107,176,0.46)]">
         <form onSubmit={handleSubmit} className="overflow-hidden rounded-[24px]">
-          <div className="border-b border-[#d8d1eb] bg-linear-to-r from-[#ece8f8] via-[#f5f2fb] to-white px-6 py-5">
+          <div className="border-b border-[#e8dff5] bg-linear-to-r from-[#e8dff5] via-[#f5f2fb] to-white px-6 py-5">
             <DialogHeader className="space-y-1 text-left">
-              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-linear-to-br from-[#50469B] via-[#5b52a7] to-[#6b61b6] text-white shadow-[0_14px_26px_-18px_rgba(80,70,155,0.82)]">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-linear-to-br from-[#7c6bb0] via-[#8a79bb] to-[#9987c7] text-white shadow-[0_14px_26px_-18px_rgba(124,107,176,0.82)]">
                 <KeyRound className="h-4.5 w-4.5" />
               </div>
               <DialogTitle className="pt-3 text-[20px] font-bold tracking-[-0.02em] text-slate-900">
@@ -197,7 +197,7 @@ export function ChangePasswordDialog({ open, onOpenChange, userEmail }: Props) {
             />
           </div>
 
-          <DialogFooter className="border-t border-[#ded9ee] bg-white/70 px-6 py-4 sm:justify-between sm:space-x-0">
+          <DialogFooter className="border-t border-[#e8dff5] bg-white/70 px-6 py-4 sm:justify-between sm:space-x-0">
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={saving}>
               Cancel
             </Button>
@@ -246,12 +246,12 @@ function PasswordField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
-          className="h-11 rounded-2xl border-[#cfc9e5] bg-white/90 pr-11 text-[13px]"
+          className="h-11 rounded-2xl border-[#d9cfe4] bg-white/90 pr-11 text-[13px]"
         />
         <button
           type="button"
           onClick={onToggle}
-          className="crm-motion absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 hover:bg-[#ece8f8] hover:text-[#50469B]"
+          className="crm-motion absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 hover:bg-[#e8dff5] hover:text-[#7c6bb0]"
           aria-label={visible ? `Hide ${label}` : `Show ${label}`}
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

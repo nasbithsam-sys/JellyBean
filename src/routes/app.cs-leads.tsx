@@ -1271,7 +1271,7 @@ function Inner() {
             className={cn(
               "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
               activeStatus === "__all__"
-                ? "bg-linear-to-r from-[#50469B] to-[#6a61b4] text-white shadow-md"
+                ? "bg-linear-to-r from-[#7c6bb0] to-[#9987c7] text-white shadow-md"
                 : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
@@ -1289,7 +1289,7 @@ function Inner() {
               className={cn(
                 "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
                 activeStatus === s
-                  ? cn("shadow-sm ring-1", STATUS_TONE[s] ?? "bg-[#ece9f8] text-[#50469B] border-[#c8c1e6]")
+                  ? cn("shadow-sm ring-1", STATUS_TONE[s] ?? "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4]")
                   : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
               )}
             >
@@ -1308,7 +1308,7 @@ function Inner() {
             className={cn(
               "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
               activeStatus === "templates"
-                ? "bg-linear-to-r from-[#50469B] to-[#6a61b4] text-white shadow-md"
+                ? "bg-linear-to-r from-[#7c6bb0] to-[#9987c7] text-white shadow-md"
                 : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
@@ -1316,14 +1316,14 @@ function Inner() {
             Templates
           </button>
         </div>
-        <div className="inline-flex items-center gap-1 rounded-xl border border-[#b7dae0] bg-linear-to-r from-white via-[#e3f2f4] to-[#ece9f8] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
+        <div className="inline-flex items-center gap-1 rounded-xl border border-[#b7dae0] bg-linear-to-r from-white via-[#e3f2f4] to-[#e8dff5] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
           <button
             type="button"
             onClick={() => setViewMode("cards")}
             className={cn(
               "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
               viewMode === "cards"
-                ? "bg-[#ece9f8] text-[#50469B] ring-1 ring-[#c8c1e6] shadow-sm"
+                ? "bg-[#e8dff5] text-[#7c6bb0] ring-1 ring-[#d9cfe4] shadow-sm"
                 : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
@@ -1336,7 +1336,7 @@ function Inner() {
             className={cn(
               "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
               viewMode === "table"
-                ? "bg-[#ece9f8] text-[#50469B] ring-1 ring-[#c8c1e6] shadow-sm"
+                ? "bg-[#e8dff5] text-[#7c6bb0] ring-1 ring-[#d9cfe4] shadow-sm"
                 : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
@@ -2013,7 +2013,7 @@ function LeadCard({
     important
       ? "from-[#e5bc57] via-[#FFD670] to-[#ffe39a]"
       : status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged"
-        ? "from-[#4c9fac] via-[#5EB1BF] to-[#84c9d3]"
+        ? "from-[#4c9fac] via-[#9987c7] to-[#a9a0d4]"
         : status === "converted" || status === "closed_won"
           ? "from-[#07B053] via-[#14bc60] to-[#37c978]"
           : status === "undeliver" ||
@@ -2027,7 +2027,7 @@ function LeadCard({
             ? "from-[#d24e52] via-[#C1292E] to-[#ae1f24]"
             : status === "already_got_someone" || status === "service_provider_himself"
             ? "from-[#9b9d95] via-[#74766B] to-[#64665d]"
-              : "from-[#5c53a8] via-[#50469B] to-[#6a61b4]";
+              : "from-[#7055a3] via-[#7c6bb0] to-[#9987c7]";
   const cardSurface =
     important
       ? "crm-accent-amber"
@@ -2478,7 +2478,7 @@ function StatusBadge({ status }: { status: string }) {
 function statusDotTone(status: string) {
   if (status === "converted" || status === "closed_won") return "bg-[#07B053]";
   if (status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged") {
-    return "bg-[#5EB1BF]";
+    return "bg-[#9987c7]";
   }
   if (
     status === "undeliver" ||
@@ -2495,7 +2495,7 @@ function statusDotTone(status: string) {
   if (status === "already_got_someone" || status === "service_provider_himself") {
     return "bg-[#74766B]";
   }
-  return "bg-[#50469B]";
+  return "bg-[#7c6bb0]";
 }
 
 function PhoneCopyLink({
