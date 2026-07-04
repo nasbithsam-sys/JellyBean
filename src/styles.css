@@ -796,3 +796,102 @@ select:focus-visible,
     transform: none !important;
   }
 }
+
+/* ---------- Global smooth transitions & route animations ---------- */
+
+@keyframes crm-route-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.crm-route-enter {
+  animation: crm-route-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Subtle universal easing on interactive & structural elements.
+   Kept short (140-180ms) and property-scoped so it stays light. */
+a,
+button,
+[role="button"],
+[role="tab"],
+[role="menuitem"],
+[data-slot="select-trigger"],
+[data-slot="dropdown-menu-item"],
+.crm-nav-item,
+.crm-chip,
+.crm-tab,
+.crm-badge {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity, fill, stroke;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Sidebar link hover polish */
+aside a,
+aside [role="button"] {
+  transition:
+    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+aside a:hover,
+aside [role="button"]:hover {
+  transform: translateX(1px);
+}
+
+/* Card hover already lifts via crm-lead-card/glass-card; ensure buttons feel alive */
+button:hover:not(:disabled),
+[role="button"]:hover:not(:disabled) {
+  transform: translateY(-0.5px);
+}
+button:active:not(:disabled),
+[role="button"]:active:not(:disabled) {
+  transform: translateY(0.5px) scale(0.997);
+}
+
+/* Table rows: gentle fade on mount */
+.crm-data-row {
+  animation: crm-fade-up 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Dialog / popover / dropdown content — Radix already toggles data-state;
+   these keep motion consistent when animate classes aren't set inline. */
+[data-slot="dialog-content"],
+[data-slot="popover-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="select-content"],
+[data-slot="sheet-content"],
+[data-slot="tooltip-content"] {
+  transition:
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Tabs indicator + trigger feel */
+[data-slot="tabs-trigger"] {
+  transition:
+    color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .crm-route-enter,
+  .crm-data-row {
+    animation: none !important;
+  }
+  a,
+  button,
+  [role="button"] {
+    transition-duration: 0.01ms !important;
+    transform: none !important;
+  }
+}
