@@ -141,7 +141,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
         return query
           .is("category" as never, null as never)
           .is("assigned_myself_at" as never, null as never)
-          .not("lead" as never, "eq" as never, "review" as never);
+          .or("lead.is.null,lead.neq.review" as never);
       }
       if (category === "review") {
         return query
