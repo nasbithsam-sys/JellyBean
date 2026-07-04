@@ -132,6 +132,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       is: (...a: never[]) => T;
       eq: (...a: never[]) => T;
       not: (...a: never[]) => T;
+      or: (...a: never[]) => T;
     }>(
       query: T,
       category: CategoryFilter,
@@ -141,7 +142,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
         return query
           .is("category" as never, null as never)
           .is("assigned_myself_at" as never, null as never)
-          .not("lead" as never, "eq" as never, "review" as never);
+          .or("lead.is.null,lead.neq.review" as never);
       }
       if (category === "review") {
         return query
@@ -300,7 +301,7 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
       .select("row_key", { count: "exact", head: true })
       .is("category", null)
       .is("assigned_myself_at", null)
-      .not("lead", "eq", "review");
+      .or("lead.is.null,lead.neq.review");
     let assignedMyselfQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
