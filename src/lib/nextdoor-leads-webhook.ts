@@ -92,6 +92,22 @@ function errorReason(error: unknown) {
   return error instanceof Error ? error.message : "server_error";
 }
 
+async function logWebhookActivity(action: string, metadata: Record<string, unknown>) {
+  try {
+    const supabaseAdmin = await loadSupabaseAdmin();
+    await supabaseAdmin.from("activity_logs").insert({
+      actor_id: null,
+      actor_name: "Nextdoor Scraper Webhook",
+      actor_role: "system",
+      action,
+      entity_type: "raw_lead_cache",
+      metadata,
+    });
+  } catch (err) {
+    console.error("[Nextdoor webhook] Failed to log activity:", err);
+  }
+}
+
 export function handleNextdoorLeadsOptions() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
@@ -99,9 +115,15 @@ export function handleNextdoorLeadsOptions() {
 export async function handleNextdoorLeadsPost(request: Request) {
   try {
     const webhookSecret = process.env.WEBHOOK_SECRET;
-    if (!webhookSecret) {
-      console.warn("[Nextdoor webhook] WEBHOOK_SECRET is not set; skipping webhook authentication");
-    } else if (request.headers.get("X-Webhook-Secret") !== webhookSecret) {
+    
+    // Read headers safely
+    const requestSecret = request.headers.get("X-Webhook-Secret");
+
+    if (webhookSecret && requestSecret !== webhookSecret) {
+      await logWebhookActivity("webhook_auth_failed", {
+        reason: "secret_mismatch",
+        received_present: !!requestSecret,
+      });
       return json({ ok: false, reason: "unauthorized" }, 401);
     }
 
@@ -109,10 +131,15 @@ export async function handleNextdoorLeadsPost(request: Request) {
     try {
       body = await request.json();
     } catch {
+      await logWebhookActivity("webhook_parse_failed", { reason: "invalid_json" });
       return json({ ok: false, reason: "invalid_json" }, 400);
     }
 
     if (body.schemaVersion !== SCHEMA_VERSION) {
+      await logWebhookActivity("webhook_schema_mismatch", {
+        received: body.schemaVersion,
+        expected: SCHEMA_VERSION,
+      });
       return json({ ok: false, reason: "unsupported_schema_version" }, 400);
     }
 
@@ -124,18 +151,27 @@ export async function handleNextdoorLeadsPost(request: Request) {
         .from("raw_lead_cache")
         .select("row_key", { count: "exact", head: true });
       if (error) {
+        await logWebhookActivity("webhook_test_connection_failed", { error: error.message });
         return json({ schemaVersion: SCHEMA_VERSION, ok: false, reason: error.message }, 500);
       }
+      await logWebhookActivity("webhook_test_connection_success", {});
       return json({ schemaVersion: SCHEMA_VERSION, ok: true, status: "ok" });
     }
 
     if (action !== "append_rows") {
+      await logWebhookActivity("webhook_unknown_action", { action });
       return json({ ok: false, reason: "unknown_action" }, 400);
     }
 
     const rawRows = Array.isArray(body.rows) ? (body.rows as ExtRow[]) : [];
-    if (rawRows.length === 0) return json({ ok: false, reason: "no_rows" }, 400);
-    if (rawRows.length > 500) return json({ ok: false, reason: "too_many_rows" }, 400);
+    if (rawRows.length === 0) {
+      await logWebhookActivity("webhook_no_rows", {});
+      return json({ ok: false, reason: "no_rows" }, 400);
+    }
+    if (rawRows.length > 500) {
+      await logWebhookActivity("webhook_too_many_rows", { count: rawRows.length });
+      return json({ ok: false, reason: "too_many_rows" }, 400);
+    }
 
     const supabaseAdmin = await loadSupabaseAdmin();
     const { unique, duplicateKeys } = uniqueRows(rawRows);
@@ -161,6 +197,7 @@ export async function handleNextdoorLeadsPost(request: Request) {
         .upsert(slice, { onConflict: "row_key", ignoreDuplicates: true });
 
       if (error) {
+        await logWebhookActivity("webhook_upsert_failed", { error: error.message });
         return json({ ok: false, reason: error.message }, 500);
       }
 
@@ -180,6 +217,13 @@ export async function handleNextdoorLeadsPost(request: Request) {
 
     const skippedIds = [...dbSkippedIds, ...duplicateKeys];
 
+    await logWebhookActivity("webhook_success", {
+      added: acceptedIds.length,
+      skipped: skippedIds.length,
+      duplicate_keys: duplicateKeys.length,
+      db_skipped_keys: dbSkippedIds.length,
+    });
+
     return json({
       schemaVersion: SCHEMA_VERSION,
       ok: true,
@@ -191,6 +235,9 @@ export async function handleNextdoorLeadsPost(request: Request) {
     });
   } catch (error) {
     console.error("[Nextdoor webhook]", error);
+    await logWebhookActivity("webhook_fatal_error", {
+      message: error instanceof Error ? error.message : String(error),
+    });
     return json({ schemaVersion: SCHEMA_VERSION, ok: false, reason: errorReason(error) }, 500);
   }
 }
