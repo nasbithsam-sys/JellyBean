@@ -729,6 +729,36 @@ function Inner() {
     placeholderData: keepPreviousData,
   });
 
+  const allTimeStatusCounts = useQuery({
+    queryKey: ["cs_leads", "status_counts_all_time"],
+    queryFn: async () => {
+      const countForStatus = async (status: CsStatus | null) => {
+        let q = supabase.from("qualified_leads").select("id", { count: "exact", head: true });
+        if (status) q = q.eq("cs_status", status);
+        const { count, error } = await q;
+        if (error) throw error;
+        return count ?? 0;
+      };
+
+      const entries = await Promise.all([
+        countForStatus(null),
+        ...PIPELINE_STATUSES.map(async (status) => [status, await countForStatus(status)] as const),
+      ]);
+
+      const countsByStatus: Record<string, number> = {};
+      for (const status of PIPELINE_STATUSES) countsByStatus[status] = 0;
+      for (const entry of entries.slice(1) as Array<readonly [CsStatus, number]>) {
+        countsByStatus[entry[0]] = entry[1];
+      }
+
+      return {
+        all: entries[0] as number,
+        statuses: countsByStatus,
+      };
+    },
+    placeholderData: keepPreviousData,
+  });
+
   const totalPages = Math.max(1, Math.ceil((totalCount.data ?? 0) / PAGE_SIZE));
 
   const todayStart = useMemo(() => {
@@ -919,16 +949,8 @@ function Inner() {
     });
   }, [areaFilter, list.data, query]);
 
-  // Status tab counts — computed from the current page's filtered result.
-  // DB-level filters (date, owner, status) narrow the dataset; counts here
-  // reflect what is visible on this page after client-side area/search.
-  // This avoids a per-status heavy count query while keeping counts honest.
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {};
-    for (const s of PIPELINE_STATUSES) c[s] = 0;
-    for (const l of filtered) c[l.cs_status] = (c[l.cs_status] ?? 0) + 1;
-    return c;
-  }, [filtered]);
+  const counts = allTimeStatusCounts.data?.statuses ?? {};
+  const allLeadsCount = allTimeStatusCounts.data?.all ?? 0;
 
   // All leads on the current page after client-side filtering, sorted with
   // pinned-important leads first (DB also orders pinned first, so this is
@@ -1278,7 +1300,7 @@ function Inner() {
             <span className={cn("h-1.5 w-1.5 rounded-full", activeStatus === "__all__" ? "bg-card" : "bg-foreground")} />
             All Leads
             <span className={cn("text-[10.5px] tabular-nums", activeStatus === "__all__" ? "text-primary-foreground/90" : "text-muted-foreground")}>
-              {filtered.length}
+              {allLeadsCount}
             </span>
           </button>
           {PIPELINE_STATUSES.map((s) => (
