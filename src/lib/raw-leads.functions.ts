@@ -98,7 +98,7 @@ function normalizePhoneDigits(value: string | null | undefined): string {
 
 export const fetchRawLeadCache = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((input) =>
+  .inputValidator((input) =>
     z
       .object({
         limit: z.number().int().min(1).max(500).default(500),
@@ -251,7 +251,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
 
 export const fetchRawLeadCounts = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((input) => z.object({}).parse(input ?? {}))
+  .inputValidator((input) => z.object({}).parse(input ?? {}))
   .handler(async ({ context }) => {
     
     const { data: rolesData, error: rolesError } = await context.supabase
@@ -339,7 +339,7 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
 
 export const checkDuplicatePhone = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .validator((input) =>
+  .inputValidator((input) =>
     z
       .object({
         phone: z.string().default(""),

@@ -168,7 +168,7 @@ async function classifyWithOpenAi({
 
 export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input) => analyzeInputSchema.parse(input))
+  .inputValidator((input) => analyzeInputSchema.parse(input))
   .handler(async ({ data, context }) => {
     await ensureRequesterCanAnalyze(context.userId);
 
@@ -305,7 +305,7 @@ const rephraseInputSchema = z.object({
 
 export const rephraseLeadTemplateWithAi = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input) => rephraseInputSchema.parse(input))
+  .inputValidator((input) => rephraseInputSchema.parse(input))
   .handler(async ({ data, context }) => {
     await ensureRequesterCanRephrase(context.userId);
 
