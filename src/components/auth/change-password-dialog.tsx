@@ -150,21 +150,22 @@ export function ChangePasswordDialog({ open, onOpenChange, userEmail }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md rounded-[24px] border-[#d9cfe4] bg-linear-to-br from-white via-[#f8f7fc] to-[#f1eef9] p-0 shadow-[0_28px_70px_-40px_rgba(124,107,176,0.46)]">
-        <form onSubmit={handleSubmit} className="overflow-hidden rounded-[24px]">
-          <div className="border-b border-[#e8dff5] bg-linear-to-r from-[#e8dff5] via-[#f5f2fb] to-white px-6 py-5">
+      <DialogContent className="max-w-md rounded-lg border-border bg-card p-0 shadow-lg">
+        <form onSubmit={handleSubmit} className="overflow-hidden rounded-lg">
+          <div className="border-b border-border bg-surface px-6 py-5">
             <DialogHeader className="space-y-1 text-left">
-              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-linear-to-br from-[#7c6bb0] via-[#8a79bb] to-[#9987c7] text-white shadow-[0_14px_26px_-18px_rgba(124,107,176,0.82)]">
-                <KeyRound className="h-4.5 w-4.5" />
+              <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <KeyRound className="h-4 w-4" />
               </div>
-              <DialogTitle className="pt-3 text-[20px] font-bold tracking-[-0.02em] text-slate-900">
+              <DialogTitle className="pt-3 text-[18px] font-bold tracking-[-0.02em] text-foreground">
                 Change Password
               </DialogTitle>
-              <DialogDescription className="text-[13px] leading-5 text-slate-600">
+              <DialogDescription className="text-[13px] leading-5 text-muted-foreground">
                 Verify your current password, then set a new password for your own account.
               </DialogDescription>
             </DialogHeader>
           </div>
+
 
           <div className="space-y-4 px-6 py-5">
             <PasswordField
