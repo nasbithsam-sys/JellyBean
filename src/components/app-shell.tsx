@@ -114,25 +114,26 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   useRealtimeSync(auth.primaryRole);
 
   return (
-    <div className="crm-app-shell flex h-screen overflow-hidden bg-background text-foreground p-3 md:p-4">
-      <aside className="crm-sidebar-shell w-[272px] shrink-0 text-sidebar-foreground flex flex-col h-full rounded-[28px]">
-        <div className="px-6 pt-6 pb-5">
-          <div className="relative flex items-center gap-3 overflow-hidden rounded-[20px] border border-[#c8c1e6] bg-linear-to-br from-white via-[#ece9f8] to-[#f3effb] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_20px_36px_-22px_rgba(80,70,155,0.42)] backdrop-blur-sm">
-            <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[#b8b0de] to-transparent" />
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-linear-to-br from-[#7c6bb0] via-[#5b52a7] to-[#6b61b6] text-white shadow-[0_18px_30px_-18px_rgba(80,70,155,0.78)] ring-1 ring-white/80">
-              <span className="text-[13px] font-bold tracking-[0.01em]">LG</span>
+    <div className="crm-app-shell flex h-screen overflow-hidden bg-background text-foreground">
+      <aside className="crm-sidebar-shell w-[248px] shrink-0 text-sidebar-foreground flex flex-col h-full">
+        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06]">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-md bg-primary-glow text-white ring-1 ring-white/10">
+              <span className="text-[12px] font-bold tracking-[0.02em]">LG</span>
             </div>
             <div className="leading-tight">
-              <div className="text-[15px] font-extrabold tracking-[-0.02em] text-slate-900">
+              <div className="text-[14px] font-bold tracking-[-0.015em] text-white">
                 Leadgrid
               </div>
-              <div className="text-[12px] font-medium tracking-[-0.01em] text-slate-600">CRM workspace</div>
+              <div className="text-[11px] font-medium tracking-[0.02em] uppercase text-white/50">
+                CRM
+              </div>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 min-h-0 px-4 py-2 space-y-1 overflow-y-auto">
-          <div className="px-3 pb-2 text-[11px] uppercase tracking-[0.12em] text-slate-600 font-bold">
+        <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto">
+          <div className="px-3 pb-2 pt-1 text-[10px] uppercase tracking-[0.14em] text-white/40 font-bold">
             Workspace
           </div>
           {items.map((item) => {
@@ -144,51 +145,45 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  "group crm-motion relative flex items-center gap-3 px-3.5 py-3 rounded-2xl text-[14px] tracking-[-0.01em]",
+                  "group crm-motion relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] tracking-[-0.005em]",
                   active
-                    ? "crm-sidebar-active text-slate-950 font-semibold shadow-md"
-                    : "text-slate-700 font-medium hover:bg-white/92 hover:text-slate-950 hover:shadow-sm",
+                    ? "crm-sidebar-active text-white font-semibold"
+                    : "text-white/70 font-medium hover:bg-white/[0.06] hover:text-white",
                 )}
               >
                 <Icon
                   className={cn(
-                    "h-[17px] w-[17px] crm-motion",
-                    active
-                      ? "text-[#7c6bb0]"
-                      : "text-slate-600 group-hover:text-[#7c6bb0]",
+                    "h-[16px] w-[16px] crm-motion",
+                    active ? "text-white" : "text-white/60 group-hover:text-white",
                   )}
                 />
                 <span className="flex-1 truncate">{item.label}</span>
                 {item.shortcut && (
                   <kbd
                     className={cn(
-                      "crm-motion opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded-md",
-                      active
-                        ? "bg-[#d8d2ef] text-[#3d357a]"
-                        : "bg-slate-200/80 text-slate-600",
+                      "crm-motion opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded font-mono",
+                      active ? "bg-white/15 text-white" : "bg-white/10 text-white/60",
                     )}
                   >
                     {item.shortcut}
                   </kbd>
-                )}
-                {active && (
-                  <span className="absolute left-1.5 top-1/2 h-8 w-1 -translate-y-1/2 rounded-full bg-linear-to-b from-[#7c6bb0] to-[#6b61b6]" />
                 )}
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-auto border-t border-sidebar-border/80 p-4">
-          <div className="relative flex items-center gap-3 overflow-hidden rounded-[22px] border border-[#bdb4e0] bg-linear-to-br from-white via-[#ece7f8] to-[#f2edf9] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_22px_34px_-22px_rgba(80,70,155,0.42)]">
-            <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-[#b8b0de] to-transparent" />
-            <div className="h-10 w-10 rounded-full bg-linear-to-br from-[#7c6bb0] via-[#5b52a7] to-[#6b61b6] grid place-items-center text-[12px] font-bold text-white ring-1 ring-white/90 shadow-[0_14px_24px_-14px_rgba(80,70,155,0.7)]">
+        <div className="mt-auto border-t border-white/[0.06] p-3">
+          <div className="flex items-center gap-2.5 rounded-md bg-white/[0.04] border border-white/[0.06] p-2.5">
+            <div className="h-8 w-8 rounded-md bg-primary-glow grid place-items-center text-[11px] font-bold text-white">
               {initials(auth.profile?.full_name, auth.user?.email)}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[13.5px] font-bold tracking-[-0.015em] truncate text-slate-900">{displayName}</div>
-              <div className="text-[11.5px] font-medium tracking-[-0.01em] text-slate-600 capitalize flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#9987c7]" />
+              <div className="text-[12.5px] font-semibold tracking-[-0.005em] truncate text-white">
+                {displayName}
+              </div>
+              <div className="text-[10.5px] font-medium tracking-[0.03em] uppercase text-white/50 capitalize flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                 {roleLabel(auth.primaryRole)}
               </div>
             </div>
@@ -197,20 +192,17 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                 <button
                   type="button"
                   title="Account options"
-                  className="crm-motion h-8 w-8 grid place-items-center rounded-xl border border-[#cdc5e8] bg-white/88 text-[#7c6bb0] shadow-sm hover:bg-white hover:text-[#3d357a] hover:shadow-md"
+                  className="crm-motion h-7 w-7 grid place-items-center rounded-md text-white/60 hover:bg-white/10 hover:text-white"
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-52 rounded-2xl border-[#cfc8e7] bg-linear-to-br from-white via-[#f8f7fc] to-[#f1eef9] p-2 shadow-[0_22px_46px_-28px_rgba(80,70,155,0.42)]"
-              >
+              <DropdownMenuContent align="end" className="w-52 p-1">
                 <DropdownMenuItem
                   onSelect={() => setPasswordDialogOpen(true)}
-                  className="crm-motion rounded-xl px-3 py-2 text-[13px] font-medium text-slate-700 focus:bg-[#ebe8f8] focus:text-[#7c6bb0]"
+                  className="crm-motion rounded-sm px-2.5 py-2 text-[13px] font-medium"
                 >
-                  <KeyRound className="h-4 w-4 text-[#7c6bb0]" />
+                  <KeyRound className="h-4 w-4" />
                   Change Password
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -218,29 +210,28 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
             <button
               onClick={() => void auth.signOut()}
               title="Sign out"
-              className="crm-motion h-8 w-8 grid place-items-center rounded-xl border border-[#cdc5e8] bg-white/88 text-[#7c6bb0] shadow-sm hover:bg-white hover:text-[#3d357a] hover:shadow-md"
+              className="crm-motion h-7 w-7 grid place-items-center rounded-md text-white/60 hover:bg-white/10 hover:text-white"
             >
               <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
       </aside>
-      <main className="flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden bg-transparent pl-3 md:pl-4">
+      <main className="flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden bg-background">
         {skewSeconds !== null && (
-          <div className="m-4 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-200 text-sm shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in">
+          <div className="m-4 p-3 rounded-md border border-warning/40 bg-warning/10 text-warning-foreground text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in">
             <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2 font-semibold">
-                <span className="text-base">⚠️</span>
+              <div className="flex items-center gap-2 font-semibold text-[13px]">
                 <span>System Clock Out of Sync</span>
               </div>
-              <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+              <p className="text-xs leading-relaxed opacity-90">
                 Your computer's clock is out of sync with our servers by about{" "}
-                <strong>{Math.round(Math.abs(skewSeconds) / 60)} minutes</strong>.
-                This causes security checks to fail and will trigger automatic logout (HTTP 429 Too Many Requests).
+                <strong>{Math.round(Math.abs(skewSeconds) / 60)} minutes</strong>. This
+                causes security checks to fail and will trigger automatic logout.
               </p>
             </div>
-            <div className="shrink-0 text-xs font-semibold bg-amber-100 dark:bg-amber-900/40 px-3 py-1.5 rounded-lg text-amber-900 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
-              Turn on "Set time automatically" in Date & Time Settings
+            <div className="shrink-0 text-xs font-semibold bg-warning/20 px-3 py-1.5 rounded border border-warning/40">
+              Enable "Set time automatically" in Date & Time Settings
             </div>
           </div>
         )}
