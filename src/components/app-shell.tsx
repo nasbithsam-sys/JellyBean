@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChangePasswordDialog } from "@/components/auth/change-password-dialog";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useState } from "react";
 
 type Item = {
@@ -173,47 +174,53 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           })}
         </nav>
 
+        <div className="px-3 pb-3">
+          <ThemeToggle className="group crm-motion relative flex w-full items-center gap-3 px-3 py-2 rounded-md text-[13px] tracking-[-0.005em] text-white/70 font-medium hover:bg-white/[0.06] hover:text-white focus:ring-0 focus:ring-offset-0" />
+        </div>
         <div className="mt-auto border-t border-white/[0.06] p-3">
-          <div className="flex items-center gap-2.5 rounded-md bg-white/[0.04] border border-white/[0.06] p-2.5">
-            <div className="h-8 w-8 rounded-md bg-primary-glow grid place-items-center text-[11px] font-bold text-white">
+          <div className="flex items-center gap-2.5 rounded-xl bg-card border border-border shadow-sm p-2.5 overflow-hidden">
+            <div className="h-9 w-9 shrink-0 rounded-full bg-indigo-600 grid place-items-center text-[12px] font-bold text-white shadow-sm">
               {initials(auth.profile?.full_name, auth.user?.email)}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] font-semibold tracking-[-0.005em] truncate text-white">
+            <div className="min-w-0 flex-1 flex flex-col justify-center">
+              <div className="text-[13px] font-bold tracking-tight truncate text-foreground leading-none mb-1.5">
                 {displayName}
               </div>
-              <div className="text-[10.5px] font-medium tracking-[0.03em] uppercase text-white/50 capitalize flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                {roleLabel(auth.primaryRole)}
+              <div className="text-[11px] font-medium uppercase text-muted-foreground capitalize flex items-center gap-1.5 leading-none">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <span className="truncate">{roleLabel(auth.primaryRole)}</span>
               </div>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  title="Account options"
-                  className="crm-motion h-7 w-7 grid place-items-center rounded-md text-white/60 hover:bg-white/10 hover:text-white"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52 p-1">
-                <DropdownMenuItem
-                  onSelect={() => setPasswordDialogOpen(true)}
-                  className="crm-motion rounded-sm px-2.5 py-2 text-[13px] font-medium"
-                >
-                  <KeyRound className="h-4 w-4" />
-                  Change Password
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <button
-              onClick={() => void auth.signOut()}
-              title="Sign out"
-              className="crm-motion h-7 w-7 grid place-items-center rounded-md text-white/60 hover:bg-white/10 hover:text-white"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    title="Account options"
+                    className="crm-motion h-8 w-8 grid place-items-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground transition-colors"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52 p-1">
+                  <DropdownMenuItem
+                    onSelect={() => setPasswordDialogOpen(true)}
+                    className="crm-motion rounded-sm px-2.5 py-2 text-[13px] font-medium cursor-pointer flex items-center gap-2"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                    Change Password
+                  </DropdownMenuItem>
+
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <button
+                onClick={() => void auth.signOut()}
+                title="Sign out"
+                className="crm-motion h-8 w-8 grid place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
       </aside>

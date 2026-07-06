@@ -331,7 +331,7 @@ function Inner() {
                 return (
                   <tr key={s.user_id} className="border-t hover:bg-muted/30">
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-900">{s.name}</div>
+                      <div className="font-semibold text-foreground">{s.name}</div>
                       <div className="text-[12px] crm-muted-text">{s.email}</div>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-semibold">

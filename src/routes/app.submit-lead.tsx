@@ -177,21 +177,21 @@ function Dashboard() {
       <PageBody className="space-y-6">
         <div className="crm-section-panel">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <StatCard label="Today" value={stats.today} icon={<Send className="h-4 w-4 text-[#1e3a5f]" />} />
+            <StatCard label="Today" value={stats.today} icon={<Send className="h-4 w-4 text-foreground" />} />
             <StatCard
               label="This week"
               value={stats.week}
-              icon={<CalendarDays className="h-4 w-4 text-[#3b6fa0]" />}
+              icon={<CalendarDays className="h-4 w-4 text-primary-glow" />}
             />
             <StatCard
               label="This month"
               value={stats.month}
-              icon={<TrendingUp className="h-4 w-4 text-[#07B053]" />}
+              icon={<TrendingUp className="h-4 w-4 text-success" />}
             />
             <StatCard
               label="All time"
               value={leads.length}
-              icon={<CheckCircle2 className="h-4 w-4 text-[#d4ae48]" />}
+              icon={<CheckCircle2 className="h-4 w-4 text-warning" />}
             />
           </div>
         </div>

@@ -12,8 +12,8 @@
   --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --font-sans: "Epilogue", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Urbanist", "Epilogue", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-background: var(--background);
@@ -60,7 +60,6 @@
 
 /* ---------- Navy Trust professional palette ---------- */
 :root,
-.dark,
 .light {
   --radius: 0.5rem;
 
@@ -71,23 +70,23 @@
   --surface-hover: #e4ebf3;
 
   --card: #ffffff;
-  --card-foreground: #0f1b3d;
+  --card-foreground: #0F172A;
 
   --popover: #ffffff;
-  --popover-foreground: #0f1b3d;
+  --popover-foreground: #0F172A;
 
   --primary: #1e3a5f;
   --primary-foreground: #ffffff;
   --primary-glow: #3b6fa0;
 
   --secondary: #e8edf3;
-  --secondary-foreground: #0f1b3d;
+  --secondary-foreground: #475569;
 
   --muted: #eef2f7;
-  --muted-foreground: #5b6b82;
+  --muted-foreground: #64748B;
 
   --accent: #e1e8f1;
-  --accent-foreground: #1e3a5f;
+  --accent-foreground: #0F172A;
 
   --destructive: #b42318;
   --destructive-foreground: #ffffff;
@@ -122,6 +121,69 @@
   --shadow-md: 0 4px 12px -4px rgba(15, 27, 61, 0.10), 0 2px 4px -2px rgba(15, 27, 61, 0.06);
   --shadow-lg: 0 12px 28px -12px rgba(15, 27, 61, 0.18);
   --shadow-glow: 0 0 0 1px rgba(59, 111, 160, 0.20), 0 6px 14px -8px rgba(30, 58, 95, 0.35);
+}
+
+.dark {
+  --radius: 0.5rem;
+
+  --background: #0B1120;
+  --foreground: #F8FAFC;
+
+  --surface: #111827;
+  --surface-hover: #1E293B;
+
+  --card: #111827;
+  --card-foreground: #F8FAFC;
+
+  --popover: #1E293B;
+  --popover-foreground: #F8FAFC;
+
+  --primary: #8B7CF6;
+  --primary-foreground: #ffffff;
+  --primary-glow: #A78BFA;
+
+  --secondary: #1E293B;
+  --secondary-foreground: #CBD5E1;
+
+  --muted: #172033;
+  --muted-foreground: #94A3B8;
+
+  --accent: #1E293B;
+  --accent-foreground: #F8FAFC;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --success: #10b981;
+  --success-foreground: #ffffff;
+
+  --warning: #f59e0b;
+  --warning-foreground: #ffffff;
+
+  --border: #334155;
+  --border-strong: #475569;
+  --input: #0F172A;
+  --ring: #8B7CF6;
+
+  --sidebar: #0F172A;
+  --sidebar-foreground: #CBD5E1;
+  --sidebar-primary: #8B7CF6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1E293B;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1E293B;
+  --sidebar-ring: #8B7CF6;
+
+  --chart-1: #8B7CF6;
+  --chart-2: #A78BFA;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #ef4444;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px -4px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 28px -12px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 0 1px rgba(139, 124, 246, 0.20), 0 6px 14px -8px rgba(167, 139, 250, 0.35);
 }
 
 @layer base {
@@ -176,7 +238,7 @@
   input,
   textarea,
   select {
-    color: #1f2a44;
+    color: var(--foreground);
     font-size: 13.5px;
     font-weight: 500;
     letter-spacing: -0.005em;
@@ -184,7 +246,7 @@
 
   input::placeholder,
   textarea::placeholder {
-    color: #8a97ab;
+    color: var(--muted-foreground);
     opacity: 1;
   }
 }
@@ -193,24 +255,24 @@
 .crm-page-title {
   font-size: clamp(1.55rem, 1.3rem + 0.7vw, 1.9rem);
   line-height: 1.1;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: -0.025em;
-  color: #0f1b3d;
+  color: var(--foreground);
 }
 
 .crm-page-subtitle {
   font-size: 14.5px;
   line-height: 1.55;
   font-weight: 500;
-  color: #5b6b82;
+  color: var(--muted-foreground);
 }
 
 .crm-section-title {
-  font-size: 14.5px;
+  font-size: 17px;
   line-height: 1.35;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: #0f1b3d;
+  color: var(--foreground);
 }
 
 .crm-card-value {
@@ -218,29 +280,29 @@
   line-height: 1.05;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: #0f1b3d;
+  color: var(--foreground);
   font-variant-numeric: tabular-nums;
 }
 
 .crm-card-label {
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.4;
   font-weight: 600;
-  color: #5b6b82;
+  color: var(--muted-foreground);
   letter-spacing: 0.01em;
 }
 
 .crm-kicker {
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.2;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #6b7a92;
+  color: var(--muted-foreground);
 }
 
 .crm-muted-text {
-  color: #5b6b82;
+  color: var(--muted-foreground);
   font-weight: 500;
 }
 
@@ -255,12 +317,12 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #f2f5f9;
-  color: #4d5c76;
-  font-weight: 600;
+  background: var(--surface);
+  color: var(--muted-foreground);
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-size: 10.5px;
+  font-size: 11.5px;
   text-align: left;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
@@ -268,11 +330,11 @@
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 .crm-table tbody td {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
-  color: #1f2a44;
+  color: var(--foreground);
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(215, 222, 231, 0.6);
+  border-bottom: 1px solid var(--border);
   vertical-align: middle;
   transition:
     background-color 120ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -282,19 +344,19 @@
   transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .crm-table tbody tr:nth-child(even) td {
-  background: rgba(238, 242, 247, 0.5);
+  background: var(--surface);
 }
 .crm-table tbody tr:hover td {
-  background: rgba(225, 232, 241, 0.7) !important;
+  background: var(--surface-hover) !important;
 }
 .crm-table tbody tr[data-selected="true"] td {
-  background: rgba(225, 232, 241, 0.9) !important;
+  background: color-mix(in srgb, var(--primary) 15%, transparent) !important;
   box-shadow: inset 2px 0 0 0 var(--primary);
 }
 
 /* ---------- Cards / panels ---------- */
 .glass-card {
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
@@ -345,7 +407,7 @@
   position: relative;
   z-index: 0;
   margin-bottom: 0.75rem;
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
@@ -369,13 +431,13 @@
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: #4d5c76;
+  color: var(--muted-foreground);
 }
 
 .crm-data-table tbody td {
   font-size: 13px;
   font-weight: 500;
-  color: #1f2a44;
+  color: var(--foreground);
 }
 
 .crm-data-row > td {
@@ -388,19 +450,19 @@
 }
 
 .crm-data-row:nth-child(odd) > td {
-  background: #ffffff;
+  background: var(--card);
 }
 
 .crm-data-row:nth-child(even) > td {
-  background: rgba(238, 242, 247, 0.55);
+  background: var(--surface);
 }
 
 .crm-data-row:hover > td {
-  background: rgba(225, 232, 241, 0.75) !important;
+  background: var(--surface-hover) !important;
 }
 
 .crm-data-row.crm-data-row-active > td {
-  background: rgba(225, 232, 241, 0.95) !important;
+  background: color-mix(in srgb, var(--primary) 15%, transparent) !important;
   box-shadow: inset 2px 0 0 0 var(--primary);
 }
 
@@ -409,7 +471,7 @@
 }
 
 .crm-lead-card {
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
@@ -425,7 +487,7 @@
 }
 
 .crm-lead-card.crm-accent-amber {
-  background: #ffffff;
+  background: var(--card);
   border-left: 3px solid #b54708;
 }
 
@@ -434,21 +496,21 @@
   line-height: 1.3;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: #0f1b3d;
+  color: var(--foreground);
 }
 
 .crm-lead-meta {
   font-size: 12.5px;
   line-height: 1.45;
   font-weight: 500;
-  color: #4d5c76;
+  color: var(--muted-foreground);
 }
 
 .crm-lead-body {
   font-size: 12.75px;
   line-height: 1.6;
   font-weight: 500;
-  color: #3d4a63;
+  color: var(--foreground);
 }
 
 .crm-lead-label {
@@ -457,7 +519,7 @@
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: #6b7a92;
+  color: var(--muted-foreground);
 }
 
 .crm-pill-text {
@@ -468,7 +530,7 @@
 }
 
 .crm-section-panel {
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 1rem;
@@ -476,7 +538,7 @@
 }
 
 .crm-toolbar-panel {
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 0.75rem 0.9rem;
@@ -484,7 +546,7 @@
 }
 
 .crm-surface-card {
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
@@ -520,7 +582,7 @@
 .overflow-x-auto.rounded-md.border,
 .rounded-md.border,
 .rounded-lg.border {
-  background: #ffffff;
+  background: var(--card);
   border-color: var(--border);
   box-shadow: var(--shadow-sm);
 }
@@ -535,7 +597,7 @@ table {
 
 thead.bg-surface,
 thead .bg-surface {
-  background-color: #f2f5f9;
+  background-color: var(--surface);
 }
 
 tbody tr {
@@ -554,7 +616,7 @@ input,
 textarea,
 select,
 [data-slot="select-trigger"] {
-  background: #ffffff;
+  background: var(--card);
   border-color: var(--input);
   box-shadow: 0 1px 0 rgba(15, 27, 61, 0.02);
   transition:
@@ -566,39 +628,39 @@ select,
 
 /* ---------- Accent chips (subtle, professional) ---------- */
 .crm-accent-indigo {
-  background: #eef3fa;
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
   border-color: rgba(59, 111, 160, 0.28);
-  color: #1e3a5f;
+  color: var(--foreground);
 }
 
 .crm-accent-sky {
-  background: #eaf4f7;
+  background: color-mix(in srgb, var(--chart-2) 20%, transparent);
   border-color: rgba(59, 130, 160, 0.24);
-  color: #17475a;
+  color: var(--foreground);
 }
 
 .crm-accent-mint {
-  background: #e6f4ec;
+  background: color-mix(in srgb, var(--success) 20%, transparent);
   border-color: rgba(6, 118, 71, 0.24);
-  color: #04593a;
+  color: var(--foreground);
 }
 
 .crm-accent-amber {
-  background: #fdf2e2;
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
   border-color: rgba(181, 71, 8, 0.28);
-  color: #7a3208;
+  color: var(--foreground);
 }
 
 .crm-accent-rose {
-  background: #fbeaea;
+  background: color-mix(in srgb, var(--destructive) 20%, transparent);
   border-color: rgba(180, 35, 24, 0.24);
-  color: #7d1a12;
+  color: var(--foreground);
 }
 
 .crm-accent-slate {
-  background: #eef1f5;
+  background: var(--surface-hover);
   border-color: rgba(91, 107, 130, 0.28);
-  color: #364357;
+  color: var(--foreground);
 }
 
 @media (max-width: 768px) {

@@ -107,34 +107,34 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(135deg,#f7fbff_0%,#eef5ff_48%,#ffffff_100%)] px-4 py-8 flex items-center justify-center">
-      <div className="w-full max-w-5xl grid overflow-hidden rounded-[28px] border border-white/80 bg-white/82 shadow-[0_32px_90px_-50px_rgba(30,64,175,0.45)] backdrop-blur-xl md:grid-cols-[0.92fr_1fr] animate-fade-in-up">
-        <section className="hidden md:flex flex-col justify-between bg-[linear-gradient(160deg,#2563eb_0%,#4f46e5_56%,#7c3aed_100%)] p-9 text-white">
+    <div className="min-h-screen bg-primary px-4 py-8 flex items-center justify-center">
+      <div className="w-full max-w-5xl grid overflow-hidden rounded-[28px] border border-border/80 bg-card/95 shadow-[0_32px_90px_-50px_rgba(0,0,0,0.45)] backdrop-blur-xl md:grid-cols-[0.92fr_1fr] animate-fade-in-up">
+        <section className="hidden md:flex flex-col justify-between bg-primary p-9 text-primary-foreground">
           <div>
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-white/16 ring-1 ring-white/22 grid place-items-center">
+              <div className="h-11 w-11 rounded-2xl bg-card ring-1 ring-border/20 grid place-items-center">
                 <span className="text-sm font-semibold">LG</span>
               </div>
               <div>
                 <div className="text-lg font-semibold tracking-tight">Leadgrid</div>
-                <div className="text-sm text-white/68">Lead operations CRM</div>
+                <div className="text-sm text-primary-foreground/80">Lead operations CRM</div>
               </div>
             </div>
             <div className="mt-16 max-w-sm">
               <h1 className="text-[34px] leading-[1.05] font-semibold tracking-[-0.02em]">
                 Manage every lead from one calm workspace.
               </h1>
-              <p className="mt-4 text-sm leading-6 text-white/72">
+              <p className="mt-4 text-sm leading-6 text-primary-foreground/90">
                 Review raw leads, forward qualified jobs, and keep CS follow-up moving without extra
                 login codes.
               </p>
             </div>
           </div>
-          <div className="grid gap-3 text-sm text-white/82">
+          <div className="grid gap-3 text-sm text-primary-foreground/90">
             {["Password-only access", "Role-based CRM views", "Live Supabase lead data"].map(
               (item) => (
                 <div key={item} className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-white" />
+                  <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                   <span>{item}</span>
                 </div>
               ),
@@ -192,7 +192,7 @@ function LoginPage() {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   required
-                  className="mt-2 h-12 rounded-xl bg-white"
+                  className="mt-2 h-12 rounded-xl bg-input text-foreground border-border"
                 />
               </div>
               <div>
@@ -207,7 +207,7 @@ function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="h-12 rounded-xl bg-white pr-10"
+                    className="h-12 rounded-xl bg-input text-foreground border-border pr-10"
                   />
                   <button
                     type="button"

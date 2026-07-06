@@ -1109,7 +1109,7 @@ function Inner() {
           </Popover>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-[#eef2f7] border border-[#d7dee7] text-[12px] shadow-sm">
+          <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px] shadow-sm">
             <span className="text-muted-foreground">Sent today</span>
             <span className="font-semibold tabular-nums">{sentToday.data ?? "—"}</span>
           </div>
@@ -1264,20 +1264,20 @@ function Inner() {
       {/* Status tabs */}
       <div className="crm-toolbar-panel">
         <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-[#d7dee7] bg-linear-to-r from-white via-[#eef2f7] to-[#f2eef9] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1 ">
           <button
             type="button"
             onClick={() => setActiveStatus("__all__")}
             className={cn(
               "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
               activeStatus === "__all__"
-                ? "bg-linear-to-r from-[#1e3a5f] to-[#3b6fa0] text-white shadow-md"
-                : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
+                ? "bg-primary text-primary-foreground shadow-md"
+                : "text-muted-foreground hover:bg-surface hover:text-foreground",
             )}
           >
-            <span className={cn("h-1.5 w-1.5 rounded-full", activeStatus === "__all__" ? "bg-white" : "bg-foreground")} />
+            <span className={cn("h-1.5 w-1.5 rounded-full", activeStatus === "__all__" ? "bg-card" : "bg-foreground")} />
             All Leads
-            <span className={cn("text-[10.5px] tabular-nums", activeStatus === "__all__" ? "text-white/85" : "text-muted-foreground")}>
+            <span className={cn("text-[10.5px] tabular-nums", activeStatus === "__all__" ? "text-primary-foreground/90" : "text-muted-foreground")}>
               {filtered.length}
             </span>
           </button>
@@ -1289,8 +1289,8 @@ function Inner() {
               className={cn(
                 "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
                 activeStatus === s
-                  ? cn("shadow-sm ring-1", STATUS_TONE[s] ?? "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7]")
-                  : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
+                  ? cn("shadow-sm ring-1", STATUS_TONE[s] ?? "bg-surface-hover text-foreground border-border")
+                  : "text-muted-foreground hover:bg-surface hover:text-foreground",
               )}
             >
               <span
@@ -1308,23 +1308,23 @@ function Inner() {
             className={cn(
               "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
               activeStatus === "templates"
-                ? "bg-linear-to-r from-[#1e3a5f] to-[#3b6fa0] text-white shadow-md"
-                : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
+                ? "bg-primary text-primary-foreground shadow-md"
+                : "text-muted-foreground hover:bg-surface hover:text-foreground",
             )}
           >
             <MessageSquarePlus className="h-3.5 w-3.5" />
             Templates
           </button>
         </div>
-        <div className="inline-flex items-center gap-1 rounded-xl border border-[#b7dae0] bg-linear-to-r from-white via-[#e3f2f4] to-[#e8edf3] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
+        <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-linear-to-r from-white via-[#e3f2f4] to-[#e8edf3] p-1 ">
           <button
             type="button"
             onClick={() => setViewMode("cards")}
             className={cn(
               "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
               viewMode === "cards"
-                ? "bg-[#e8edf3] text-[#1e3a5f] ring-1 ring-[#d7dee7] shadow-sm"
-                : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
+                ? "bg-surface-hover text-foreground ring-1 ring-border shadow-sm"
+                : "text-muted-foreground hover:bg-surface hover:text-foreground",
             )}
           >
             <LayoutGrid className="h-3.5 w-3.5" />
@@ -1336,8 +1336,8 @@ function Inner() {
             className={cn(
               "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
               viewMode === "table"
-                ? "bg-[#e8edf3] text-[#1e3a5f] ring-1 ring-[#d7dee7] shadow-sm"
-                : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
+                ? "bg-surface-hover text-foreground ring-1 ring-border shadow-sm"
+                : "text-muted-foreground hover:bg-surface hover:text-foreground",
             )}
           >
             <Table2 className="h-3.5 w-3.5" />
@@ -1371,7 +1371,7 @@ function Inner() {
       ) : (
         <div className="crm-section-panel space-y-4">
           {(isCs || isAdmin) && selectedIds.size > 0 && (
-            <div className="sticky top-[96px] z-20 -mx-4 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#d7dee7] bg-white/92 px-4 py-2 text-[12px] shadow-md backdrop-blur supports-[backdrop-filter]:bg-white/86">
+            <div className="sticky top-[96px] z-20 -mx-4 mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-card/92 px-4 py-2 text-[12px] shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/86">
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">{selectedIds.size} selected</span>
                 <button
@@ -1439,13 +1439,13 @@ function Inner() {
             </div>
           )}
           {dueLeads.length > 0 && (
-            <div className="glass-card crm-accent-amber p-4 rounded-xl space-y-3 mb-4 border-[#f0d27b]">
+            <div className="glass-card crm-accent-amber p-4 rounded-xl space-y-3 mb-4 border-warning/40">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-[#8f6a00] flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-warning flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-[#FFD670] animate-pulse" />
                   Follow-ups due today
                 </h3>
-                <span className="text-xs font-medium bg-white/88 text-[#8f6a00] px-2.5 py-0.5 rounded-full border border-[#f0d27b] shadow-sm">
+                <span className="text-xs font-medium bg-card/88 text-warning px-2.5 py-0.5 rounded-full border border-warning/40 shadow-sm">
                   {dueLeads.length} lead{dueLeads.length === 1 ? "" : "s"} need follow-up
                 </span>
               </div>
@@ -2009,59 +2009,19 @@ function LeadCard({
     setShowDeleteConfirm(true);
   }
 
-  const cardAccent =
-    important
-      ? "from-[#e5bc57] via-[#FFD670] to-[#ffe39a]"
-      : status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged"
-        ? "from-[#4c9fac] via-[#3b6fa0] to-[#a9a0d4]"
-        : status === "converted" || status === "closed_won"
-          ? "from-[#07B053] via-[#14bc60] to-[#37c978]"
-          : status === "undeliver" ||
-              status === "wrong_number" ||
-              status === "wrong_lead" ||
-              status === "wrong_service" ||
-              status === "wrong_person" ||
-              status === "not_interested" ||
-              status === "already_done" ||
-              status === "closed_lost"
-            ? "from-[#d24e52] via-[#C1292E] to-[#ae1f24]"
-            : status === "already_got_someone" || status === "service_provider_himself"
-            ? "from-[#9b9d95] via-[#74766B] to-[#64665d]"
-              : "from-[#7055a3] via-[#1e3a5f] to-[#3b6fa0]";
-  const cardSurface =
-    important
-      ? "crm-accent-amber"
-      : status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged"
-        ? "crm-accent-sky"
-        : status === "converted" || status === "closed_won"
-          ? "crm-accent-mint"
-          : status === "undeliver" ||
-              status === "wrong_number" ||
-              status === "wrong_lead" ||
-              status === "wrong_service" ||
-              status === "wrong_person" ||
-              status === "not_interested" ||
-              status === "already_done" ||
-              status === "closed_lost"
-            ? "crm-accent-rose"
-            : status === "already_got_someone" || status === "service_provider_himself"
-              ? "crm-accent-slate"
-              : "crm-accent-indigo";
+
 
   return (
     <div
       id={`lead-${lead.id}`}
       className={cn(
-        "crm-lead-card crm-motion-lift crm-enter relative overflow-hidden p-4.5 group hover:border-border-strong hover:-translate-y-0.5 cursor-pointer",
-        cardSurface,
-        selected && "ring-2 ring-primary border-primary",
-        important && "border-warning/55",
+        "crm-lead-card crm-motion-lift crm-enter relative overflow-hidden p-4.5 group hover:border-border-strong hover:-translate-y-0.5 cursor-pointer bg-card",
+        selected && "ring-2 ring-primary border-primary"
       )}
       onClick={onOpen}
     >
-      <div className={cn("absolute inset-x-0 top-0 h-1.5 bg-linear-to-r", cardAccent)} />
       {important && (
-        <div className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#fff4cf] text-[#8f6a00] border border-[#e8cb73] crm-pill-text shadow-sm">
+        <div className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning/10 text-warning border border-warning/40 crm-pill-text shadow-sm">
           {lead.pinned_important && lead.cs_status === "new" ? (
             <Pin className="h-3 w-3 fill-warning/20 rotate-45" />
           ) : (
@@ -2113,7 +2073,7 @@ function LeadCard({
           <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
           <div className="min-w-0 flex items-center gap-1.5">
             <span className="crm-muted-text">Area:</span>
-            <span className="font-semibold text-slate-800">{lead.sub_area}</span>
+            <span className="font-semibold text-foreground">{lead.sub_area}</span>
             <button
               type="button"
               title="Copy area"
@@ -2131,7 +2091,7 @@ function LeadCard({
           <ArrowRightCircle className="h-3 w-3 mt-0.5 text-primary shrink-0" />
           <div className="min-w-0">
             <span className="crm-muted-text">Service:</span>{" "}
-            <span className="font-semibold text-slate-800">{lead.service}</span>
+            <span className="font-semibold text-foreground">{lead.service}</span>
           </div>
         </div>
       )}
@@ -2139,23 +2099,23 @@ function LeadCard({
       <div className="mt-2.5 flex items-start gap-1.5 crm-lead-meta">
         <div className="min-w-0">
           <span className="crm-muted-text">Reference:</span>{" "}
-          <span className="font-semibold text-slate-800">{lead.reference || "-"}</span>
+          <span className="font-semibold text-foreground">{lead.reference || "-"}</span>
         </div>
       </div>
 
       {lead.context && (
-        <div className="mt-4 rounded-2xl border border-border/70 bg-white/72 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
+        <div className="mt-4 rounded-2xl border border-border/70 bg-surface/72 px-3.5 py-3 ">
           <div className="crm-lead-label mb-1.5">
             Context
           </div>
-          <p className="crm-lead-body line-clamp-3 whitespace-pre-wrap text-slate-700">
+          <p className="crm-lead-body line-clamp-3 whitespace-pre-wrap text-muted-foreground">
             {lead.context}
           </p>
         </div>
       )}
 
       {lead.post_text && (
-        <div className="mt-3 rounded-2xl border border-border/70 bg-white/68 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+        <div className="mt-3 rounded-2xl border border-border/70 bg-surface/68 px-3.5 py-3 ">
           <div className="crm-lead-label mb-1.5">
             Exact customer requirement
           </div>
@@ -2175,8 +2135,8 @@ function LeadCard({
 
       {isAdmin && forwardedByText && (
         <div className="mt-3.5 flex items-center gap-1.5 text-[11.5px] crm-muted-text">
-          <span className="crm-lead-label !text-[10px] !tracking-[0.08em] !font-bold !text-slate-500">Forwarded by</span>
-          <span className="font-semibold text-slate-800">{forwardedByText}</span>
+          <span className="crm-lead-label !text-[10px] !tracking-[0.08em] !font-bold !text-muted-foreground">Forwarded by</span>
+          <span className="font-semibold text-foreground">{forwardedByText}</span>
         </div>
       )}
 
@@ -2190,7 +2150,7 @@ function LeadCard({
       </div>
 
       {/* Manual field filled by CS */}
-      <div className="mt-4 rounded-2xl border border-border/70 bg-white/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-4 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
         <Label className="crm-lead-label">
           Number Name
         </Label>
@@ -2208,7 +2168,7 @@ function LeadCard({
           }}
         />
       </div>
-      <div className="mt-3 rounded-2xl border border-border/70 bg-white/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-3 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
         <Label className="crm-lead-label">
           Requirement 1
         </Label>
@@ -2227,7 +2187,7 @@ function LeadCard({
           placeholder="Requirement 1"
         />
       </div>
-      <div className="mt-3 rounded-2xl border border-border/70 bg-white/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-3 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
         <Label className="crm-lead-label">
           Requirement 2
         </Label>
@@ -2246,7 +2206,7 @@ function LeadCard({
           placeholder="Requirement 2"
         />
       </div>
-      <div className="mt-3 rounded-2xl border border-border/70 bg-white/72 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-3 rounded-2xl border border-border/70 bg-surface/72 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-1">
           <Label className="crm-lead-label">
             Compose
@@ -2322,7 +2282,7 @@ function LeadCard({
       </div>
 
       {/* Assignment row */}
-      <div className="mt-3 rounded-2xl border border-border/65 bg-white/68 px-3.5 py-3" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-3 rounded-2xl border border-border/65 bg-surface/68 px-3.5 py-3" onClick={(e) => e.stopPropagation()}>
         {isAdmin ? (
           <Select
             value={assignedTo ?? UNASSIGNED_VALUE}
@@ -2462,7 +2422,7 @@ function LeadCard({
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const tone = STATUS_TONE[status] ?? "bg-[#efefec] text-[#74766B] border-[#d5d6cf]";
+  const tone = STATUS_TONE[status] ?? "bg-muted text-muted-foreground border-border";
   return (
     <span
       className={cn(

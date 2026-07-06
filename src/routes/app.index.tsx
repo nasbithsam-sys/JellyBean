@@ -120,57 +120,36 @@ function AdminDashboard() {
       label: "New raw leads",
       value: stats.data?.rawCounts.new ?? 0,
       icon: Inbox,
-      tone: "primary",
-      cardClass: "crm-accent-indigo",
-      iconClass: "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7]",
     },
     {
       label: "Forwarded to CS",
       value: stats.data?.rawCounts.forwarded ?? 0,
       icon: Send,
-      tone: "accent",
-      cardClass: "crm-accent-sky",
-      iconClass: "bg-[#d9eef1] text-[#2d5c67] border-[#b7dae0]",
     },
     {
       label: "Number not found",
       value: stats.data?.rawCounts.notFound ?? 0,
       icon: AlertCircle,
-      tone: "muted",
-      cardClass: "crm-accent-slate",
-      iconClass: "bg-[#ecece8] text-[#74766B] border-[#d3d4cc]",
     },
     {
       label: "Wrong posts",
       value: stats.data?.rawCounts.wrong ?? 0,
       icon: AlertCircle,
-      tone: "muted",
-      cardClass: "crm-accent-rose",
-      iconClass: "bg-[#f8e4e5] text-[#C1292E] border-[#e6b0b2]",
     },
     {
       label: "Processed",
       value: stats.data?.csCounts.converted ?? 0,
       icon: Trophy,
-      tone: "success",
-      cardClass: "crm-accent-mint",
-      iconClass: "bg-[#def7e8] text-[#07B053] border-[#a9dfbf]",
     },
     {
       label: "Follow-ups",
       value: stats.data?.csCounts.need_follow_up ?? 0,
       icon: Clock,
-      tone: "warning",
-      cardClass: "crm-accent-amber",
-      iconClass: "bg-[#fff3cd] text-[#8f6a00] border-[#f0d27b]",
     },
     {
       label: "New to contact",
       value: stats.data?.csCounts.new ?? 0,
       icon: CheckCircle2,
-      tone: "primary",
-      cardClass: "crm-accent-indigo",
-      iconClass: "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7]",
     },
   ];
 
@@ -184,36 +163,12 @@ function AdminDashboard() {
         <div className="crm-section-panel">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7 gap-4">
             {tiles.map((t) => (
-              <div key={t.label} className={cn("crm-surface-card relative overflow-hidden p-5", t.cardClass)}>
-                <div
-                  className={cn(
-                    "absolute inset-x-0 top-0 h-1.5",
-                    t.tone === "primary" && "bg-linear-to-r from-[#1e3a5f] via-[#2a4d7a] to-[#3b6fa0]",
-                    t.tone === "success" && "bg-linear-to-r from-[#07B053] via-[#15bb60] to-[#31c878]",
-                    t.tone === "warning" && "bg-linear-to-r from-[#d4ae48] via-[#FFD670] to-[#ffe39c]",
-                    t.tone === "accent" && "bg-linear-to-r from-[#4c9fac] via-[#3b6fa0] to-[#a9a0d4]",
-                    t.tone === "muted" && "bg-linear-to-r from-[#74766B] via-[#8a8c82] to-[#b2b4ad]",
-                  )}
-                />
+              <div key={t.label} className="bg-card border border-border shadow-sm rounded-2xl p-5 hover:shadow-md hover:border-border-strong transition-all relative overflow-hidden">
                 <div className="flex items-start justify-between gap-3">
-                  <div
-                    className={cn(
-                      "h-11 w-11 rounded-2xl grid place-items-center border shadow-sm",
-                      t.iconClass,
-                    )}
-                  >
-                    <t.icon
-                      className={cn(
-                        "h-4.5 w-4.5",
-                        t.tone === "primary" && "text-[#1e3a5f]",
-                        t.tone === "success" && "text-[#07B053]",
-                        t.tone === "warning" && "text-[#9b7718]",
-                        t.tone === "accent" && "text-[#2d5c67]",
-                        t.tone === "muted" && "text-[#74766B]",
-                      )}
-                    />
+                  <div className="h-11 w-11 rounded-2xl grid place-items-center border border-border/50 bg-surface shadow-sm">
+                    <t.icon className="h-4.5 w-4.5 text-primary" />
                   </div>
-                  <ArrowUpRight className="h-4 w-4 text-muted-foreground/55" />
+                  <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div className="crm-card-value mt-7 tabular-nums">
                   {t.value}
@@ -228,13 +183,13 @@ function AdminDashboard() {
             <div className="crm-surface-card crm-accent-sky p-6">
               <h3 className="crm-section-title mb-4">Today</h3>
               <div className="space-y-3 text-[13px] crm-muted-text">
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#b7dae0] bg-white/78 px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/78 px-4 py-3 shadow-sm">
                   <span>New raw leads captured</span>
                   <span className="text-base font-semibold text-foreground tabular-nums">
                     {stats.data?.todayRaw ?? 0}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#d7dee7] bg-white/78 px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/78 px-4 py-3 shadow-sm">
                   <span>Leads forwarded to CS</span>
                   <span className="text-base font-semibold text-foreground tabular-nums">
                     {stats.data?.todayForwarded ?? 0}
@@ -251,7 +206,7 @@ function AdminDashboard() {
                   .sort((a, b) => b[1] - a[1])
                   .slice(0, 6)
                   .map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between gap-3 rounded-2xl border border-[#d7dee7] bg-white/80 px-4 py-3 shadow-sm">
+                    <div key={k} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-sm">
                       <span>{CS_LABELS[k] ?? k.replace(/_/g, " ")}</span>
                       <span className="font-semibold text-foreground tabular-nums">{v}</span>
                     </div>
