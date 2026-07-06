@@ -144,17 +144,9 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       category: CategoryFilter,
     ): T => {
       if (category === "new") {
-        // "New" excludes categorised rows, self-assigned rows, and AI-review rows.
         return query
           .is("category" as never, null as never)
-          .is("assigned_myself_at" as never, null as never)
-          .or("lead.is.null,lead.neq.review" as never);
-      }
-      if (category === "review") {
-        return query
-          .is("category" as never, null as never)
-          .is("assigned_myself_at" as never, null as never)
-          .eq("lead" as never, "review" as never);
+          .is("assigned_myself_at" as never, null as never);
       }
       if (
         category === "forwarded" ||
@@ -296,18 +288,11 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
       duplicate: 0,
     };
 
-    let reviewQuery = context.supabase
-      .from("raw_lead_cache")
-      .select("row_key", { count: "exact", head: true })
-      .eq("lead", "review")
-      .is("category", null)
-      .is("assigned_myself_at", null);
     let newAdjustedQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
       .is("category", null)
-      .is("assigned_myself_at", null)
-      .or("lead.is.null,lead.neq.review");
+      .is("assigned_myself_at", null);
     let assignedMyselfQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
@@ -316,25 +301,22 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
       .is("category", null);
 
     if (!isAdmin) {
-      reviewQuery = reviewQuery.or(`assigned_to.is.null,assigned_to.eq.${context.userId}` as never);
       newAdjustedQuery = newAdjustedQuery.or(
         `assigned_to.is.null,assigned_to.eq.${context.userId}` as never,
       );
     }
 
     const [
-      { count: reviewCount, error: reviewCountError },
       { count: adjustedNewCount, error: adjustedNewCountError },
       { count: assignedMyselfCount, error: assignedMyselfCountError },
-    ] = await Promise.all([reviewQuery, newAdjustedQuery, assignedMyselfQuery]);
+    ] = await Promise.all([newAdjustedQuery, assignedMyselfQuery]);
 
-    if (reviewCountError) throw new Error(reviewCountError.message);
     if (adjustedNewCountError) throw new Error(adjustedNewCountError.message);
     if (assignedMyselfCountError) throw new Error(assignedMyselfCountError.message);
 
     return {
       new: adjustedNewCount ?? 0,
-      review: reviewCount ?? 0,
+      review: 0,
       forwarded: baseCounts.forwarded ?? 0,
       not_found: baseCounts.not_found ?? 0,
       wrong: baseCounts.wrong ?? 0,

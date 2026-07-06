@@ -90,7 +90,7 @@ type Row = Record<string, string> & {
 };
 
 type Category = "forwarded" | "not_found" | "wrong" | "duplicate";
-type LeadDecision = "yes" | "no" | "review";
+type LeadDecision = "yes" | "no";
 type Action = { category?: Category | null; lead?: LeadDecision | null; phone?: string | null };
 type CacheEntry = {
   row_key: string;
@@ -290,18 +290,18 @@ function capturedIsoFromRow(r: Row): string | null {
   return t ? new Date(t).toISOString() : null;
 }
 
-function leadValueFromRow(r: Row): "yes" | "no" | "review" | null {
+function leadValueFromRow(r: Row): "yes" | "no" | null {
   const raw = (r.Lead ?? "").trim().toLowerCase();
   if (raw === "yes" || raw === "y" || raw === "true") return "yes";
   if (raw === "no" || raw === "n" || raw === "false") return "no";
-  if (raw === "review" || raw === "maybe") return "review";
+  if (raw === "review" || raw === "maybe") return "no";
   return null;
 }
 
-function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "review" | "" {
+function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
   // User override (from Supabase action cache) always wins over the sheet value,
   // otherwise once the sheet says a value the dropdown can never be changed.
-  if (a?.lead === "yes" || a?.lead === "no" || a?.lead === "review") return a.lead;
+  if (a?.lead === "yes" || a?.lead === "no") return a.lead;
   const base = leadValueFromRow(r);
   if (base) return base;
   return "";
@@ -400,7 +400,7 @@ function Inner() {
     typeof window === "undefined" ? "" : `${window.location.origin}/api/public/nextdoor-leads`;
 
   const [tab, setTab] = useState<
-    "new" | "review" | "forwarded" | "not_found" | "wrong" | "duplicate" | "assigned_myself"
+    "new" | "forwarded" | "not_found" | "wrong" | "duplicate" | "assigned_myself"
   >("new");
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
@@ -822,9 +822,8 @@ function Inner() {
         const lead = leadByKey.get(entry.row_key);
         return lead ? { ...entry, lead } : entry;
       });
-      const reviewCount = result.results.filter((r) => r.lead === "review").length;
       toast.success(
-        `AI checked ${result.analyzed}: ${result.yes} Yes, ${result.no} No${reviewCount ? `, ${reviewCount} Review` : ""}`,
+        `AI checked ${result.analyzed}: ${result.yes} Yes, ${result.no} No`,
       );
     } catch (e) {
       toast.error(friendlyError(e));
@@ -848,7 +847,6 @@ function Inner() {
           {(
             [
               ["new", "New", tabCounts.new],
-              ["review", "AI Review", tabCounts.review],
               ["forwarded", "Forwarded", tabCounts.forwarded],
               ["not_found", "Number not found", tabCounts.not_found],
               ["duplicate", "Duplicate", tabCounts.duplicate],
@@ -912,7 +910,6 @@ function Inner() {
             <SelectItem value="all">All leads</SelectItem>
             <SelectItem value="yes">Lead yes</SelectItem>
             <SelectItem value="no">Lead no</SelectItem>
-            <SelectItem value="review">Lead review</SelectItem>
           </SelectContent>
           </Select>
 
@@ -1268,7 +1265,7 @@ function Inner() {
                       <Select
                         value={lv || ""}
                         onValueChange={(v) =>
-                          updateAction(k, { lead: v as "yes" | "no" | "review" })
+                          updateAction(k, { lead: v as "yes" | "no" })
                         }
                       >
                         <SelectTrigger
@@ -1277,7 +1274,6 @@ function Inner() {
                             lv === "yes" && "bg-success/15 text-success border-success/30",
                             lv === "no" &&
                               "bg-destructive/15 text-destructive border-destructive/30",
-                            lv === "review" && "bg-warning/15 text-warning border-warning/30",
                           )}
                         >
                           <SelectValue placeholder="—" />
@@ -1285,7 +1281,6 @@ function Inner() {
                         <SelectContent>
                           <SelectItem value="yes">Yes</SelectItem>
                           <SelectItem value="no">No</SelectItem>
-                          <SelectItem value="review">Review</SelectItem>
                         </SelectContent>
                       </Select>
                     </td>

@@ -7,13 +7,11 @@ import { logActivity } from "@/lib/activity-log";
 // FROZEN PROMPT — do not edit. Approved home-repair lead filter.
 export const FROZEN_LEAD_PROMPT = `Home repair lead filter.
 
-Mark only YES, NO, or REVIEW.
+Mark only YES or NO. Do not output anything else.
 
 YES = person is asking for any home/property repair, install, maintenance, handyman, cleaning, moving, junk removal, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, hot tub service, or any recommendation for home service.
 
-NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, not asking for home service, someone promoting their own services, cooking, food, meal prep, catering, nails, salon, grooming, nanny, babysitting, baby-sitting, daycare, child care, pet care, pet sitting, dog walking, animal parenting, or animal-related service.
-
-REVIEW = unclear post, maybe home-service related, asking only advice/cost/experience, or not enough information to confidently mark YES or NO.`;
+NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, not asking for home service, someone promoting their own services, cooking, food, meal prep, catering, nails, salon, grooming, nanny, babysitting, baby-sitting, daycare, child care, pet care, pet sitting, dog walking, animal parenting, or animal-related service, or unclear post, or asking only advice/cost/experience, or not enough information to confidently mark YES.`;
 
 const analyzeInputSchema = z.object({
   // Accepted for backward-compat but ignored — system prompt is frozen.
@@ -21,7 +19,7 @@ const analyzeInputSchema = z.object({
   rowKeys: z.array(z.string().min(1)).min(1).max(50),
 });
 
-type LeadDecision = "yes" | "no" | "review";
+type LeadDecision = "yes" | "no";
 
 type RawLeadAiResult = {
   row_key: string;
@@ -92,7 +90,7 @@ function parseAiResults(text: string, rowKeys: string[]): RawLeadAiResult[] {
       return (
         typeof item.id === "string" &&
         allowedIds.has(item.id) &&
-        (item.lead === "yes" || item.lead === "no" || item.lead === "review")
+        (item.lead === "yes" || item.lead === "no")
       );
     })
     .map((item) => ({
@@ -145,7 +143,7 @@ async function classifyWithOpenAi({
                   additionalProperties: false,
                   properties: {
                     id: { type: "string" },
-                    lead: { type: "string", enum: ["yes", "no", "review"] },
+                    lead: { type: "string", enum: ["yes", "no"] },
                   },
                   required: ["id", "lead"],
                 },
@@ -229,10 +227,6 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
 
     if (results.length === 0) throw new Error("AI returned no usable lead decisions");
 
-    // review decisions are intentionally not persisted to the database — they are returned to the client only.
-    // The raw_lead_cache.lead column only accepts 'yes' | 'no' | NULL
-    // (per raw_lead_cache_lead_chk). 'review' decisions are returned to
-    // the client but not persisted — they stay unclassified in the DB.
     const leadUpdates = results
       .filter((result) => result.lead === "yes" || result.lead === "no")
       .map(({ row_key, lead }) => ({ row_key, lead }));
@@ -247,7 +241,7 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
 
     const yes = results.filter((result) => result.lead === "yes").length;
     const no = results.filter((result) => result.lead === "no").length;
-    const review = results.filter((result) => result.lead === "review").length;
+    const review = 0;
     const actor = await loadActor(context.userId);
     await logActivity({
       supabaseAdmin,
