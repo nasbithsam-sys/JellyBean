@@ -198,7 +198,7 @@ export function ChangePasswordDialog({ open, onOpenChange, userEmail }: Props) {
             />
           </div>
 
-          <DialogFooter className="border-t border-[#e8dff5] bg-white/70 px-6 py-4 sm:justify-between sm:space-x-0">
+          <DialogFooter className="border-t border-[#e8edf3] bg-white/70 px-6 py-4 sm:justify-between sm:space-x-0">
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={saving}>
               Cancel
             </Button>
@@ -247,12 +247,12 @@ function PasswordField({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
-          className="h-11 rounded-2xl border-[#d9cfe4] bg-white/90 pr-11 text-[13px]"
+          className="h-11 rounded-2xl border-[#d7dee7] bg-white/90 pr-11 text-[13px]"
         />
         <button
           type="button"
           onClick={onToggle}
-          className="crm-motion absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 hover:bg-[#e8dff5] hover:text-[#7c6bb0]"
+          className="crm-motion absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 hover:bg-[#e8edf3] hover:text-[#1e3a5f]"
           aria-label={visible ? `Hide ${label}` : `Show ${label}`}
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

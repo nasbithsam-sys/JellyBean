@@ -1109,7 +1109,7 @@ function Inner() {
           </Popover>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-[#ece9f8] border border-[#c8c1e6] text-[12px] shadow-sm">
+          <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-[#eef2f7] border border-[#d7dee7] text-[12px] shadow-sm">
             <span className="text-muted-foreground">Sent today</span>
             <span className="font-semibold tabular-nums">{sentToday.data ?? "—"}</span>
           </div>
@@ -1264,14 +1264,14 @@ function Inner() {
       {/* Status tabs */}
       <div className="crm-toolbar-panel">
         <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-[#c8c1e6] bg-linear-to-r from-white via-[#ece9f8] to-[#f2eef9] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-[#d7dee7] bg-linear-to-r from-white via-[#eef2f7] to-[#f2eef9] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
           <button
             type="button"
             onClick={() => setActiveStatus("__all__")}
             className={cn(
               "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
               activeStatus === "__all__"
-                ? "bg-linear-to-r from-[#7c6bb0] to-[#9987c7] text-white shadow-md"
+                ? "bg-linear-to-r from-[#1e3a5f] to-[#3b6fa0] text-white shadow-md"
                 : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
@@ -1289,7 +1289,7 @@ function Inner() {
               className={cn(
                 "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
                 activeStatus === s
-                  ? cn("shadow-sm ring-1", STATUS_TONE[s] ?? "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4]")
+                  ? cn("shadow-sm ring-1", STATUS_TONE[s] ?? "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7]")
                   : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
               )}
             >
@@ -1308,7 +1308,7 @@ function Inner() {
             className={cn(
               "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
               activeStatus === "templates"
-                ? "bg-linear-to-r from-[#7c6bb0] to-[#9987c7] text-white shadow-md"
+                ? "bg-linear-to-r from-[#1e3a5f] to-[#3b6fa0] text-white shadow-md"
                 : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
@@ -1316,14 +1316,14 @@ function Inner() {
             Templates
           </button>
         </div>
-        <div className="inline-flex items-center gap-1 rounded-xl border border-[#b7dae0] bg-linear-to-r from-white via-[#e3f2f4] to-[#e8dff5] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
+        <div className="inline-flex items-center gap-1 rounded-xl border border-[#b7dae0] bg-linear-to-r from-white via-[#e3f2f4] to-[#e8edf3] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.82)]">
           <button
             type="button"
             onClick={() => setViewMode("cards")}
             className={cn(
               "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
               viewMode === "cards"
-                ? "bg-[#e8dff5] text-[#7c6bb0] ring-1 ring-[#d9cfe4] shadow-sm"
+                ? "bg-[#e8edf3] text-[#1e3a5f] ring-1 ring-[#d7dee7] shadow-sm"
                 : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
@@ -1336,7 +1336,7 @@ function Inner() {
             className={cn(
               "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
               viewMode === "table"
-                ? "bg-[#e8dff5] text-[#7c6bb0] ring-1 ring-[#d9cfe4] shadow-sm"
+                ? "bg-[#e8edf3] text-[#1e3a5f] ring-1 ring-[#d7dee7] shadow-sm"
                 : "text-slate-700 hover:bg-white/88 hover:text-slate-950",
             )}
           >
@@ -1371,7 +1371,7 @@ function Inner() {
       ) : (
         <div className="crm-section-panel space-y-4">
           {(isCs || isAdmin) && selectedIds.size > 0 && (
-            <div className="sticky top-[96px] z-20 -mx-4 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#c8c1e6] bg-white/92 px-4 py-2 text-[12px] shadow-md backdrop-blur supports-[backdrop-filter]:bg-white/86">
+            <div className="sticky top-[96px] z-20 -mx-4 mb-4 flex items-center justify-between gap-3 rounded-xl border border-[#d7dee7] bg-white/92 px-4 py-2 text-[12px] shadow-md backdrop-blur supports-[backdrop-filter]:bg-white/86">
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">{selectedIds.size} selected</span>
                 <button
@@ -2013,7 +2013,7 @@ function LeadCard({
     important
       ? "from-[#e5bc57] via-[#FFD670] to-[#ffe39a]"
       : status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged"
-        ? "from-[#4c9fac] via-[#9987c7] to-[#a9a0d4]"
+        ? "from-[#4c9fac] via-[#3b6fa0] to-[#a9a0d4]"
         : status === "converted" || status === "closed_won"
           ? "from-[#07B053] via-[#14bc60] to-[#37c978]"
           : status === "undeliver" ||
@@ -2027,7 +2027,7 @@ function LeadCard({
             ? "from-[#d24e52] via-[#C1292E] to-[#ae1f24]"
             : status === "already_got_someone" || status === "service_provider_himself"
             ? "from-[#9b9d95] via-[#74766B] to-[#64665d]"
-              : "from-[#7055a3] via-[#7c6bb0] to-[#9987c7]";
+              : "from-[#7055a3] via-[#1e3a5f] to-[#3b6fa0]";
   const cardSurface =
     important
       ? "crm-accent-amber"
@@ -2478,7 +2478,7 @@ function StatusBadge({ status }: { status: string }) {
 function statusDotTone(status: string) {
   if (status === "converted" || status === "closed_won") return "bg-[#07B053]";
   if (status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged") {
-    return "bg-[#9987c7]";
+    return "bg-[#3b6fa0]";
   }
   if (
     status === "undeliver" ||
@@ -2495,7 +2495,7 @@ function statusDotTone(status: string) {
   if (status === "already_got_someone" || status === "service_provider_himself") {
     return "bg-[#74766B]";
   }
-  return "bg-[#7c6bb0]";
+  return "bg-[#1e3a5f]";
 }
 
 function PhoneCopyLink({

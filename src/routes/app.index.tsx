@@ -122,7 +122,7 @@ function AdminDashboard() {
       icon: Inbox,
       tone: "primary",
       cardClass: "crm-accent-indigo",
-      iconClass: "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4]",
+      iconClass: "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7]",
     },
     {
       label: "Forwarded to CS",
@@ -170,7 +170,7 @@ function AdminDashboard() {
       icon: CheckCircle2,
       tone: "primary",
       cardClass: "crm-accent-indigo",
-      iconClass: "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4]",
+      iconClass: "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7]",
     },
   ];
 
@@ -188,10 +188,10 @@ function AdminDashboard() {
                 <div
                   className={cn(
                     "absolute inset-x-0 top-0 h-1.5",
-                    t.tone === "primary" && "bg-linear-to-r from-[#7c6bb0] via-[#8a79bb] to-[#9987c7]",
+                    t.tone === "primary" && "bg-linear-to-r from-[#1e3a5f] via-[#2a4d7a] to-[#3b6fa0]",
                     t.tone === "success" && "bg-linear-to-r from-[#07B053] via-[#15bb60] to-[#31c878]",
                     t.tone === "warning" && "bg-linear-to-r from-[#d4ae48] via-[#FFD670] to-[#ffe39c]",
-                    t.tone === "accent" && "bg-linear-to-r from-[#4c9fac] via-[#9987c7] to-[#a9a0d4]",
+                    t.tone === "accent" && "bg-linear-to-r from-[#4c9fac] via-[#3b6fa0] to-[#a9a0d4]",
                     t.tone === "muted" && "bg-linear-to-r from-[#74766B] via-[#8a8c82] to-[#b2b4ad]",
                   )}
                 />
@@ -205,7 +205,7 @@ function AdminDashboard() {
                     <t.icon
                       className={cn(
                         "h-4.5 w-4.5",
-                        t.tone === "primary" && "text-[#7c6bb0]",
+                        t.tone === "primary" && "text-[#1e3a5f]",
                         t.tone === "success" && "text-[#07B053]",
                         t.tone === "warning" && "text-[#9b7718]",
                         t.tone === "accent" && "text-[#2d5c67]",
@@ -234,7 +234,7 @@ function AdminDashboard() {
                     {stats.data?.todayRaw ?? 0}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#d9cfe4] bg-white/78 px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#d7dee7] bg-white/78 px-4 py-3 shadow-sm">
                   <span>Leads forwarded to CS</span>
                   <span className="text-base font-semibold text-foreground tabular-nums">
                     {stats.data?.todayForwarded ?? 0}
@@ -251,7 +251,7 @@ function AdminDashboard() {
                   .sort((a, b) => b[1] - a[1])
                   .slice(0, 6)
                   .map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between gap-3 rounded-2xl border border-[#c8c1e6] bg-white/80 px-4 py-3 shadow-sm">
+                    <div key={k} className="flex items-center justify-between gap-3 rounded-2xl border border-[#d7dee7] bg-white/80 px-4 py-3 shadow-sm">
                       <span>{CS_LABELS[k] ?? k.replace(/_/g, " ")}</span>
                       <span className="font-semibold text-foreground tabular-nums">{v}</span>
                     </div>
