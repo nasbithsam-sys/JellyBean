@@ -36,15 +36,15 @@ function json(body: unknown, status = 200) {
 
 function toSheetRow(row: ExtRow): Record<string, string> {
   return {
-    "Account Name": row.accountName ?? "",
-    "Sub Area / Neighborhood": row.subArea ?? "",
-    "Posted Date & Time": row.postDateTime ?? "",
-    "Post Text": row.postText ?? "",
-    "Lead Link": row.finalLink || row.postLink || row.profileLink || "",
-    "Captured Date (UTC)": row.capturedDate ?? "",
-    "Captured Time (UTC)": row.capturedTime ?? "",
-    "Account Area": row.accountArea ?? "",
-    "Incog Account": row.incogAccount ?? "",
+    "Account Name": row.accountName || (row["Account Name"] as string) || "",
+    "Sub Area / Neighborhood": row.subArea || (row["Sub Area / Neighborhood"] as string) || "",
+    "Posted Date & Time": row.postDateTime || (row["Posted Date & Time"] as string) || "",
+    "Post Text": row.postText || (row["Post Text"] as string) || "",
+    "Lead Link": row.finalLink || row.postLink || row.profileLink || (row["Lead Link"] as string) || "",
+    "Captured Date (UTC)": row.capturedDate || (row["Captured Date (UTC)"] as string) || "",
+    "Captured Time (UTC)": row.capturedTime || (row["Captured Time (UTC)"] as string) || "",
+    "Account Area": row.accountArea || (row["Account Area"] as string) || "",
+    "Incog Account": row.incogAccount || (row["Incog Account"] as string) || "",
   };
 }
 
@@ -52,14 +52,17 @@ function rowKey(row: ExtRow): string {
   if (row.postId) return row.postId;
   if (row.finalLink) return row.finalLink;
   if (row.postLink) return row.postLink;
-  return `${row.accountName ?? ""}|${row.postDateTime ?? ""}|${(row.postText ?? "").slice(0, 40)}`;
+  const name = row.accountName || (row["Account Name"] as string) || "";
+  const posted = row.postDateTime || (row["Posted Date & Time"] as string) || "";
+  const text = row.postText || (row["Post Text"] as string) || "";
+  return `${name}|${posted}|${text.slice(0, 40)}`;
 }
 
 function capturedIso(row: ExtRow): string | null {
-  const source = row.captureDateTime || row.capturedDate;
-  if (!source) return null;
-  const time = Date.parse(source);
-  return Number.isNaN(time) ? null : new Date(time).toISOString();
+  const source = row.captureDateTime || row.capturedDate || row["Captured Date (UTC)"] || row["Captured Date"];
+  if (!source) return new Date().toISOString(); // Fallback to current time so it stays at the top
+  const time = Date.parse(String(source));
+  return Number.isNaN(time) ? new Date().toISOString() : new Date(time).toISOString();
 }
 
 function uniqueRows(rows: ExtRow[]) {
