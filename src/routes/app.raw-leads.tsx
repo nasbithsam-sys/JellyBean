@@ -865,15 +865,13 @@ function Inner() {
                 tab === k
                   ? k === "forwarded"
                     ? "bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-200"
-                    : k === "review"
-                      ? "bg-sky-50 text-sky-700 shadow-sm ring-1 ring-sky-200"
-                      : k === "not_found"
-                        ? "bg-amber-50 text-amber-700 shadow-sm ring-1 ring-amber-200"
-                        : k === "wrong" || k === "duplicate"
-                          ? "bg-rose-50 text-rose-700 shadow-sm ring-1 ring-rose-200"
-                          : k === "assigned_myself"
-                            ? "bg-violet-50 text-violet-700 shadow-sm ring-1 ring-violet-200"
-                            : "bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200"
+                    : k === "not_found"
+                      ? "bg-amber-50 text-amber-700 shadow-sm ring-1 ring-amber-200"
+                      : k === "wrong" || k === "duplicate"
+                        ? "bg-rose-50 text-rose-700 shadow-sm ring-1 ring-rose-200"
+                        : k === "assigned_myself"
+                          ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-200"
+                          : "bg-sky-50 text-sky-700 shadow-sm ring-1 ring-sky-200"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >

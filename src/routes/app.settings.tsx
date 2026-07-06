@@ -132,7 +132,7 @@ function TabBtn({
       className={cn(
         "crm-motion h-8 px-3 rounded-md text-[12.5px] font-medium flex items-center gap-1.5",
         active
-          ? "bg-linear-to-r from-indigo-600 to-violet-500 text-white shadow-md"
+          ? "bg-linear-to-r from-primary to-primary-glow text-white shadow-md"
           : "text-muted-foreground hover:text-foreground",
       )}
     >

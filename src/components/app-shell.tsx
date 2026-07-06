@@ -183,7 +183,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         </div>
         <div className="mt-auto p-2.5 lg:p-3">
           <div className="flex items-center justify-center lg:justify-start gap-2.5 rounded-[22px] bg-sidebar-accent/72 border border-white/[0.10] shadow-sm p-2 lg:p-2.5 overflow-hidden">
-            <div className="h-9 w-9 shrink-0 rounded-full bg-indigo-600 grid place-items-center text-[12px] font-bold text-white shadow-sm">
+            <div className="h-9 w-9 shrink-0 rounded-full bg-primary grid place-items-center text-[12px] font-bold text-white shadow-sm">
               {initials(auth.profile?.full_name, auth.user?.email)}
             </div>
             <div className="hidden lg:flex min-w-0 flex-1 flex-col justify-center">

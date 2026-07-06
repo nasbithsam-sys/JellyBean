@@ -199,7 +199,7 @@ function AdminDashboard() {
             </div>
           </div>
           <div className="crm-section-panel">
-            <div className="crm-surface-card crm-accent-indigo p-6">
+            <div className="crm-surface-card crm-accent-navy p-6">
               <h3 className="crm-section-title mb-4">CS pipeline mix</h3>
               <div className="text-[13px] crm-muted-text space-y-2">
                 {Object.entries(stats.data?.csCounts ?? {})
