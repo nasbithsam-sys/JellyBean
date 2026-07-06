@@ -65,7 +65,7 @@ async function loadActorName(userId: string) {
 
 // Bootstrap: allow creating the FIRST admin only when zero users exist.
 export const bootstrapFirstAdmin = createServerFn({ method: "POST" })
-  .inputValidator((input) => createUserSchema.parse(input))
+  .validator((input) => createUserSchema.parse(input))
   .handler(async ({ data }) => {
     // Count existing profiles
     const { count, error: countErr } = await supabaseAdmin
@@ -81,7 +81,7 @@ export const bootstrapFirstAdmin = createServerFn({ method: "POST" })
 // Admin-only user creation
 export const adminCreateUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => createUserSchema.parse(input))
+  .validator((input) => createUserSchema.parse(input))
   .handler(async ({ data, context }) => {
     await ensureRequesterIsAdmin(context.userId);
     const result = await createUserInternal(data);
@@ -100,7 +100,7 @@ export const adminCreateUser = createServerFn({ method: "POST" })
 // Admin-only deactivate
 export const adminSetActive = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) =>
+  .validator((input) =>
     z.object({ userId: z.string().uuid(), isActive: z.boolean() }).parse(input),
   )
   .handler(async ({ data, context }) => {
@@ -129,7 +129,7 @@ export const adminSetActive = createServerFn({ method: "POST" })
 // Admin-only password reset (sets a new password directly)
 export const adminResetPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) =>
+  .validator((input) =>
     z.object({ userId: z.string().uuid(), newPassword: z.string().min(8).max(128) }).parse(input),
   )
   .handler(async ({ data, context }) => {

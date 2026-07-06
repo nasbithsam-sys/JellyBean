@@ -15,7 +15,7 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "crm-page-header crm-enter flex items-center justify-between gap-4 px-6 md:px-8 py-5 mx-3 md:mx-4 rounded-[28px]",
+        "crm-page-header crm-enter flex items-center justify-between gap-4 px-5 md:px-7 py-5 mx-3 md:mx-5 mt-3 md:mt-5 rounded-[28px]",
         className,
       )}
     >
@@ -38,8 +38,8 @@ export function PageBody({
   className?: string;
 }) {
   return (
-    <div className={cn("crm-page-body crm-enter px-3 md:px-4 pb-4 pt-4", className)}>
-      <div className="rounded-[32px] px-4 py-5 md:px-6 md:py-6">{children}</div>
+    <div className={cn("crm-page-body crm-enter px-3 md:px-5 pb-5 pt-4", className)}>
+      <div className="rounded-[32px] px-1 py-2 md:px-1 md:py-3">{children}</div>
     </div>
   );
 }

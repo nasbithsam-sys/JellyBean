@@ -116,13 +116,13 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
 
   return (
     <div className="crm-app-shell flex h-screen overflow-hidden bg-background text-foreground">
-      <aside className="crm-sidebar-shell w-[248px] shrink-0 text-sidebar-foreground flex flex-col h-full">
-        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06]">
-          <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-md bg-primary-glow text-white ring-1 ring-white/10">
+      <aside className="crm-sidebar-shell w-[76px] lg:w-[236px] shrink-0 text-sidebar-foreground flex flex-col h-full">
+        <div className="px-3 lg:px-5 pt-5 pb-4">
+          <div className="flex items-center justify-center lg:justify-start gap-3">
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-sidebar-primary text-white ring-1 ring-white/30 shadow-[0_14px_30px_-16px_color-mix(in_srgb,var(--sidebar-primary)_80%,transparent)]">
               <span className="text-[12px] font-bold tracking-[0.02em]">LG</span>
             </div>
-            <div className="leading-tight">
+            <div className="hidden lg:block leading-tight">
               <div className="text-[14px] font-bold tracking-[-0.015em] text-white">
                 Leadgrid
               </div>
@@ -133,8 +133,8 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           </div>
         </div>
 
-        <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto">
-          <div className="px-3 pb-2 pt-1 text-[10px] uppercase tracking-[0.14em] text-white/40 font-bold">
+        <nav className="flex-1 min-h-0 px-2.5 lg:px-3 py-3 space-y-1 overflow-y-auto">
+          <div className="hidden lg:block px-3 pb-2 pt-1 text-[10px] uppercase tracking-[0.14em] text-white/40 font-bold">
             Workspace
           </div>
           {items.map((item) => {
@@ -145,11 +145,12 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
               <Link
                 key={item.to}
                 to={item.to}
+                title={item.label}
                 className={cn(
-                  "group crm-motion relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] tracking-[-0.005em]",
+                  "group crm-motion relative flex h-11 items-center justify-center lg:justify-start gap-3 px-0 lg:px-3 rounded-2xl text-[13px] tracking-[-0.005em]",
                   active
                     ? "crm-sidebar-active text-white font-semibold"
-                    : "text-white/70 font-medium hover:bg-white/[0.06] hover:text-white",
+                    : "text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white",
                 )}
               >
                 <Icon
@@ -158,11 +159,11 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                     active ? "text-white" : "text-white/60 group-hover:text-white",
                   )}
                 />
-                <span className="flex-1 truncate">{item.label}</span>
+                <span className="hidden lg:block flex-1 truncate">{item.label}</span>
                 {item.shortcut && (
                   <kbd
                     className={cn(
-                      "crm-motion opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded font-mono",
+                      "hidden lg:inline-flex crm-motion opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded font-mono",
                       active ? "bg-white/15 text-white" : "bg-white/10 text-white/60",
                     )}
                   >
@@ -174,30 +175,30 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           })}
         </nav>
 
-        <div className="px-3 pb-3">
-          <ThemeToggle className="group crm-motion relative flex w-full items-center gap-3 px-3 py-2 rounded-md text-[13px] tracking-[-0.005em] text-white/70 font-medium hover:bg-white/[0.06] hover:text-white focus:ring-0 focus:ring-offset-0" />
+        <div className="px-2.5 lg:px-3 pb-3">
+          <ThemeToggle className="group crm-motion relative flex h-11 w-full items-center justify-center lg:justify-start gap-3 px-0 lg:px-3 rounded-2xl text-[13px] tracking-[-0.005em] text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white focus:ring-0 focus:ring-offset-0 [&>span]:hidden lg:[&>span]:inline" />
         </div>
-        <div className="mt-auto border-t border-white/[0.06] p-3">
-          <div className="flex items-center gap-2.5 rounded-xl bg-card border border-border shadow-sm p-2.5 overflow-hidden">
+        <div className="mt-auto p-2.5 lg:p-3">
+          <div className="flex items-center justify-center lg:justify-start gap-2.5 rounded-[22px] bg-sidebar-accent/72 border border-white/[0.10] shadow-sm p-2 lg:p-2.5 overflow-hidden">
             <div className="h-9 w-9 shrink-0 rounded-full bg-indigo-600 grid place-items-center text-[12px] font-bold text-white shadow-sm">
               {initials(auth.profile?.full_name, auth.user?.email)}
             </div>
-            <div className="min-w-0 flex-1 flex flex-col justify-center">
-              <div className="text-[13px] font-bold tracking-tight truncate text-foreground leading-none mb-1.5">
+            <div className="hidden lg:flex min-w-0 flex-1 flex-col justify-center">
+              <div className="text-[13px] font-bold tracking-tight truncate text-white leading-none mb-1.5">
                 {displayName}
               </div>
-              <div className="text-[11px] font-medium uppercase text-muted-foreground capitalize flex items-center gap-1.5 leading-none">
+              <div className="text-[11px] font-medium uppercase text-white/52 capitalize flex items-center gap-1.5 leading-none">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
                 <span className="truncate">{roleLabel(auth.primaryRole)}</span>
               </div>
             </div>
-            <div className="flex items-center gap-0.5 shrink-0">
+            <div className="hidden lg:flex items-center gap-0.5 shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     title="Account options"
-                    className="crm-motion h-8 w-8 grid place-items-center rounded-lg text-muted-foreground hover:bg-surface-hover hover:text-foreground transition-colors"
+                    className="crm-motion h-8 w-8 grid place-items-center rounded-xl text-white/55 hover:bg-white/10 hover:text-white transition-colors"
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
@@ -216,7 +217,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
               <button
                 onClick={() => void auth.signOut()}
                 title="Sign out"
-                className="crm-motion h-8 w-8 grid place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                className="crm-motion h-8 w-8 grid place-items-center rounded-xl text-white/55 hover:bg-destructive/15 hover:text-white transition-colors"
               >
                 <LogOut className="h-4 w-4" />
               </button>

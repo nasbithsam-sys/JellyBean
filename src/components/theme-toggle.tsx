@@ -1,31 +1,22 @@
-import { useState, useEffect } from "react";
 import { Moon, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/hooks/use-theme";
 
 export function ThemeToggle({ className }: { className?: string }) {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const { theme, toggle } = useTheme();
 
-  useEffect(() => {
-    const isDark = document.documentElement.classList.contains("dark");
-    setTheme(isDark ? "dark" : "light");
-  }, []);
-
-  const toggleTheme = (e: React.MouseEvent) => {
+  const toggleTheme = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const newTheme = theme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(newTheme);
+    toggle();
   };
 
   return (
     <button
       onClick={toggleTheme}
+      title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors hover:bg-surface hover:text-foreground",
-        "text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-muted-foreground hover:bg-surface hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/35 focus:ring-offset-0",
         className
       )}
     >

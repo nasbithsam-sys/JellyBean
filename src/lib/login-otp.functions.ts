@@ -17,7 +17,7 @@ async function ensureRequesterIsAdmin(userId: string) {
 // Admin: delete any user (including other admins). Cannot delete self.
 export const adminDeleteUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => z.object({ userId: z.string().uuid() }).parse(input))
+  .validator((input) => z.object({ userId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     await ensureRequesterIsAdmin(context.userId);
     if (data.userId === context.userId) throw new Error("You cannot delete your own account.");

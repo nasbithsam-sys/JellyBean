@@ -107,12 +107,13 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-primary px-4 py-8 flex items-center justify-center">
-      <div className="w-full max-w-5xl grid overflow-hidden rounded-[28px] border border-border/80 bg-card/95 shadow-[0_32px_90px_-50px_rgba(0,0,0,0.45)] backdrop-blur-xl md:grid-cols-[0.92fr_1fr] animate-fade-in-up">
-        <section className="hidden md:flex flex-col justify-between bg-primary p-9 text-primary-foreground">
+    <div className="min-h-screen bg-background px-4 py-8 flex items-center justify-center">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_22%_14%,color-mix(in_oklch,var(--primary)_18%,transparent),transparent_30rem)]" />
+      <div className="w-full max-w-5xl grid overflow-hidden rounded-[32px] border border-border bg-card/90 shadow-lg backdrop-blur-xl md:grid-cols-[0.9fr_1fr] animate-fade-in-up">
+        <section className="hidden md:flex flex-col justify-between bg-[linear-gradient(135deg,color-mix(in_oklch,var(--primary)_88%,black),color-mix(in_oklch,var(--primary-glow)_72%,var(--surface)))] p-9 text-primary-foreground">
           <div>
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-card ring-1 ring-border/20 grid place-items-center">
+              <div className="h-11 w-11 rounded-2xl bg-white/95 text-primary ring-1 ring-white/30 grid place-items-center shadow-sm">
                 <span className="text-sm font-semibold">LG</span>
               </div>
               <div>
@@ -121,7 +122,7 @@ function LoginPage() {
               </div>
             </div>
             <div className="mt-16 max-w-sm">
-              <h1 className="text-[34px] leading-[1.05] font-semibold tracking-[-0.02em]">
+              <h1 className="text-[34px] leading-[1.05] font-bold tracking-[-0.02em]">
                 Manage every lead from one calm workspace.
               </h1>
               <p className="mt-4 text-sm leading-6 text-primary-foreground/90">
@@ -142,7 +143,7 @@ function LoginPage() {
           </div>
         </section>
 
-        <section className="p-7 sm:p-10 md:p-12">
+        <section className="p-7 sm:p-10 md:p-12 bg-card/72">
           <div className="md:hidden mb-8 flex items-center gap-3">
             <div className="h-11 w-11 rounded-2xl bg-primary text-primary-foreground grid place-items-center">
               <span className="text-sm font-semibold">LG</span>
@@ -172,8 +173,8 @@ function LoginPage() {
             )}
 
             <div className="mb-8">
-              <p className="text-sm font-medium text-primary">Welcome back</p>
-              <h1 className="mt-2 text-[30px] leading-tight font-semibold tracking-[-0.02em]">
+              <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-primary">Welcome back</p>
+              <h1 className="mt-2 text-[30px] leading-tight font-bold tracking-[-0.02em]">
                 Sign in to your workspace
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
