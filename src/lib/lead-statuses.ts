@@ -22,7 +22,7 @@ export const STATUS_LABEL: Record<string, string> = {
 
 // Using explicit Tailwind colors to ensure classes are not purged at build time
 export const STATUS_TONE: Record<string, string> = {
-  new: "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4] shadow-sm",
+  new: "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7] shadow-sm",
   undeliver: "bg-[#f8e4e5] text-[#C1292E] border-[#e7b1b3] shadow-sm",
   wrong_number: "bg-[#f8e4e5] text-[#C1292E] border-[#e7b1b3] shadow-sm",
   wrong_lead: "bg-[#f8e4e5] text-[#C1292E] border-[#e7b1b3] shadow-sm",
@@ -32,10 +32,10 @@ export const STATUS_TONE: Record<string, string> = {
   service_provider_himself: "bg-[#efefec] text-[#74766B] border-[#d5d6cf] shadow-sm",
   converted: "bg-[#def7e8] text-[#07B053] border-[#a9dfbf] shadow-sm",
   need_follow_up: "bg-[#fff5d5] text-[#8f6a00] border-[#f1d27a] shadow-sm",
-  called: "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4] shadow-sm",
-  messaged: "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4] shadow-sm",
+  called: "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7] shadow-sm",
+  messaged: "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7] shadow-sm",
   follow_up: "bg-[#fff5d5] text-[#8f6a00] border-[#f1d27a] shadow-sm",
-  interested: "bg-[#e8dff5] text-[#7c6bb0] border-[#d9cfe4] shadow-sm",
+  interested: "bg-[#e8edf3] text-[#1e3a5f] border-[#d7dee7] shadow-sm",
   not_interested: "bg-[#f8e4e5] text-[#C1292E] border-[#e7b1b3] shadow-sm",
   already_done: "bg-[#f8e4e5] text-[#C1292E] border-[#e7b1b3] shadow-sm",
   closed_won: "bg-[#def7e8] text-[#07B053] border-[#a9dfbf] shadow-sm",
