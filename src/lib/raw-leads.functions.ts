@@ -2,7 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const ALLOWED_RAW_LEAD_ROLES = ["admin", "sub_admin", "maturing", "acc_handler"] as const;
+const ALLOWED_RAW_LEAD_ROLES = [
+  "admin",
+  "sub_admin",
+  "scraping",
+  "maturing",
+  "acc_handler",
+] as const;
 
 type RawLeadRole = (typeof ALLOWED_RAW_LEAD_ROLES)[number];
 

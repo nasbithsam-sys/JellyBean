@@ -51,7 +51,10 @@ const ADMIN: Item[] = [
   { to: "/app/settings", label: "Settings", icon: Settings, shortcut: "S" },
 ];
 
-const SCRAPING: Item[] = [{ to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe }];
+const SCRAPING: Item[] = [
+  { to: "/app/raw-leads", label: "Raw Leads", icon: Table2 },
+  { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe },
+];
 
 const MATURING: Item[] = [
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2 },
