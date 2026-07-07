@@ -2033,6 +2033,26 @@ function LeadCard({
 
 
 
+  const imagesList = Array.isArray(lead.images) ? (lead.images as string[]) : [];
+  let videoCount = 0;
+  let imageCount = 0;
+  imagesList.forEach(url => {
+    if (/\.(mp4|webm|mov)(\?.*)?$/i.test(url)) {
+      videoCount++;
+    } else {
+      imageCount++;
+    }
+  });
+
+  let attachmentText = "";
+  if (videoCount > 0 && imageCount > 0) {
+    attachmentText = "Pictures and videos attached";
+  } else if (videoCount > 0) {
+    attachmentText = "Videos attached";
+  } else if (imageCount > 0) {
+    attachmentText = "Pictures attached";
+  }
+
   return (
     <div
       id={`lead-${lead.id}`}
@@ -2147,11 +2167,18 @@ function LeadCard({
         </div>
       )}
 
-      {lead.submitted_by_role && (
+      {(lead.submitted_by_role || attachmentText) && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          <span className="px-2.5 py-1 rounded-full bg-accent/45 text-accent-foreground border border-border crm-pill-text uppercase tracking-[0.08em]">
-            via {lead.submitted_by_role}
-          </span>
+          {lead.submitted_by_role && (
+            <span className="px-2.5 py-1 rounded-full bg-accent/45 text-accent-foreground border border-border crm-pill-text uppercase tracking-[0.08em]">
+              via {lead.submitted_by_role}
+            </span>
+          )}
+          {attachmentText && (
+            <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 crm-pill-text uppercase tracking-[0.08em]">
+              {attachmentText}
+            </span>
+          )}
         </div>
       )}
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle } from "lucide-react";
+import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle, Video } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { formatPhone, normalizePhone } from "@/lib/crm-lite";
 import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
+import { compressVideoInBrowser, MAX_VIDEO_BYTES, ALLOWED_VIDEO_MIME_TYPES, getVideoDimensions } from "@/lib/video-compressor";
 
 const BUCKET = "lead-attachments";
 const MAX_IMAGES = 20;
@@ -28,6 +29,7 @@ export type LeadFormValues = {
   reference: string;
   isImportant: boolean;
   files: File[];
+  existingImages?: string[];
   extraNumbers?: string[];
 };
 
@@ -41,6 +43,7 @@ type LeadFormInitialValues = {
   reference?: string;
   isImportant?: boolean;
   extraNumbers?: string[];
+  images?: string[];
   id?: string;
 };
 
@@ -114,6 +117,10 @@ export function LeadForm({
   disableDuplicateCheck?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const videoFileRef = useRef<HTMLInputElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const toastIdRef = useRef<string | number | null>(null);
+
   const [customerName, setCustomerName] = useState(initialValues?.customerName ?? "");
   const [customerNumber, setCustomerNumber] = useState(initialValues?.customerNumber ?? "");
   const [extraNumbers, setExtraNumbers] = useState<string[]>(initialValues?.extraNumbers ?? []);
@@ -129,7 +136,22 @@ export function LeadForm({
   const [importantValue, setImportantValue] = useState(
     (initialValues?.isImportant ?? false) ? "yes" : "no",
   );
+  const [existingImages, setExistingImages] = useState<string[]>(initialValues?.images ?? []);
   const [files, setFiles] = useState<File[]>([]);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      // Cleanup on unmount (if dialog closes)
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (toastIdRef.current) {
+        toast.dismiss(toastIdRef.current);
+      }
+    };
+  }, []);
 
   const checkDuplicate = useServerFn(checkDuplicatePhone);
   const phoneDigits = useMemo(
@@ -180,7 +202,8 @@ export function LeadForm({
     reference !== resolveInitialReference(referenceMode, initialValues?.reference) ||
     importantValue !== ((initialValues?.isImportant ?? false) ? "yes" : "no") ||
     files.length > 0 ||
-    extraNumbers.join() !== (initialValues?.extraNumbers ?? []).join();
+    existingImages.length !== (initialValues?.images?.length ?? 0) ||
+    JSON.stringify(extraNumbers) !== JSON.stringify(initialValues?.extraNumbers ?? []);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -203,13 +226,86 @@ export function LeadForm({
     }
     setFiles((prev) => {
       const merged = [...prev, ...valid];
-      if (merged.length > MAX_IMAGES) {
-        toast.error(`Maximum ${MAX_IMAGES} images`);
-        return merged.slice(0, MAX_IMAGES);
+      const allowedCount = MAX_IMAGES - (existingImages.length + prev.length);
+      if (merged.length > allowedCount) {
+        toast.error(`Maximum ${MAX_IMAGES} attachments limit reached`);
+        return merged.slice(0, allowedCount);
       }
       return merged;
     });
     if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function addVideoFile(picked: FileList | null) {
+    if (!picked || picked.length === 0) return;
+    const file = picked[0];
+
+    if (!ALLOWED_VIDEO_MIME_TYPES.includes(file.type)) {
+      toast.error(`Invalid video format. Allowed: mp4, webm, mov.`);
+      if (videoFileRef.current) videoFileRef.current.value = "";
+      return;
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      toast.error(`Video is larger than 50 MB.`);
+      if (videoFileRef.current) videoFileRef.current.value = "";
+      return;
+    }
+
+    if (files.length >= MAX_IMAGES) {
+      toast.error(`Maximum 20 attachments total.`);
+      if (videoFileRef.current) videoFileRef.current.value = "";
+      return;
+    }
+
+    // Smart skip compression for small videos (<= 10MB)
+    if (file.size <= 10 * 1024 * 1024) {
+      try {
+        const { height } = await getVideoDimensions(file);
+        if (height <= 720) {
+          setFiles((prev) => [...prev, file]);
+          toast.success("Video added!");
+          if (videoFileRef.current) videoFileRef.current.value = "";
+          return;
+        }
+      } catch (err) {
+        console.warn("Failed to get video dimensions, falling back to compression", err);
+      }
+    }
+
+    setIsCompressing(true);
+    setCompressionProgress(0);
+    const toastId = toast.loading("Compressing video...");
+    toastIdRef.current = toastId;
+
+    abortControllerRef.current = new AbortController();
+
+    try {
+      const compressedFile = await compressVideoInBrowser(
+        file,
+        (progress) => {
+          setCompressionProgress(progress);
+          toast.loading(`Compressing video (${progress}%)...`, { id: toastId });
+        },
+        abortControllerRef.current.signal
+      );
+
+      setFiles((prev) => [...prev, compressedFile]);
+      toast.success("Video compressed and added!", { id: toastId });
+    } catch (err) {
+      if (err instanceof Error && err.message === "AbortError") {
+        toast.error("Compression cancelled.", { id: toastId });
+        return;
+      }
+      console.error("Video compression error:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      toast.error(`Compression failed: ${errorMessage}`, { id: toastId });
+    } finally {
+      setIsCompressing(false);
+      setCompressionProgress(0);
+      abortControllerRef.current = null;
+      toastIdRef.current = null;
+      if (videoFileRef.current) videoFileRef.current.value = "";
+    }
   }
 
   function removeFile(index: number) {
@@ -277,6 +373,7 @@ export function LeadForm({
       reference: reference.trim(),
       isImportant: importantValue === "yes",
       files,
+      existingImages,
       extraNumbers: extraNumbers.filter((num) => num.trim() !== ""),
     });
   }
@@ -423,8 +520,9 @@ export function LeadForm({
       {showAttachments ? (
         <Field label="Add Attachment">
           <div className="space-y-3">
-            <div className="text-[11px] text-muted-foreground">
-              Up to {MAX_IMAGES} images, 10 MB each. Paste with Ctrl/Cmd+V if needed.
+            <div className="text-[11px] text-muted-foreground flex gap-4">
+              <span>Images: Up to 20 total, 10MB each.</span>
+              <span>Videos: Up to 50MB (auto-compressed to 720p).</span>
             </div>
             <input
               ref={fileRef}
@@ -434,37 +532,123 @@ export function LeadForm({
               className="hidden"
               onChange={(e) => addFiles(e.target.files)}
             />
+            <input
+              ref={videoFileRef}
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime"
+              className="hidden"
+              onChange={(e) => {
+                void addVideoFile(e.target.files);
+              }}
+            />
             <div className="flex flex-wrap gap-3 items-start">
-              {files.map((file, index) => (
-                <div
-                  key={`${file.name}-${index}`}
-                  className="relative h-20 w-20 rounded-md overflow-hidden border border-border bg-muted"
-                >
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
+              {/* Existing Images from DB */}
+              {existingImages.map((url, idx) => {
+                const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(url);
+                return (
+                  <div
+                    key={`existing-${idx}`}
+                    className={cn(
+                      "relative rounded-md overflow-hidden border border-border bg-muted",
+                      isVideo ? "h-32 w-48" : "h-20 w-20"
+                    )}
+                  >
+                    {isVideo ? (
+                      <video
+                        src={url}
+                        className="h-full w-full object-cover"
+                        controls
+                        controlsList="nodownload"
+                        preload="metadata"
+                      />
+                    ) : (
+                      <img
+                        src={url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setExistingImages((prev) => prev.filter((_, i) => i !== idx))}
+                      className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+              
+              {/* Newly added files */}
+              {files.map((file, index) => {
+                const isVideo = file.type.startsWith("video/");
+                return (
+                  <div
+                    key={`${file.name}-${index}`}
+                    className={cn(
+                      "relative rounded-md overflow-hidden border border-border bg-muted",
+                      isVideo ? "h-32 w-48" : "h-20 w-20"
+                    )}
+                  >
+                    {isVideo ? (
+                      <video
+                        src={URL.createObjectURL(file)}
+                        className="h-full w-full object-cover"
+                        controls
+                        controlsList="nodownload"
+                        preload="metadata"
+                      />
+                    ) : (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index)}
+                      className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+              {(files.length + existingImages.length) < MAX_IMAGES && (
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => removeFile(index)}
-                    className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={isCompressing || submitting}
+                    className="h-20 w-20 rounded-md border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors grid place-items-center text-muted-foreground hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <X className="h-3 w-3" />
+                    <div className="flex flex-col items-center gap-1 text-[11px]">
+                      <ImagePlus className="h-4 w-4" />
+                      Image
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => videoFileRef.current?.click()}
+                    disabled={isCompressing || submitting}
+                    className="h-20 w-20 rounded-md border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors grid place-items-center text-muted-foreground hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="flex flex-col items-center gap-1 text-[11px]">
+                      {isCompressing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          {compressionProgress}%
+                        </>
+                      ) : (
+                        <>
+                          <Video className="h-4 w-4" />
+                          Video
+                        </>
+                      )}
+                    </div>
                   </button>
                 </div>
-              ))}
-              {files.length < MAX_IMAGES && (
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className="h-20 w-20 rounded-md border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors grid place-items-center text-muted-foreground hover:text-primary"
-                >
-                  <div className="flex flex-col items-center gap-1 text-[11px]">
-                    <ImagePlus className="h-4 w-4" />
-                    Add
-                  </div>
-                </button>
               )}
             </div>
           </div>
@@ -494,13 +678,17 @@ export function LeadForm({
           variant="outline"
           onClick={() => {
             if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+            if (abortControllerRef.current) abortControllerRef.current.abort();
+            if (toastIdRef.current) toast.dismiss(toastIdRef.current);
+            setIsCompressing(false);
+            setCompressionProgress(0);
             onCancel();
           }}
           disabled={submitting}
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={submitting || hasDuplicate}>
+        <Button type="submit" disabled={submitting || isCompressing || hasDuplicate}>
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />

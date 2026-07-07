@@ -690,7 +690,7 @@ function UnifiedForwardedLeadForm({
           post_text: values.exactCustomerText,
           reference: values.reference,
           is_important: lead.pinned_important ? true : values.isImportant,
-          images: [...(lead.images ?? []), ...uploadedImages],
+          images: [...(values.existingImages ?? []), ...uploadedImages],
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
@@ -722,6 +722,7 @@ function UnifiedForwardedLeadForm({
         exactCustomerText: lead.post_text || lead.context || "",
         reference: lead.reference || undefined,
         isImportant: lead.is_important,
+        images: Array.isArray(lead.images) ? (lead.images as string[]) : [],
       }}
       submitting={saving}
       onDirtyChange={onDirtyChange}
@@ -987,49 +988,81 @@ function ForwardedLeadForm({
           />
           <div className="flex flex-wrap gap-3 items-start">
             {/* Existing Images from DB */}
-            {existingImages.map((url, idx) => (
-              <div
-                key={`existing-${idx}`}
-                className="relative h-20 w-20 rounded-md overflow-hidden border border-border bg-muted"
-              >
-                <img
-                  src={url}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExistingImages((prev) => prev.filter((_, i) => i !== idx));
-                  }}
-                  className="crm-motion absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground"
+            {existingImages.map((url, idx) => {
+              const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(url);
+              return (
+                <div
+                  key={`existing-${idx}`}
+                  className={cn(
+                    "relative rounded-md overflow-hidden border border-border bg-muted",
+                    isVideo ? "h-32 w-48" : "h-20 w-20"
+                  )}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+                  {isVideo ? (
+                    <video
+                      src={url}
+                      className="h-full w-full object-cover"
+                      controls
+                      controlsList="nodownload"
+                      preload="metadata"
+                    />
+                  ) : (
+                    <img
+                      src={url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                    }}
+                    className="crm-motion absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground z-10"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
             {/* New Files */}
-            {files.map((file, idx) => (
-              <div
-                key={`new-${idx}`}
-                className="relative h-20 w-20 rounded-md overflow-hidden border border-border bg-muted"
-              >
-                <img
-                  src={URL.createObjectURL(file)}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
+            {files.map((file, idx) => {
+              const isVideo = file.type.startsWith("video/");
+              return (
+                <div
+                  key={`new-${idx}`}
+                  className={cn(
+                    "relative rounded-md overflow-hidden border border-border bg-muted",
+                    isVideo ? "h-32 w-48" : "h-20 w-20"
+                  )}
+                >
+                  {isVideo ? (
+                    <video
+                      src={URL.createObjectURL(file)}
+                      className="h-full w-full object-cover"
+                      controls
+                      controlsList="nodownload"
+                      preload="metadata"
+                    />
+                  ) : (
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  )}
                 <button
                   type="button"
                   onClick={() => {
                     setFiles((prev) => prev.filter((_, i) => i !== idx));
                   }}
-                  className="crm-motion absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground"
+                  className="crm-motion absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground z-10"
                 >
                   <X className="h-3 w-3" />
                 </button>
               </div>
-            ))}
+              );
+            })}
             {existingImages.length + files.length < 20 && (
               <button
                 type="button"
