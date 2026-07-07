@@ -299,6 +299,47 @@ function Inner() {
     qc.invalidateQueries({ queryKey: ["incog_profiles"] });
   }
 
+  const [downloadingBridge, setDownloadingBridge] = useState(false);
+  const [downloadingExtension, setDownloadingExtension] = useState(false);
+
+  const handleDownloadBridge = async () => {
+    setDownloadingBridge(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from("crm-downloads")
+        .createSignedUrl("incogniton-bridge.zip", 60 * 10);
+      
+      if (error || !data?.signedUrl) {
+        toast.error("Failed to generate download link for Bridge.");
+        return;
+      }
+      window.open(data.signedUrl, "_blank");
+    } catch (e) {
+      toast.error("An unexpected error occurred.");
+    } finally {
+      setDownloadingBridge(false);
+    }
+  };
+
+  const handleDownloadExtension = async () => {
+    setDownloadingExtension(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from("crm-downloads")
+        .createSignedUrl("scraping-extension.zip", 60 * 10);
+      
+      if (error || !data?.signedUrl) {
+        toast.error("Failed to generate download link for Extension.");
+        return;
+      }
+      window.open(data.signedUrl, "_blank");
+    } catch (e) {
+      toast.error("An unexpected error occurred.");
+    } finally {
+      setDownloadingExtension(false);
+    }
+  };
+
   async function removeSelected() {
     const ids = [...selectedProfileIds];
     if (ids.length === 0) return;
@@ -410,6 +451,12 @@ function Inner() {
               <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete {selectedProfiles.length}
             </Button>
           )}
+          <Button variant="outline" onClick={handleDownloadBridge} disabled={downloadingBridge}>
+            {downloadingBridge ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1.5" />} Bridge
+          </Button>
+          <Button variant="outline" onClick={handleDownloadExtension} disabled={downloadingExtension}>
+            {downloadingExtension ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1.5" />} Extension
+          </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="h-3.5 w-3.5 mr-1.5" /> Import
           </Button>
