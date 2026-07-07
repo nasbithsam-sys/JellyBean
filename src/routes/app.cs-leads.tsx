@@ -58,6 +58,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Paperclip,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -2062,14 +2063,24 @@ function LeadCard({
       )}
       onClick={onOpen}
     >
-      {important && (
-        <div className="mb-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning/10 text-warning border border-warning/40 crm-pill-text shadow-sm">
-          {lead.pinned_important && lead.cs_status === "new" ? (
-            <Pin className="h-3 w-3 fill-warning/20 rotate-45" />
-          ) : (
-            <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+      {(important || (Array.isArray(lead.images) && lead.images.length > 0)) && (
+        <div className="flex flex-wrap gap-2 mb-3.5">
+          {important && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning/10 text-warning border border-warning/40 crm-pill-text shadow-sm">
+              {lead.pinned_important && lead.cs_status === "new" ? (
+                <Pin className="h-3 w-3 fill-warning/20 rotate-45" />
+              ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+              )}
+              {lead.pinned_important && lead.cs_status === "new" ? "Pinned Important" : "Important job"}
+            </div>
           )}
-          {lead.pinned_important && lead.cs_status === "new" ? "Pinned Important" : "Important job"}
+          {Array.isArray(lead.images) && lead.images.length > 0 && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/30 crm-pill-text shadow-sm">
+              <Paperclip className="h-3 w-3 shrink-0" />
+              <span>Pictures Attached</span>
+            </div>
+          )}
         </div>
       )}
       <div className="flex items-start gap-3.5">
