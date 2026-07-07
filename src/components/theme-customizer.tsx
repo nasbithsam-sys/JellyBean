@@ -124,7 +124,7 @@ export function applyThemeSettings(theme: Partial<ThemeSettings>) {
   }
 }
 
-// Function to generate a unique CSS selector for any DOM element
+// Function to generate a unique CSS selector for any DOM element (used for text content)
 function getUniqueSelector(el: HTMLElement): string {
   if (el.id) {
     return `#${el.id}`;
@@ -140,8 +140,7 @@ function getUniqueSelector(el: HTMLElement): string {
     } else {
       const classes = Array.from(parent.classList)
         .filter(c => 
-          !c.includes("hover:") && 
-          !c.includes("focus:") && 
+          !c.includes(":") && 
           !c.includes("crm-motion") &&
           !c.includes("translate-y") &&
           !c.includes("opacity-") &&
@@ -164,10 +163,70 @@ function getUniqueSelector(el: HTMLElement): string {
   return path.join(" > ");
 }
 
+// Function to generate a repeatable selector (targets all elements of the SAME TYPE, e.g. all lead cards)
+function getRepeatableSelector(el: HTMLElement): string {
+  // 1. If the element itself has a class starting with crm-
+  const crmClass = Array.from(el.classList).find(c => c.startsWith("crm-"));
+  if (crmClass) {
+    return `.${crmClass}`;
+  }
+
+  // 2. If a parent has a class starting with crm-
+  let parent = el.parentElement;
+  while (parent) {
+    const parentCrmClass = Array.from(parent.classList).find(c => c.startsWith("crm-"));
+    if (parentCrmClass) {
+      // Find own classes, filtering out layouts, spacings, and colors
+      const ownClasses = Array.from(el.classList)
+        .filter(c => 
+          !c.includes(":") && 
+          !c.includes("crm-motion") &&
+          !c.startsWith("bg-") && 
+          !c.startsWith("text-") && 
+          !c.startsWith("border-") && 
+          !c.startsWith("rounded-") && 
+          !c.startsWith("p-") && 
+          !c.startsWith("px-") && 
+          !c.startsWith("py-") && 
+          !c.startsWith("m-") && 
+          !c.startsWith("mx-") && 
+          !c.startsWith("my-") && 
+          !c.startsWith("w-") && 
+          !c.startsWith("h-") && 
+          !c.startsWith("shadow-") && 
+          !c.startsWith("ring-")
+        )
+        .join(".");
+
+      const childSelector = ownClasses ? `.${ownClasses}` : el.tagName.toLowerCase();
+      return `.${parentCrmClass} ${childSelector}`;
+    }
+    parent = parent.parentElement;
+  }
+
+  // 3. Fallback to general classes if no crm parent
+  const ownClasses = Array.from(el.classList)
+    .filter(c => 
+      !c.includes(":") && 
+      !c.includes("crm-motion") &&
+      !c.startsWith("bg-") && 
+      !c.startsWith("text-") && 
+      !c.startsWith("border-") && 
+      !c.startsWith("rounded-")
+    )
+    .join(".");
+
+  if (ownClasses) {
+    return `.${ownClasses}`;
+  }
+
+  return el.tagName.toLowerCase();
+}
+
 export function loadSavedTheme() {
   if (typeof window === "undefined") return;
   
-  // 1. Load root variables
+  // Load root variables
   const saved = localStorage.getItem("leadgrid-custom-theme");
   if (saved) {
     try {
@@ -178,7 +237,7 @@ export function loadSavedTheme() {
     }
   }
 
-  // 2. Load inline element styles
+  // Load inline element styles
   loadSavedElementStyles();
 }
 
@@ -405,7 +464,7 @@ export function ThemeCustomizer({ isOpen, onClose }: { isOpen: boolean; onClose:
   // Visual Designer change handlers for clicked element
   const handleElementStyleChange = (prop: string, val: string) => {
     if (!selectedEl) return;
-    const selector = getUniqueSelector(selectedEl);
+    const selector = getRepeatableSelector(selectedEl);
     
     // Save to local element style store
     const stored = localStorage.getItem("leadgrid-element-styles");
@@ -418,14 +477,30 @@ export function ThemeCustomizer({ isOpen, onClose }: { isOpen: boolean; onClose:
     loadSavedElementStyles(); // apply dynamically
   };
 
+  const handleTextChange = (text: string) => {
+    if (!selectedEl) return;
+    const selector = getUniqueSelector(selectedEl); // renames ONLY this specific instance
+    
+    const stored = localStorage.getItem("leadgrid-element-styles");
+    const styles = stored ? JSON.parse(stored) : {};
+    
+    if (!styles[selector]) styles[selector] = {};
+    styles[selector]["textContent"] = text;
+    
+    localStorage.setItem("leadgrid-element-styles", JSON.stringify(styles));
+    loadSavedElementStyles(); // apply dynamically
+  };
+
   const resetSelectedElement = () => {
     if (!selectedEl) return;
-    const selector = getUniqueSelector(selectedEl);
+    const repSelector = getRepeatableSelector(selectedEl);
+    const uniqSelector = getUniqueSelector(selectedEl);
     
     const stored = localStorage.getItem("leadgrid-element-styles");
     if (stored) {
       const styles = JSON.parse(stored);
-      delete styles[selector];
+      delete styles[repSelector];
+      delete styles[uniqSelector];
       localStorage.setItem("leadgrid-element-styles", JSON.stringify(styles));
     }
     
@@ -442,8 +517,8 @@ export function ThemeCustomizer({ isOpen, onClose }: { isOpen: boolean; onClose:
           <div className="flex items-center gap-2">
             <Sparkles className="h-4.5 w-4.5 text-primary animate-pulse shrink-0" />
             <div className="flex flex-col">
-              <span className="text-[12.5px] font-bold tracking-tight">Visual Design Mode Active</span>
-              <span className="text-[10px] text-white/50 font-medium">Click on any card, button, text or panel to style it</span>
+              <span className="text-[12px] font-bold tracking-tight">Visual Design Mode Active</span>
+              <span className="text-[9.5px] text-white/50 font-medium">Click on any card, button, or text to style all matching items</span>
             </div>
           </div>
           <div className="h-5 w-[1px] bg-white/20" />
@@ -491,7 +566,7 @@ export function ThemeCustomizer({ isOpen, onClose }: { isOpen: boolean; onClose:
             <div className="flex items-center justify-between border-b border-border pb-2">
               <div className="flex items-center gap-1.5 min-w-0">
                 <ArrowUpRight className="h-3.5 w-3.5 text-primary" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground truncate">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">
                   Style {selectedEl.tagName.toLowerCase()}
                 </span>
               </div>
@@ -503,16 +578,23 @@ export function ThemeCustomizer({ isOpen, onClose }: { isOpen: boolean; onClose:
               </button>
             </div>
 
-            {/* Custom Text Option */}
+            <div className="bg-primary/5 border border-primary/25 rounded-xl px-2.5 py-2 text-[10.5px] text-primary/90 font-medium">
+              ✨ Styling changes apply to **all similar elements** globally.
+            </div>
+
+            {/* Custom Text Option (Single Element Only) */}
             <div className="space-y-1.5">
-              <Label htmlFor="el-text" className="text-[11px] font-bold text-foreground/80">Change Text Content</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="el-text" className="text-[11px] font-bold text-foreground/80">Rename (This item only)</Label>
+                <span className="text-[9.5px] text-muted-foreground font-semibold uppercase">Unique</span>
+              </div>
               <textarea
                 id="el-text"
                 value={customText}
                 onChange={(e) => {
                   setCustomText(e.target.value);
                   selectedEl.textContent = e.target.value;
-                  handleElementStyleChange("textContent", e.target.value);
+                  handleTextChange(e.target.value);
                 }}
                 className="w-full h-14 bg-surface border border-border rounded-xl text-xs p-2 text-foreground focus:ring-1 focus:ring-primary focus:outline-none resize-none"
               />
@@ -627,7 +709,7 @@ export function ThemeCustomizer({ isOpen, onClose }: { isOpen: boolean; onClose:
                 onClick={resetSelectedElement}
                 className="flex-1 text-[11px] h-8 text-destructive"
               >
-                Reset Element
+                Reset Styles
               </Button>
               <Button 
                 size="sm" 
