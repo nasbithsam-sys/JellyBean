@@ -1214,3 +1214,20 @@ button:hover:not(:disabled),
 }
 
 /* Theme switch is instant — matches native OS and other fast apps. */
+
+/* Glassmorphism for popovers, dropdowns, dialogs */
+[data-radix-popper-content-wrapper] > *,
+[role="menu"],
+[role="listbox"],
+[role="dialog"] {
+  background: color-mix(in srgb, var(--popover) 78%, transparent) !important;
+  backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent) !important;
+}
+.dark [data-radix-popper-content-wrapper] > *,
+.dark [role="menu"],
+.dark [role="listbox"],
+.dark [role="dialog"] {
+  background: color-mix(in srgb, var(--popover) 60%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 50%, transparent) !important;
+}
