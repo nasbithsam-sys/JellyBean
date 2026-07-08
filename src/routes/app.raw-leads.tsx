@@ -1007,7 +1007,7 @@ function Inner() {
             )}
             Refresh
           </Button>
-          {isAdmin && (
+          {auth.primaryRole === "admin" && (
             <Button size="sm" variant="outline" className="h-9" onClick={exportRows}>
               <Download className="h-3.5 w-3.5 mr-1.5" />
               Export
