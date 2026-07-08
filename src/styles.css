@@ -389,6 +389,13 @@
   background: var(--background);
 }
 
+.dark .crm-app-shell {
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(110, 168, 255, 0.08), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(147, 193, 255, 0.05), transparent 55%),
+    var(--background);
+}
+
 .crm-sidebar-shell {
   background: var(--sidebar);
   color: var(--sidebar-foreground);
@@ -396,11 +403,52 @@
   box-shadow: 0 0 0 1px rgba(15, 27, 61, 0.02);
 }
 
+.dark .crm-sidebar-shell {
+  background:
+    linear-gradient(180deg, rgba(110, 168, 255, 0.03), transparent 40%),
+    var(--sidebar);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.02);
+}
+
 .crm-sidebar-active {
   background: rgba(59, 111, 160, 0.18);
   border: 1px solid rgba(59, 111, 160, 0.35);
   color: #ffffff;
   box-shadow: inset 2px 0 0 0 var(--primary-glow);
+}
+
+.dark .crm-sidebar-active {
+  background: linear-gradient(90deg, rgba(110, 168, 255, 0.16), rgba(110, 168, 255, 0.04));
+  border: 1px solid rgba(110, 168, 255, 0.28);
+  color: #ffffff;
+  box-shadow:
+    inset 2px 0 0 0 var(--primary),
+    0 0 24px -8px rgba(110, 168, 255, 0.35);
+}
+
+.dark .glass-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 60%), var(--card);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 8px 24px -12px rgba(0, 0, 0, 0.6);
+}
+
+.dark .glass-card:hover {
+  border-color: var(--border-strong);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 12px 32px -14px rgba(0, 0, 0, 0.7);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  background-clip: padding-box;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+  background-clip: padding-box;
 }
 
 .crm-motion {
