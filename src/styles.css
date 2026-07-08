@@ -230,26 +230,16 @@
     background-clip: padding-box;
   }
 
-  ::selection {
-    background: rgba(27, 96, 157, 0.22);
-    color: #0F172A;
-  }
-
-  .dark ::selection {
-    background: rgba(56, 189, 248, 0.45);
-    color: #FFFFFF;
-  }
-
   input::selection,
   textarea::selection {
-    background: rgba(27, 96, 157, 0.28);
-    color: #0F172A;
+    background: color-mix(in srgb, var(--primary) 32%, transparent);
+    color: var(--foreground);
   }
 
   .dark input::selection,
   .dark textarea::selection {
-    background: rgba(56, 189, 248, 0.55);
-    color: #FFFFFF;
+    background: color-mix(in srgb, var(--primary) 45%, transparent);
+    color: var(--primary-foreground);
   }
 
   input,
