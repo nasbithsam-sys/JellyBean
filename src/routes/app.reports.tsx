@@ -304,10 +304,12 @@ function Inner() {
             />
           </>
         )}
-        <Button size="sm" variant="outline" className="h-8 ml-auto" onClick={exportReport}>
-          <Download className="h-3.5 w-3.5 mr-1.5" />
-          Export counts
-        </Button>
+        {isAdmin && (
+          <Button size="sm" variant="outline" className="h-8 ml-auto" onClick={exportReport}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export counts
+          </Button>
+        )}
         </div>
       </div>
       <Section title="Raw leads by status">
