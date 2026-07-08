@@ -1339,7 +1339,7 @@ function Inner() {
             Templates
           </button>
         </div>
-        <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-linear-to-r from-white via-[#e3f2f4] to-[#e8edf3] p-1 ">
+        <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1 ">
           <button
             type="button"
             onClick={() => setViewMode("cards")}
@@ -1465,7 +1465,7 @@ function Inner() {
             <div className="glass-card crm-accent-amber p-4 rounded-xl space-y-3 mb-4 border-warning/40">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-warning flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-[#FFD670] animate-pulse" />
+                  <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
                   Follow-ups due today
                 </h3>
                 <span className="text-xs font-medium bg-card/88 text-warning px-2.5 py-0.5 rounded-full border border-warning/40 shadow-sm">
@@ -1489,14 +1489,14 @@ function Inner() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 px-3 text-[11px] border-sky-500/30 hover:bg-sky-500/10 text-sky-600"
+                      className="h-7 px-3 text-[11px] border-primary/30 hover:bg-primary/10 text-primary"
                       onClick={() => {
                         const el = document.getElementById(`lead-${lead.id}`);
                         if (el) {
                           el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          el.classList.add("ring-2", "ring-sky-500");
+                          el.classList.add("ring-2", "ring-primary");
                           setTimeout(() => {
-                            el.classList.remove("ring-2", "ring-sky-500");
+                            el.classList.remove("ring-2", "ring-primary");
                           }, 2000);
                         } else {
                           setOpened(lead);
@@ -2496,9 +2496,9 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function statusDotTone(status: string) {
-  if (status === "converted" || status === "closed_won") return "bg-[#07B053]";
+  if (status === "converted" || status === "closed_won") return "bg-success";
   if (status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged") {
-    return "bg-[#3b6fa0]";
+    return "bg-primary";
   }
   if (
     status === "undeliver" ||
@@ -2510,12 +2510,12 @@ function statusDotTone(status: string) {
     status === "already_done" ||
     status === "closed_lost"
   ) {
-    return "bg-[#C1292E]";
+    return "bg-destructive";
   }
   if (status === "already_got_someone" || status === "service_provider_himself") {
-    return "bg-[#74766B]";
+    return "bg-muted-foreground";
   }
-  return "bg-[#1e3a5f]";
+  return "bg-primary-glow";
 }
 
 function PhoneCopyLink({

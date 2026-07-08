@@ -861,22 +861,25 @@ function Inner() {
                 setPageIndex(0);
               }}
               className={cn(
-                "crm-motion px-3 h-8 text-[12px] font-medium rounded-md",
+                "crm-motion px-3 h-8 text-[12px] font-medium rounded-md inline-flex items-center gap-1.5",
                 tab === k
-                  ? k === "forwarded"
-                    ? "bg-emerald-50 text-emerald-700 shadow-sm ring-1 ring-emerald-200"
-                    : k === "not_found"
-                      ? "bg-amber-50 text-amber-700 shadow-sm ring-1 ring-amber-200"
-                      : k === "wrong" || k === "duplicate"
-                        ? "bg-rose-50 text-rose-700 shadow-sm ring-1 ring-rose-200"
-                        : k === "assigned_myself"
-                          ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-200"
-                          : "bg-sky-50 text-sky-700 shadow-sm ring-1 ring-sky-200"
+                  ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
                   : "text-muted-foreground hover:text-foreground",
               )}
+              aria-pressed={tab === k}
             >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  k === "forwarded" && "bg-success",
+                  k === "not_found" && "bg-warning",
+                  (k === "wrong" || k === "duplicate") && "bg-destructive",
+                  k === "assigned_myself" && "bg-primary",
+                  k === "new" && "bg-primary-glow",
+                )}
+              />
               {label}
-              <span className="ml-1.5 text-[10.5px] text-muted-foreground tabular-nums">{n}</span>
+              <span className="ml-0.5 text-[10.5px] text-muted-foreground tabular-nums">{n}</span>
             </button>
           ))}
           </div>
