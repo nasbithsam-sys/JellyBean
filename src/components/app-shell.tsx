@@ -15,9 +15,8 @@ import {
   PieChart,
   MoreHorizontal,
   KeyRound,
-  Paintbrush,
 } from "lucide-react";
-import { ThemeCustomizer } from "@/components/theme-customizer";
+
 import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
