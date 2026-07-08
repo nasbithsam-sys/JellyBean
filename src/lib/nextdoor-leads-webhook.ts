@@ -101,7 +101,7 @@ async function logWebhookActivity(action: string, metadata: Record<string, unkno
       actor_role: "system",
       action,
       entity_type: "raw_lead_cache",
-      metadata,
+      metadata: metadata as never,
     });
   } catch (err) {
     console.error("[Nextdoor webhook] Failed to log activity:", err);
