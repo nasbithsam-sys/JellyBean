@@ -1028,9 +1028,9 @@ button:hover:not(:disabled),
   --popover: oklch(0.22 0.02 260 / 0.75);
   --popover-foreground: oklch(0.94 0.005 250);
 
-  --primary: oklch(0.68 0.16 265);
-  --primary-foreground: oklch(0.14 0.02 265);
-  --primary-glow: oklch(0.78 0.13 265);
+  --primary: oklch(0.55 0.20 265);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-glow: oklch(0.72 0.17 265);
 
   --secondary: oklch(0.22 0.018 260 / 0.5);
   --secondary-foreground: oklch(0.86 0.008 250);
