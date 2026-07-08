@@ -1079,10 +1079,10 @@ button:hover:not(:disabled),
 /* ---------- Considered backdrop — single-hue field, no rainbow ---------- */
 body {
   background:
-    radial-gradient(1200px 780px at 8% -8%, oklch(0.88 0.09 235 / 0.55), transparent 62%),
-    radial-gradient(1000px 780px at 100% 105%, oklch(0.90 0.07 215 / 0.48), transparent 62%),
-    radial-gradient(700px 520px at 55% 35%, oklch(0.93 0.05 245 / 0.35), transparent 65%),
-    linear-gradient(180deg, oklch(0.97 0.02 230), oklch(0.93 0.04 225));
+    radial-gradient(1200px 800px at 8% -8%, oklch(0.72 0.16 240 / 0.55), transparent 62%),
+    radial-gradient(1000px 780px at 100% 105%, oklch(0.76 0.14 215 / 0.5), transparent 62%),
+    radial-gradient(700px 520px at 55% 40%, oklch(0.82 0.10 200 / 0.38), transparent 65%),
+    linear-gradient(180deg, oklch(0.90 0.06 230), oklch(0.82 0.08 225));
   background-attachment: fixed;
   min-height: 100vh;
 }
