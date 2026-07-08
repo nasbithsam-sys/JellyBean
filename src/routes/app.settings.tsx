@@ -549,10 +549,9 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     fullName: "",
     email: "",
     password: "",
-    role: "scraping" as
+    role: "maturing" as
       | "admin"
       | "sub_admin"
-      | "scraping"
       | "maturing"
       | "cs"
       | "acc_handler"
