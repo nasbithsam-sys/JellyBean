@@ -116,7 +116,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   const displayName = auth.profile?.full_name || auth.user?.email || "-";
   const skewSeconds = useClockSkew();
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  const [themeCustomizerOpen, setThemeCustomizerOpen] = useState(false);
+  
   useRealtimeSync(auth.primaryRole);
 
   return (
@@ -182,13 +182,6 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
 
         <div className="px-2.5 lg:px-3 pb-3 flex flex-col gap-1.5">
           <ThemeToggle className="group crm-motion relative flex h-11 w-full items-center justify-center lg:justify-start gap-3 px-0 lg:px-3 rounded-2xl text-[13px] tracking-[-0.005em] text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white focus:ring-0 focus:ring-offset-0 [&>span]:hidden lg:[&>span]:inline" />
-          <button
-            onClick={() => setThemeCustomizerOpen(true)}
-            className="group crm-motion relative flex h-11 w-full items-center justify-center lg:justify-start gap-3 px-0 lg:px-3 rounded-2xl text-[13px] tracking-[-0.005em] text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white focus:ring-0 focus:ring-offset-0 [&>span]:hidden lg:[&>span]:inline"
-          >
-            <Paintbrush className="h-[16px] w-[16px] text-sidebar-foreground/60 group-hover:text-white crm-motion" />
-            <span className="hidden lg:inline">Customize UI</span>
-          </button>
         </div>
         <div className="mt-auto p-2.5 lg:p-3">
           <div className="flex items-center justify-center lg:justify-start gap-2.5 rounded-[22px] bg-sidebar-accent/72 border border-white/[0.10] shadow-sm p-2 lg:p-2.5 overflow-hidden">
