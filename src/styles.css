@@ -1095,14 +1095,18 @@ body {
   background-attachment: fixed;
 }
 
-.crm-app-shell {
+.crm-app-shell,
+.crm-app-shell > main,
+.crm-app-shell main {
   position: relative;
   min-height: 100vh;
-  background: transparent;
+  background: transparent !important;
 }
 
-.dark .crm-app-shell {
-  background: transparent;
+.dark .crm-app-shell,
+.dark .crm-app-shell > main,
+.dark .crm-app-shell main {
+  background: transparent !important;
 }
 
 .crm-app-shell::before {
