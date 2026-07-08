@@ -24,7 +24,7 @@ async function getFFmpeg() {
           "text/javascript"
         ),
         wasmURL: await toBlobURL(
-          `${baseURL}/ffmpeg-core.wasm`,
+          wasmAsset.url,
           "application/wasm"
         ),
       });
