@@ -101,6 +101,8 @@ function Page() {
 }
 
 function Inner() {
+  const auth = useAuth();
+  const isAdmin = auth.primaryRole === "admin";
   const today = toIsoDay(new Date());
   const [preset, setPreset] = useState<DatePreset>("all");
   const [fromDate, setFromDate] = useState<string>(today);
