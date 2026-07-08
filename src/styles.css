@@ -988,14 +988,15 @@ button:hover:not(:disabled),
   --input: oklch(1 0 0 / 0.7);
   --ring: oklch(0.55 0.16 265);
 
-  --sidebar: oklch(0.97 0.01 258 / 0.7);
-  --sidebar-foreground: oklch(0.28 0.025 258);
-  --sidebar-primary: oklch(0.44 0.16 265);
+  /* Sidebar stays a dark rail in light mode — premium CRM pattern (Linear/Attio) */
+  --sidebar: oklch(0.20 0.03 262 / 0.82);
+  --sidebar-foreground: oklch(0.92 0.008 250);
+  --sidebar-primary: oklch(0.62 0.17 265);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.92 0.014 258 / 0.75);
-  --sidebar-accent-foreground: oklch(0.28 0.04 265);
-  --sidebar-border: oklch(0.62 0.02 258 / 0.32);
-  --sidebar-ring: oklch(0.55 0.16 265);
+  --sidebar-accent: oklch(0.28 0.04 265 / 0.55);
+  --sidebar-accent-foreground: oklch(0.94 0.01 250);
+  --sidebar-border: oklch(0.55 0.03 262 / 0.28);
+  --sidebar-ring: oklch(0.62 0.17 265);
 
   --chart-1: oklch(0.44 0.16 265);
   --chart-2: oklch(0.58 0.14 265);
