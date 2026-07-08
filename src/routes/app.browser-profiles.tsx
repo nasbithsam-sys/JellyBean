@@ -460,9 +460,11 @@ function Inner() {
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="h-3.5 w-3.5 mr-1.5" /> Import
           </Button>
-          <Button variant="outline" onClick={() => setExportOpen(true)}>
-            <Download className="h-3.5 w-3.5 mr-1.5" /> Export
-          </Button>
+          {auth.primaryRole === "admin" && (
+            <Button variant="outline" onClick={() => setExportOpen(true)}>
+              <Download className="h-3.5 w-3.5 mr-1.5" /> Export
+            </Button>
+          )}
           <Button onClick={() => setAddOpen(true)}>
             <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Profile
           </Button>
