@@ -1079,25 +1079,30 @@ button:hover:not(:disabled),
 
 /* ---------- Considered backdrop — single-hue field, no rainbow ---------- */
 body {
-  background: var(--background);
-}
-
-.crm-app-shell {
-  position: relative;
-  min-height: 100vh;
   background:
     radial-gradient(1100px 700px at 12% -5%, oklch(0.85 0.09 265 / 0.35), transparent 60%),
     radial-gradient(900px 700px at 100% 100%, oklch(0.88 0.06 265 / 0.28), transparent 60%),
     linear-gradient(180deg, var(--background), oklch(0.96 0.008 265));
   background-attachment: fixed;
+  min-height: 100vh;
 }
 
-.dark .crm-app-shell {
+.dark body {
   background:
     radial-gradient(1100px 700px at 12% -5%, oklch(0.35 0.14 265 / 0.35), transparent 60%),
     radial-gradient(900px 700px at 100% 100%, oklch(0.30 0.10 265 / 0.28), transparent 60%),
     linear-gradient(180deg, var(--background), oklch(0.11 0.02 265));
   background-attachment: fixed;
+}
+
+.crm-app-shell {
+  position: relative;
+  min-height: 100vh;
+  background: transparent;
+}
+
+.dark .crm-app-shell {
+  background: transparent;
 }
 
 .crm-app-shell::before {
