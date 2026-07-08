@@ -1308,13 +1308,11 @@ button[data-slot="button"][data-variant="ghost"],
 [data-slot="button"][data-variant="secondary"],
 [data-slot="tabs-trigger"] {
   background: var(--secondary);
-  backdrop-filter: blur(14px) saturate(150%);
   border: 1px solid var(--glass-rim);
 }
 
 [data-slot="tabs-list"] {
   background: var(--muted);
-  backdrop-filter: blur(18px) saturate(150%);
   border: 1px solid var(--glass-rim);
   border-radius: 14px;
 }
@@ -1322,7 +1320,6 @@ button[data-slot="button"][data-variant="ghost"],
 /* ---------- Badges ---------- */
 [data-slot="badge"] {
   background: color-mix(in oklch, var(--card) 60%, transparent);
-  backdrop-filter: blur(10px) saturate(160%);
   border: 1px solid var(--glass-rim);
 }
 
@@ -1333,7 +1330,6 @@ button[data-slot="button"][data-variant="ghost"],
 .crm-accent-rose,
 .crm-accent-slate {
   background: color-mix(in oklch, var(--card) 55%, transparent);
-  backdrop-filter: blur(18px) saturate(160%);
   border: 1px solid var(--glass-rim);
 }
 .crm-accent-mint { border-color: color-mix(in oklch, var(--success) 40%, var(--glass-rim)); }
@@ -1343,11 +1339,7 @@ button[data-slot="button"][data-variant="ghost"],
 /* ---------- Interactions ---------- */
 button:active:not(:disabled),
 [role="button"]:active:not(:disabled) {
-  transform: translateY(0) scale(0.985);
-}
-button:hover:not(:disabled),
-[role="button"]:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transform: scale(0.985);
 }
 
 .crm-data-row {
