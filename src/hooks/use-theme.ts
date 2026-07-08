@@ -34,6 +34,13 @@ export function useTheme() {
 
   const toggle = () => {
     const next = theme === "dark" ? "light" : "dark";
+    // Enable the slow crossfade transition only during the switch, then
+    // remove it so it doesn't affect ordinary hover/focus interactions.
+    if (typeof document !== "undefined") {
+      const root = document.documentElement;
+      root.classList.add("theme-transition");
+      window.setTimeout(() => root.classList.remove("theme-transition"), 800);
+    }
     setTheme(next);
     apply(next);
   };
