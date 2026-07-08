@@ -948,32 +948,31 @@ button:hover:not(:disabled),
 .light {
   --radius: 0.875rem;
 
-  /* Neutrals — cool graphite scale */
-  /* Cooler, deeper page canvas so glass surfaces actually stand out */
-  --background: oklch(0.945 0.012 258);
-  --foreground: oklch(0.20 0.025 258);
+  /* Lifted sky-blue canvas — matches Deep Space Sky family, day version */
+  --background: oklch(0.90 0.045 235);
+  --foreground: oklch(0.20 0.05 245);
 
-  --surface: oklch(1 0 0 / 0.72);
-  --surface-hover: oklch(1 0 0 / 0.88);
+  --surface: oklch(0.995 0.012 230 / 0.68);
+  --surface-hover: oklch(1 0.008 230 / 0.85);
 
-  --card: oklch(1 0 0 / 0.72);
-  --card-foreground: oklch(0.20 0.025 258);
+  --card: oklch(0.995 0.012 230 / 0.68);
+  --card-foreground: oklch(0.20 0.05 245);
 
-  --popover: oklch(1 0 0 / 0.9);
-  --popover-foreground: oklch(0.20 0.025 258);
+  --popover: oklch(0.995 0.012 230 / 0.92);
+  --popover-foreground: oklch(0.20 0.05 245);
 
-  --primary: oklch(0.44 0.16 265);
+  --primary: oklch(0.52 0.16 245);
   --primary-foreground: oklch(0.99 0 0);
-  --primary-glow: oklch(0.60 0.17 265);
+  --primary-glow: oklch(0.68 0.15 230);
 
-  --secondary: oklch(0.92 0.014 258 / 0.75);
-  --secondary-foreground: oklch(0.28 0.025 258);
+  --secondary: oklch(0.94 0.03 230 / 0.72);
+  --secondary-foreground: oklch(0.25 0.05 245);
 
-  --muted: oklch(0.90 0.014 258 / 0.65);
-  --muted-foreground: oklch(0.44 0.02 258);
+  --muted: oklch(0.92 0.03 230 / 0.6);
+  --muted-foreground: oklch(0.42 0.05 245);
 
-  --accent: oklch(0.90 0.03 265 / 0.75);
-  --accent-foreground: oklch(0.28 0.06 265);
+  --accent: oklch(0.90 0.06 230 / 0.75);
+  --accent-foreground: oklch(0.26 0.09 240);
 
   --destructive: oklch(0.55 0.16 22);
   --destructive-foreground: oklch(0.99 0 0);
@@ -982,34 +981,33 @@ button:hover:not(:disabled),
   --warning: oklch(0.68 0.12 68);
   --warning-foreground: oklch(0.20 0.04 68);
 
-  /* Visible borders on light glass — key to making panels legible */
-  --border: oklch(0.62 0.02 258 / 0.35);
-  --border-strong: oklch(0.52 0.03 258 / 0.55);
-  --input: oklch(1 0 0 / 0.7);
-  --ring: oklch(0.55 0.16 265);
+  --border: oklch(0.58 0.08 235 / 0.35);
+  --border-strong: oklch(0.48 0.10 240 / 0.55);
+  --input: oklch(1 0.008 230 / 0.72);
+  --ring: oklch(0.55 0.16 240);
 
-  --sidebar: oklch(0.98 0.008 235 / 0.72);
-  --sidebar-foreground: oklch(0.26 0.03 258);
-  --sidebar-primary: oklch(0.44 0.16 265);
+  --sidebar: oklch(0.98 0.018 230 / 0.72);
+  --sidebar-foreground: oklch(0.24 0.05 245);
+  --sidebar-primary: oklch(0.52 0.16 245);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.92 0.02 235 / 0.75);
-  --sidebar-accent-foreground: oklch(0.26 0.04 265);
-  --sidebar-border: oklch(0.62 0.03 235 / 0.35);
-  --sidebar-ring: oklch(0.55 0.16 265);
+  --sidebar-accent: oklch(0.92 0.04 230 / 0.75);
+  --sidebar-accent-foreground: oklch(0.24 0.08 240);
+  --sidebar-border: oklch(0.58 0.08 235 / 0.35);
+  --sidebar-ring: oklch(0.55 0.16 240);
 
-  --chart-1: oklch(0.44 0.16 265);
-  --chart-2: oklch(0.58 0.14 265);
-  --chart-3: oklch(0.72 0.10 265);
+  --chart-1: oklch(0.52 0.16 245);
+  --chart-2: oklch(0.62 0.14 225);
+  --chart-3: oklch(0.74 0.11 210);
   --chart-4: oklch(0.56 0.11 160);
   --chart-5: oklch(0.68 0.12 68);
 
-  --shadow-sm: 0 2px 8px -3px oklch(0.28 0.06 265 / 0.14);
-  --shadow-md: 0 12px 32px -14px oklch(0.26 0.07 265 / 0.22);
-  --shadow-lg: 0 26px 64px -24px oklch(0.22 0.08 265 / 0.28);
-  --shadow-glow: 0 0 0 1px oklch(0.55 0.16 265 / 0.24), 0 14px 32px -14px oklch(0.45 0.16 265 / 0.35);
+  --shadow-sm: 0 2px 10px -3px oklch(0.30 0.10 240 / 0.18);
+  --shadow-md: 0 14px 36px -14px oklch(0.28 0.12 240 / 0.28);
+  --shadow-lg: 0 28px 70px -24px oklch(0.24 0.14 240 / 0.34);
+  --shadow-glow: 0 0 0 1px oklch(0.55 0.16 240 / 0.26), 0 14px 32px -14px oklch(0.45 0.16 240 / 0.4);
 
-  --glass-rim: rgba(255, 255, 255, 0.65);
-  --glass-rim-strong: rgba(255, 255, 255, 0.9);
+  --glass-rim: rgba(255, 255, 255, 0.7);
+  --glass-rim-strong: rgba(255, 255, 255, 0.95);
 }
 
 .dark {
