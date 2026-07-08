@@ -203,6 +203,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                   <button
                     type="button"
                     title="Account options"
+                    aria-label="Account options"
                     className="crm-motion h-8 w-8 grid place-items-center rounded-xl text-white/55 hover:bg-white/10 hover:text-white transition-colors"
                   >
                     <MoreHorizontal className="h-4 w-4" />
@@ -222,6 +223,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
               <button
                 onClick={() => void auth.signOut()}
                 title="Sign out"
+                aria-label="Sign out"
                 className="crm-motion h-8 w-8 grid place-items-center rounded-xl text-white/55 hover:bg-destructive/15 hover:text-white transition-colors"
               >
                 <LogOut className="h-4 w-4" />
