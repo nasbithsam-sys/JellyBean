@@ -1489,14 +1489,14 @@ function Inner() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 px-3 text-[11px] border-sky-500/30 hover:bg-sky-500/10 text-sky-600"
+                      className="h-7 px-3 text-[11px] border-primary/30 hover:bg-primary/10 text-primary"
                       onClick={() => {
                         const el = document.getElementById(`lead-${lead.id}`);
                         if (el) {
                           el.scrollIntoView({ behavior: "smooth", block: "center" });
-                          el.classList.add("ring-2", "ring-sky-500");
+                          el.classList.add("ring-2", "ring-primary");
                           setTimeout(() => {
-                            el.classList.remove("ring-2", "ring-sky-500");
+                            el.classList.remove("ring-2", "ring-primary");
                           }, 2000);
                         } else {
                           setOpened(lead);
