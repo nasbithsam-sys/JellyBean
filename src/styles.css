@@ -1048,9 +1048,9 @@ button:hover:not(:disabled),
   --warning: oklch(0.76 0.12 68);
   --warning-foreground: oklch(0.16 0.03 68);
 
-  --border: oklch(0.55 0.02 260 / 0.20);
-  --border-strong: oklch(0.65 0.025 260 / 0.32);
-  --input: oklch(0.20 0.015 260 / 0.55);
+  --border: oklch(0.62 0.03 260 / 0.30);
+  --border-strong: oklch(0.72 0.04 260 / 0.45);
+  --input: oklch(0.22 0.02 260 / 0.6);
   --ring: oklch(0.68 0.16 265);
 
   --sidebar: oklch(0.16 0.015 260 / 0.6);
