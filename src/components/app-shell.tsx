@@ -256,9 +256,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
             </div>
           </div>
         )}
-        <div key={path} className="crm-route-enter">
-          {children}
-        </div>
+        {children}
       </main>
       <ChangePasswordDialog
         open={passwordDialogOpen}

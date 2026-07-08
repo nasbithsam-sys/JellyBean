@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, useRef } from "react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { AppRole } from "@/hooks/use-auth";
 
 // Map each replicated table to the React Query keys that should refresh
-// when any user inserts/updates/deletes a row.
+// when any user inserts/updates a row.
 const TABLE_QUERY_KEYS: Record<string, string[][]> = {
   qualified_leads: [["cs_leads"], ["cs_sent_today"], ["forwarded-leads"]],
   incogniton_profiles: [["incog_profiles"]],
@@ -18,9 +18,7 @@ const ROLE_TABLES: Record<AppRole, string[]> = {
   sub_admin: ["qualified_leads", "incogniton_profiles", "shared_state"],
   scraping: ["qualified_leads", "incogniton_profiles", "shared_state"],
   maturing: ["qualified_leads", "incogniton_profiles", "shared_state"],
-  // CS pipeline intentionally avoids background list invalidation. A separate
-  // insert listener shows new-lead alerts, while manual refresh keeps active
-  // compose work from jumping when other users forward or update leads.
+  // CS pipeline intentionally avoids background list invalidation.
   cs: [],
   acc_handler: ["incogniton_profiles", "shared_state"],
   facebook: ["qualified_leads"],
@@ -28,28 +26,58 @@ const ROLE_TABLES: Record<AppRole, string[]> = {
 };
 
 /**
- * Mount once at the app shell. Subscribes to Postgres changes on the core
- * CRM tables and invalidates the matching React Query caches so every
- * signed-in user sees changes in real time.
+ * Coalesces bursts of realtime events into a single query invalidation per
+ * key. With 15–50 concurrent users a single write can otherwise trigger N
+ * refetches per subscriber; this keeps it to at most one per 400 ms window.
+ */
+function makeDebouncedInvalidator(qc: QueryClient, waitMs = 400) {
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  return (key: string[]) => {
+    const id = key.join("/");
+    const existing = timers.get(id);
+    if (existing) clearTimeout(existing);
+    const t = setTimeout(() => {
+      timers.delete(id);
+      qc.invalidateQueries({ queryKey: key });
+    }, waitMs);
+    timers.set(id, t);
+  };
+}
+
+/**
+ * Mount once at the app shell. Subscribes to Postgres INSERT/UPDATE on the
+ * core CRM tables and debounces query cache invalidations so bursts of
+ * writes from many users don't flood the client with refetches.
  */
 export function useRealtimeSync(role: AppRole | null) {
   const qc = useQueryClient();
+  const invalidateRef = useRef<((key: string[]) => void) | null>(null);
+
+  useEffect(() => {
+    invalidateRef.current = makeDebouncedInvalidator(qc, 400);
+  }, [qc]);
 
   useEffect(() => {
     if (!role) return;
-    const channel = supabase.channel("crm-realtime-sync");
     const tables = ROLE_TABLES[role];
+    if (tables.length === 0) return;
+
+    const channel = supabase.channel("crm-realtime-sync");
 
     for (const table of tables) {
-      (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
-        "postgres_changes",
-        { event: "*", schema: "public", table },
-        () => {
-          for (const key of TABLE_QUERY_KEYS[table]) {
-            qc.invalidateQueries({ queryKey: key });
-          }
-        },
-      );
+      // INSERT + UPDATE only — DELETE is rare and doesn't need list refresh
+      // urgency; UI already reflects it locally when the user triggers it.
+      for (const event of ["INSERT", "UPDATE"] as const) {
+        (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
+          "postgres_changes",
+          { event, schema: "public", table },
+          () => {
+            const invalidate = invalidateRef.current;
+            if (!invalidate) return;
+            for (const key of TABLE_QUERY_KEYS[table] ?? []) invalidate(key);
+          },
+        );
+      }
     }
 
     channel.subscribe();
