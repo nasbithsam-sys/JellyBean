@@ -1,5 +1,6 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { toBlobURL, fetchFile } from "@ffmpeg/util";
+import wasmAsset from "../../public/ffmpeg/ffmpeg-core.wasm.asset.json";
 
 export const MAX_VIDEO_SIZE_MB = 50;
 export const MAX_VIDEO_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
@@ -23,7 +24,7 @@ async function getFFmpeg() {
           "text/javascript"
         ),
         wasmURL: await toBlobURL(
-          `${baseURL}/ffmpeg-core.wasm`,
+          wasmAsset.url,
           "application/wasm"
         ),
       });
