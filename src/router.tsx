@@ -1,12 +1,3 @@
-import "@fontsource/urbanist/400.css";
-import "@fontsource/urbanist/500.css";
-import "@fontsource/urbanist/600.css";
-import "@fontsource/urbanist/700.css";
-import "@fontsource/urbanist/800.css";
-import "@fontsource/epilogue/400.css";
-import "@fontsource/epilogue/500.css";
-import "@fontsource/epilogue/600.css";
-import "@fontsource/epilogue/700.css";
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
@@ -28,7 +19,9 @@ export const getRouter = () => {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreload: false,
+    // Preload on hover so heavy lazy chunks (Raw Leads, CS, Analytics) start
+    // downloading before the user clicks — makes route switches feel instant.
+    defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
   });
 
