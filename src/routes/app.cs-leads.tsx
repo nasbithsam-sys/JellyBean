@@ -1339,7 +1339,7 @@ function Inner() {
             Templates
           </button>
         </div>
-        <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-linear-to-r from-white via-[#e3f2f4] to-[#e8edf3] p-1 ">
+        <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1 ">
           <button
             type="button"
             onClick={() => setViewMode("cards")}
