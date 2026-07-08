@@ -1236,7 +1236,6 @@ select,
 [data-slot="input"],
 [data-slot="textarea"] {
   background: var(--input) !important;
-  backdrop-filter: blur(14px) saturate(150%);
   border: 1px solid var(--glass-rim) !important;
   border-radius: 14px !important;
 }
