@@ -2496,9 +2496,9 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function statusDotTone(status: string) {
-  if (status === "converted" || status === "closed_won") return "bg-[#07B053]";
+  if (status === "converted" || status === "closed_won") return "bg-success";
   if (status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged") {
-    return "bg-[#3b6fa0]";
+    return "bg-primary";
   }
   if (
     status === "undeliver" ||
@@ -2510,12 +2510,12 @@ function statusDotTone(status: string) {
     status === "already_done" ||
     status === "closed_lost"
   ) {
-    return "bg-[#C1292E]";
+    return "bg-destructive";
   }
   if (status === "already_got_someone" || status === "service_provider_himself") {
-    return "bg-[#74766B]";
+    return "bg-muted-foreground";
   }
-  return "bg-[#1e3a5f]";
+  return "bg-primary-glow";
 }
 
 function PhoneCopyLink({
