@@ -363,14 +363,25 @@
 
 /* ---------- Cards / panels ---------- */
 .glass-card {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    var(--shadow-sm);
+}
+
+.dark .glass-card {
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-strong) 45%, transparent);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 8px 24px -12px rgba(0, 0, 0, 0.6);
 }
 
 .glass-card:hover {
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--border-strong) 80%, transparent);
 }
 
 /* App shell — subtle paper/ink texture for a hand-crafted feel */
