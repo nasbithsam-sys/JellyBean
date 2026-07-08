@@ -1067,7 +1067,7 @@ body {
     radial-gradient(1200px 800px at 10% -10%, oklch(0.32 0.05 250 / 0.5), transparent 62%),
     radial-gradient(1000px 780px at 100% 105%, oklch(0.28 0.04 225 / 0.42), transparent 62%),
     linear-gradient(180deg, oklch(0.14 0.012 255), oklch(0.10 0.014 258));
-  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 .crm-app-shell,
