@@ -988,15 +988,14 @@ button:hover:not(:disabled),
   --input: oklch(1 0 0 / 0.7);
   --ring: oklch(0.55 0.16 265);
 
-  /* Sidebar stays a dark rail in light mode — premium CRM pattern (Linear/Attio) */
-  --sidebar: oklch(0.20 0.03 262 / 0.82);
-  --sidebar-foreground: oklch(0.92 0.008 250);
-  --sidebar-primary: oklch(0.62 0.17 265);
+  --sidebar: oklch(0.98 0.008 235 / 0.72);
+  --sidebar-foreground: oklch(0.26 0.03 258);
+  --sidebar-primary: oklch(0.44 0.16 265);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.28 0.04 265 / 0.55);
-  --sidebar-accent-foreground: oklch(0.94 0.01 250);
-  --sidebar-border: oklch(0.55 0.03 262 / 0.28);
-  --sidebar-ring: oklch(0.62 0.17 265);
+  --sidebar-accent: oklch(0.92 0.02 235 / 0.75);
+  --sidebar-accent-foreground: oklch(0.26 0.04 265);
+  --sidebar-border: oklch(0.62 0.03 235 / 0.35);
+  --sidebar-ring: oklch(0.55 0.16 265);
 
   --chart-1: oklch(0.44 0.16 265);
   --chart-2: oklch(0.58 0.14 265);
@@ -1207,6 +1206,46 @@ body {
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.35) inset,
     0 8px 24px -10px color-mix(in oklch, var(--primary) 70%, transparent);
+}
+
+/* Light-mode sidebar: neutralize hardcoded text-white / bg-white/* utilities so
+   labels, icons, and hover states stay readable on the light glass rail. */
+:root:not(.dark) .crm-sidebar-shell,
+.light .crm-sidebar-shell {
+  color: var(--sidebar-foreground);
+}
+:root:not(.dark) .crm-sidebar-shell [class*="text-white"],
+.light .crm-sidebar-shell [class*="text-white"] {
+  color: var(--sidebar-foreground) !important;
+}
+:root:not(.dark) .crm-sidebar-shell .text-white\/72,
+:root:not(.dark) .crm-sidebar-shell .text-white\/60,
+:root:not(.dark) .crm-sidebar-shell .text-white\/55,
+:root:not(.dark) .crm-sidebar-shell .text-white\/52,
+:root:not(.dark) .crm-sidebar-shell .text-white\/50,
+:root:not(.dark) .crm-sidebar-shell .text-white\/40,
+.light .crm-sidebar-shell .text-white\/72,
+.light .crm-sidebar-shell .text-white\/60,
+.light .crm-sidebar-shell .text-white\/55,
+.light .crm-sidebar-shell .text-white\/52,
+.light .crm-sidebar-shell .text-white\/50,
+.light .crm-sidebar-shell .text-white\/40 {
+  color: color-mix(in oklch, var(--sidebar-foreground) 70%, transparent) !important;
+}
+:root:not(.dark) .crm-sidebar-shell [class*="bg-white"],
+.light .crm-sidebar-shell [class*="bg-white"] {
+  background-color: color-mix(in oklch, var(--sidebar-foreground) 8%, transparent) !important;
+}
+:root:not(.dark) .crm-sidebar-shell [class*="bg-white"]:hover,
+.light .crm-sidebar-shell [class*="bg-white"]:hover {
+  background-color: color-mix(in oklch, var(--sidebar-foreground) 12%, transparent) !important;
+}
+/* The colored active pill keeps its white text */
+:root:not(.dark) .crm-sidebar-shell .crm-sidebar-active,
+:root:not(.dark) .crm-sidebar-shell .crm-sidebar-active *,
+.light .crm-sidebar-shell .crm-sidebar-active,
+.light .crm-sidebar-shell .crm-sidebar-active * {
+  color: var(--primary-foreground) !important;
 }
 
 /* ---------- Header ---------- */
