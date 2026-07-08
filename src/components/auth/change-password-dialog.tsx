@@ -198,7 +198,7 @@ export function ChangePasswordDialog({ open, onOpenChange, userEmail }: Props) {
             />
           </div>
 
-          <DialogFooter className="border-t border-[#e8edf3] bg-white/70 px-6 py-4 sm:justify-between sm:space-x-0">
+          <DialogFooter className="border-t border-border bg-muted/30 px-6 py-4 sm:justify-between sm:space-x-0">
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={saving}>
               Cancel
             </Button>
