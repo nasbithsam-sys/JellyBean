@@ -1465,7 +1465,7 @@ function Inner() {
             <div className="glass-card crm-accent-amber p-4 rounded-xl space-y-3 mb-4 border-warning/40">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-warning flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-[#FFD670] animate-pulse" />
+                  <span className="h-2 w-2 rounded-full bg-warning animate-pulse" />
                   Follow-ups due today
                 </h3>
                 <span className="text-xs font-medium bg-card/88 text-warning px-2.5 py-0.5 rounded-full border border-warning/40 shadow-sm">
