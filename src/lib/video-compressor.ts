@@ -138,7 +138,7 @@ export async function compressVideoInBrowser(
     await ffmpeg.deleteFile(inputName);
     await ffmpeg.deleteFile(outputName);
 
-    return new File([data as Uint8Array], outputName, { type: "video/mp4" });
+    return new File([new Uint8Array(data as Uint8Array)], outputName, { type: "video/mp4" });
   } finally {
     // Unbind to prevent memory leaks or duplicate calls on subsequent compressions
     if (ffmpeg) {
