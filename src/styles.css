@@ -1028,9 +1028,9 @@ button:hover:not(:disabled),
   --popover: oklch(0.22 0.02 260 / 0.75);
   --popover-foreground: oklch(0.94 0.005 250);
 
-  --primary: oklch(0.68 0.16 265);
-  --primary-foreground: oklch(0.14 0.02 265);
-  --primary-glow: oklch(0.78 0.13 265);
+  --primary: oklch(0.55 0.20 265);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-glow: oklch(0.72 0.17 265);
 
   --secondary: oklch(0.22 0.018 260 / 0.5);
   --secondary-foreground: oklch(0.86 0.008 250);
@@ -1048,9 +1048,9 @@ button:hover:not(:disabled),
   --warning: oklch(0.76 0.12 68);
   --warning-foreground: oklch(0.16 0.03 68);
 
-  --border: oklch(0.55 0.02 260 / 0.20);
-  --border-strong: oklch(0.65 0.025 260 / 0.32);
-  --input: oklch(0.20 0.015 260 / 0.55);
+  --border: oklch(0.62 0.03 260 / 0.30);
+  --border-strong: oklch(0.72 0.04 260 / 0.45);
+  --input: oklch(0.22 0.02 260 / 0.6);
   --ring: oklch(0.68 0.16 265);
 
   --sidebar: oklch(0.16 0.015 260 / 0.6);
@@ -1079,25 +1079,30 @@ button:hover:not(:disabled),
 
 /* ---------- Considered backdrop — single-hue field, no rainbow ---------- */
 body {
-  background: var(--background);
-}
-
-.crm-app-shell {
-  position: relative;
-  min-height: 100vh;
   background:
     radial-gradient(1100px 700px at 12% -5%, oklch(0.85 0.09 265 / 0.35), transparent 60%),
     radial-gradient(900px 700px at 100% 100%, oklch(0.88 0.06 265 / 0.28), transparent 60%),
     linear-gradient(180deg, var(--background), oklch(0.96 0.008 265));
   background-attachment: fixed;
+  min-height: 100vh;
 }
 
-.dark .crm-app-shell {
+.dark body {
   background:
     radial-gradient(1100px 700px at 12% -5%, oklch(0.35 0.14 265 / 0.35), transparent 60%),
     radial-gradient(900px 700px at 100% 100%, oklch(0.30 0.10 265 / 0.28), transparent 60%),
     linear-gradient(180deg, var(--background), oklch(0.11 0.02 265));
   background-attachment: fixed;
+}
+
+.crm-app-shell {
+  position: relative;
+  min-height: 100vh;
+  background: transparent;
+}
+
+.dark .crm-app-shell {
+  background: transparent;
 }
 
 .crm-app-shell::before {
