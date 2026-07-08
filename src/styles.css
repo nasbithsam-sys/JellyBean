@@ -878,9 +878,6 @@ button:hover:not(:disabled),
   transform: translateY(-0.5px);
 }
 
-.crm-data-row {
-  animation: crm-fade-up 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
 
 [data-slot="dialog-content"],
 [data-slot="popover-content"],
