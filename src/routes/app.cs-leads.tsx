@@ -1170,10 +1170,12 @@ function Inner() {
             )}
             Refresh
           </Button>
-          <Button variant="outline" size="sm" className="h-9" onClick={exportLeads}>
-            <Download className="h-3.5 w-3.5 mr-1.5" />
-            Export
-          </Button>
+          {isAdmin && (
+            <Button variant="outline" size="sm" className="h-9" onClick={exportLeads}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export
+            </Button>
+          )}
         </div>
         </div>
       </div>
