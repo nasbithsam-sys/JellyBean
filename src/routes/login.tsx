@@ -26,21 +26,24 @@ function LoginPage() {
   const [profilesExist, setProfilesExist] = useState(true);
 
   useEffect(() => {
-    async function checkProfiles() {
+    // Non-blocking: check if any profiles exist so we can show the
+    // first-run setup link. Runs after the form is already interactive.
+    let cancelled = false;
+    void (async () => {
       try {
         const { count } = await supabase
           .from("profiles")
           .select("id", { count: "exact", head: true });
-        setProfilesExist((count ?? 0) > 0);
+        if (!cancelled) setProfilesExist((count ?? 0) > 0);
       } catch (err) {
         console.error(err);
       }
-    }
-    checkProfiles();
+    })();
 
+    // If the user already has a session, jump straight to the app.
     void (async () => {
       const { data: sess } = await supabase.auth.getSession();
-      if (!sess.session) return;
+      if (cancelled || !sess.session) return;
       const access = await getLoginAccess(sess.session.user.id);
       if (!access.isActive) {
         await supabase.auth.signOut();
@@ -49,6 +52,10 @@ function LoginPage() {
       }
       navigate({ to: "/app" });
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   async function getLoginAccess(uid: string): Promise<{ isActive: boolean }> {
@@ -79,15 +86,14 @@ function LoginPage() {
         toast.error("No account found for that email or username");
         return;
       }
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      // signInWithPassword returns the user — no need for a second getUser() call.
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         const msg = error.message;
         toast.error(msg && msg !== "{}" ? msg : "Invalid login credentials or server error");
         return;
       }
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = data.user;
       if (user) {
         const access = await getLoginAccess(user.id);
         if (!access.isActive) {
