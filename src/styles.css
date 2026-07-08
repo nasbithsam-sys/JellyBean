@@ -1091,9 +1091,10 @@ body {
 
 .dark body {
   background:
-    radial-gradient(1100px 700px at 12% -5%, oklch(0.35 0.14 265 / 0.35), transparent 60%),
-    radial-gradient(900px 700px at 100% 100%, oklch(0.30 0.10 265 / 0.28), transparent 60%),
-    linear-gradient(180deg, var(--background), oklch(0.11 0.02 265));
+    radial-gradient(1200px 800px at 8% -8%, oklch(0.42 0.15 245 / 0.55), transparent 62%),
+    radial-gradient(1000px 780px at 100% 105%, oklch(0.38 0.14 225 / 0.48), transparent 62%),
+    radial-gradient(700px 520px at 55% 38%, oklch(0.50 0.12 210 / 0.30), transparent 65%),
+    linear-gradient(180deg, oklch(0.16 0.045 248), oklch(0.11 0.05 250));
   background-attachment: fixed;
 }
 
