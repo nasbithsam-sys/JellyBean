@@ -383,73 +383,104 @@
   border-color: var(--border-strong);
 }
 
+/* App shell — subtle paper/ink texture for a hand-crafted feel */
 .crm-app-shell {
   position: relative;
   min-height: 100vh;
   background: var(--background);
 }
 
+.crm-app-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.35 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: 0.035;
+  mix-blend-mode: multiply;
+}
+
+.dark .crm-app-shell::before {
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+}
+
 .dark .crm-app-shell {
   background:
-    radial-gradient(1200px 600px at 15% -10%, rgba(110, 168, 255, 0.08), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(147, 193, 255, 0.05), transparent 55%),
+    radial-gradient(1100px 550px at 12% -10%, rgba(201, 169, 97, 0.05), transparent 55%),
+    radial-gradient(800px 500px at 100% 110%, rgba(201, 169, 97, 0.035), transparent 60%),
     var(--background);
 }
 
 .crm-sidebar-shell {
   background: var(--sidebar);
   color: var(--sidebar-foreground);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 0 0 1px rgba(15, 27, 61, 0.02);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.02);
+  position: relative;
+  z-index: 1;
 }
 
 .dark .crm-sidebar-shell {
   background:
-    linear-gradient(180deg, rgba(110, 168, 255, 0.03), transparent 40%),
+    linear-gradient(180deg, rgba(201, 169, 97, 0.025), transparent 30%),
     var(--sidebar);
   border-right: 1px solid rgba(255, 255, 255, 0.04);
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.02);
 }
 
 .crm-sidebar-active {
-  background: rgba(59, 111, 160, 0.18);
-  border: 1px solid rgba(59, 111, 160, 0.35);
+  background: linear-gradient(90deg, rgba(201, 169, 97, 0.14), rgba(201, 169, 97, 0.02));
+  border: 1px solid rgba(201, 169, 97, 0.22);
   color: #ffffff;
-  box-shadow: inset 2px 0 0 0 var(--primary-glow);
+  box-shadow: inset 2px 0 0 0 var(--primary-glow, #c9a961);
 }
 
 .dark .crm-sidebar-active {
-  background: linear-gradient(90deg, rgba(110, 168, 255, 0.16), rgba(110, 168, 255, 0.04));
-  border: 1px solid rgba(110, 168, 255, 0.28);
+  background: linear-gradient(90deg, rgba(224, 196, 126, 0.14), rgba(224, 196, 126, 0.02));
+  border: 1px solid rgba(224, 196, 126, 0.22);
   color: #ffffff;
   box-shadow:
     inset 2px 0 0 0 var(--primary),
-    0 0 24px -8px rgba(110, 168, 255, 0.35);
-}
-
-.dark .glass-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 60%), var(--card);
-  border: 1px solid var(--border);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 8px 24px -12px rgba(0, 0, 0, 0.6);
-}
-
-.dark .glass-card:hover {
-  border-color: var(--border-strong);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.06) inset,
-    0 12px 32px -14px rgba(0, 0, 0, 0.7);
+    0 0 24px -10px rgba(224, 196, 126, 0.35);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(237, 232, 220, 0.08);
   background-clip: padding-box;
 }
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(237, 232, 220, 0.18);
   background-clip: padding-box;
 }
+
+/* Signature accent bar on section titles */
+.crm-section-title {
+  position: relative;
+  padding-left: 0.9rem;
+}
+.crm-section-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.32em;
+  bottom: 0.32em;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--primary), var(--primary-glow, var(--primary)));
+}
+
+/* Refined selection */
+::selection {
+  background: color-mix(in srgb, var(--primary) 32%, transparent);
+  color: var(--foreground);
+}
+.dark ::selection {
+  background: color-mix(in srgb, var(--primary) 45%, transparent);
+  color: var(--primary-foreground);
+}
+
+
 
 .crm-motion {
   transition-property: color, background-color, border-color, box-shadow, transform, opacity;
