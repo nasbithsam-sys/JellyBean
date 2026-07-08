@@ -549,10 +549,9 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     fullName: "",
     email: "",
     password: "",
-    role: "scraping" as
+    role: "maturing" as
       | "admin"
       | "sub_admin"
-      | "scraping"
       | "maturing"
       | "cs"
       | "acc_handler"
@@ -618,7 +617,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="sub_admin">Sub-admin</SelectItem>
-                <SelectItem value="scraping">Scraping</SelectItem>
+                
                 <SelectItem value="maturing">Maturing</SelectItem>
                 <SelectItem value="cs">CS</SelectItem>
                 <SelectItem value="acc_handler">Acc Handler</SelectItem>

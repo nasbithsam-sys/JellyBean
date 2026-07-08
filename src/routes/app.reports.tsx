@@ -101,6 +101,8 @@ function Page() {
 }
 
 function Inner() {
+  const auth = useAuth();
+  const isAdmin = auth.primaryRole === "admin";
   const today = toIsoDay(new Date());
   const [preset, setPreset] = useState<DatePreset>("all");
   const [fromDate, setFromDate] = useState<string>(today);
@@ -302,10 +304,12 @@ function Inner() {
             />
           </>
         )}
-        <Button size="sm" variant="outline" className="h-8 ml-auto" onClick={exportReport}>
-          <Download className="h-3.5 w-3.5 mr-1.5" />
-          Export counts
-        </Button>
+        {isAdmin && (
+          <Button size="sm" variant="outline" className="h-8 ml-auto" onClick={exportReport}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export counts
+          </Button>
+        )}
         </div>
       </div>
       <Section title="Raw leads by status">
@@ -376,10 +380,12 @@ function Inner() {
                 <span className="text-red-600 font-medium">{totals.no} no</span> · {totals.pending}{" "}
                 pending
               </span>
-              <Button size="sm" variant="outline" onClick={exportByAccount}>
-                <Download className="h-3.5 w-3.5 mr-1.5" />
-                Export CSV
-              </Button>
+              {isAdmin && (
+                <Button size="sm" variant="outline" onClick={exportByAccount}>
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  Export CSV
+                </Button>
+              )}
             </div>
           </div>
 

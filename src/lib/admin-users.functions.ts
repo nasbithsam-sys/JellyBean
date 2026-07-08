@@ -7,7 +7,6 @@ import { logActivity } from "@/lib/activity-log";
 const roleSchema = z.enum([
   "admin",
   "sub_admin",
-  "scraping",
   "maturing",
   "cs",
   "acc_handler",
