@@ -1015,65 +1015,67 @@ button:hover:not(:disabled),
 .dark {
   --radius: 0.875rem;
 
-  --background: oklch(0.14 0.015 260);
-  --foreground: oklch(0.94 0.005 250);
+  /* Deep Space Sky — lifted from near-black to a rich indigo-navy field */
+  --background: oklch(0.19 0.045 245);
+  --foreground: oklch(0.95 0.012 230);
 
-  --surface: oklch(0.20 0.018 260 / 0.5);
-  --surface-hover: oklch(0.24 0.02 260 / 0.65);
+  --surface: oklch(0.28 0.055 245 / 0.55);
+  --surface-hover: oklch(0.34 0.06 245 / 0.7);
 
-  --card: oklch(0.20 0.018 260 / 0.5);
-  --card-foreground: oklch(0.94 0.005 250);
+  --card: oklch(0.28 0.055 245 / 0.55);
+  --card-foreground: oklch(0.95 0.012 230);
 
-  --popover: oklch(0.22 0.02 260 / 0.75);
-  --popover-foreground: oklch(0.94 0.005 250);
+  --popover: oklch(0.30 0.06 245 / 0.82);
+  --popover-foreground: oklch(0.95 0.012 230);
 
-  --primary: oklch(0.55 0.20 265);
-  --primary-foreground: oklch(0.99 0 0);
-  --primary-glow: oklch(0.72 0.17 265);
+  /* Sky accent — same family as light mode for cohesion */
+  --primary: oklch(0.72 0.14 235);
+  --primary-foreground: oklch(0.14 0.04 245);
+  --primary-glow: oklch(0.82 0.12 225);
 
-  --secondary: oklch(0.22 0.018 260 / 0.5);
-  --secondary-foreground: oklch(0.86 0.008 250);
+  --secondary: oklch(0.30 0.05 245 / 0.55);
+  --secondary-foreground: oklch(0.90 0.015 230);
 
-  --muted: oklch(0.20 0.015 260 / 0.4);
-  --muted-foreground: oklch(0.68 0.012 250);
+  --muted: oklch(0.28 0.045 245 / 0.5);
+  --muted-foreground: oklch(0.74 0.02 230);
 
-  --accent: oklch(0.28 0.04 265 / 0.55);
-  --accent-foreground: oklch(0.90 0.02 260);
+  --accent: oklch(0.38 0.09 235 / 0.6);
+  --accent-foreground: oklch(0.94 0.03 230);
 
-  --destructive: oklch(0.66 0.16 22);
-  --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.68 0.12 160);
-  --success-foreground: oklch(0.14 0.03 160);
-  --warning: oklch(0.76 0.12 68);
-  --warning-foreground: oklch(0.16 0.03 68);
+  --destructive: oklch(0.70 0.16 22);
+  --destructive-foreground: oklch(0.14 0.03 22);
+  --success: oklch(0.72 0.13 165);
+  --success-foreground: oklch(0.14 0.04 165);
+  --warning: oklch(0.80 0.13 78);
+  --warning-foreground: oklch(0.16 0.03 78);
 
-  --border: oklch(0.62 0.03 260 / 0.30);
-  --border-strong: oklch(0.72 0.04 260 / 0.45);
-  --input: oklch(0.22 0.02 260 / 0.6);
-  --ring: oklch(0.68 0.16 265);
+  --border: oklch(0.72 0.05 235 / 0.28);
+  --border-strong: oklch(0.82 0.06 230 / 0.42);
+  --input: oklch(0.30 0.05 245 / 0.6);
+  --ring: oklch(0.75 0.14 230);
 
-  --sidebar: oklch(0.16 0.015 260 / 0.6);
-  --sidebar-foreground: oklch(0.82 0.008 250);
-  --sidebar-primary: oklch(0.62 0.16 265);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.22 0.02 260 / 0.55);
-  --sidebar-accent-foreground: oklch(0.92 0.01 250);
-  --sidebar-border: oklch(0.45 0.02 260 / 0.22);
-  --sidebar-ring: oklch(0.62 0.16 265);
+  --sidebar: oklch(0.22 0.05 248 / 0.62);
+  --sidebar-foreground: oklch(0.90 0.012 230);
+  --sidebar-primary: oklch(0.72 0.14 230);
+  --sidebar-primary-foreground: oklch(0.14 0.04 245);
+  --sidebar-accent: oklch(0.30 0.06 245 / 0.55);
+  --sidebar-accent-foreground: oklch(0.94 0.01 230);
+  --sidebar-border: oklch(0.55 0.05 245 / 0.24);
+  --sidebar-ring: oklch(0.72 0.14 230);
 
-  --chart-1: oklch(0.62 0.16 265);
-  --chart-2: oklch(0.72 0.13 265);
-  --chart-3: oklch(0.82 0.09 265);
-  --chart-4: oklch(0.68 0.12 160);
-  --chart-5: oklch(0.76 0.12 68);
+  --chart-1: oklch(0.72 0.14 230);
+  --chart-2: oklch(0.80 0.11 210);
+  --chart-3: oklch(0.86 0.08 245);
+  --chart-4: oklch(0.72 0.13 165);
+  --chart-5: oklch(0.80 0.13 78);
 
-  --shadow-sm: 0 2px 10px -3px rgba(0, 0, 0, 0.45);
-  --shadow-md: 0 14px 36px -14px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 28px 70px -24px rgba(0, 0, 0, 0.65);
-  --shadow-glow: 0 0 0 1px oklch(0.62 0.16 265 / 0.30), 0 18px 42px -18px oklch(0.55 0.17 265 / 0.55);
+  --shadow-sm: 0 2px 12px -3px oklch(0.05 0.05 245 / 0.55);
+  --shadow-md: 0 16px 40px -14px oklch(0.05 0.06 245 / 0.65);
+  --shadow-lg: 0 30px 78px -24px oklch(0.04 0.07 245 / 0.75);
+  --shadow-glow: 0 0 0 1px oklch(0.72 0.14 230 / 0.32), 0 18px 42px -18px oklch(0.65 0.16 230 / 0.55);
 
-  --glass-rim: rgba(255, 255, 255, 0.08);
-  --glass-rim-strong: rgba(255, 255, 255, 0.14);
+  --glass-rim: rgba(180, 210, 255, 0.14);
+  --glass-rim-strong: rgba(200, 225, 255, 0.22);
 }
 
 /* ---------- Considered backdrop — single-hue field, no rainbow ---------- */
