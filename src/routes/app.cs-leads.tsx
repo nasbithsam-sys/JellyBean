@@ -59,6 +59,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Paperclip,
+  ExternalLink,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -2820,6 +2821,20 @@ function LeadDrawer({
             {lead.requirement_1 && <Info label="Requirement 1" value={lead.requirement_1} multiline />}
             {lead.requirement_2 && <Info label="Requirement 2" value={lead.requirement_2} multiline />}
             {lead.context && <Info label="Context" value={lead.context} multiline />}
+            {lead.original_lead_link && (
+              <div>
+                <p className="text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Original Post</p>
+                <a
+                  href={lead.original_lead_link}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center gap-1.5 text-primary hover:underline text-sm font-medium"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  View Post
+                </a>
+              </div>
+            )}
             {isAdmin && Array.isArray(lead.images) && lead.images.length > 0 && (
               <div>
                 <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">

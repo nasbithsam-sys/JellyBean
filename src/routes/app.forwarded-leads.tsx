@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useRef, useEffect } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink } from "lucide-react";
 import { formatDistanceToNow, startOfDay, endOfDay } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
@@ -538,6 +538,7 @@ function ForwardedTable({
             <th className="text-left px-3 py-2 font-medium">Phone</th>
             <th className="text-left px-3 py-2 font-medium">Area</th>
             <th className="text-left px-3 py-2 font-medium">Details</th>
+            <th className="text-left px-3 py-2 font-medium">Post Link</th>
             <th className="text-left px-3 py-2 font-medium">Outcome</th>
             {isAdmin && <th className="text-left px-3 py-2 font-medium">Forwarded by</th>}
             <th className="text-left px-3 py-2 font-medium">Forwarded</th>
@@ -570,6 +571,20 @@ function ForwardedTable({
                   {[r.service, r.pass_it_to].filter(Boolean).join(" / ")}
                 </div>
                 {r.context && <div className="truncate text-[11.5px] crm-muted-text">{r.context}</div>}
+              </td>
+              <td className="px-3 py-2">
+                {r.original_lead_link ? (
+                  <a
+                    href={r.original_lead_link}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1 text-primary hover:underline text-[12px] font-medium whitespace-nowrap"
+                  >
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                    View Post
+                  </a>
+                ) : null}
               </td>
               <td className="px-3 py-2">
                 {r.cs_status === "new" ? (
@@ -691,6 +706,7 @@ function UnifiedForwardedLeadForm({
           reference: values.reference,
           is_important: lead.pinned_important ? true : values.isImportant,
           images: [...(values.existingImages ?? []), ...uploadedImages],
+          original_lead_link: values.originalLeadLink !== undefined ? values.originalLeadLink : lead.original_lead_link,
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
@@ -723,6 +739,7 @@ function UnifiedForwardedLeadForm({
         reference: lead.reference || undefined,
         isImportant: lead.is_important,
         images: Array.isArray(lead.images) ? (lead.images as string[]) : [],
+        originalLeadLink: lead.original_lead_link,
       }}
       submitting={saving}
       onDirtyChange={onDirtyChange}

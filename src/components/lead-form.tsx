@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle, Video } from "lucide-react";
+import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle, Video, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,7 @@ export type LeadFormValues = {
   files: File[];
   existingImages?: string[];
   extraNumbers?: string[];
+  originalLeadLink?: string | null;
 };
 
 type LeadFormInitialValues = {
@@ -45,6 +46,7 @@ type LeadFormInitialValues = {
   extraNumbers?: string[];
   images?: string[];
   id?: string;
+  originalLeadLink?: string | null;
 };
 
 export function formatPhoneInput(value: string): string {
@@ -138,6 +140,7 @@ export function LeadForm({
   );
   const [existingImages, setExistingImages] = useState<string[]>(initialValues?.images ?? []);
   const [files, setFiles] = useState<File[]>([]);
+  const originalLeadLink = initialValues?.originalLeadLink ?? null;
   const [isCompressing, setIsCompressing] = useState(false);
   const [compressionProgress, setCompressionProgress] = useState(0);
 
@@ -375,6 +378,7 @@ export function LeadForm({
       files,
       existingImages,
       extraNumbers: extraNumbers.filter((num) => num.trim() !== ""),
+      originalLeadLink: originalLeadLink,
     });
   }
 
@@ -458,6 +462,23 @@ export function LeadForm({
           </Button>
         )}
       </div>
+
+      {originalLeadLink && (
+        <div className="min-w-0">
+          <Label className="block mb-1.5 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+            Original Post Link
+          </Label>
+          <a
+            href={originalLeadLink}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1.5 text-primary hover:underline text-sm font-medium truncate max-w-full"
+          >
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            View Post
+          </a>
+        </div>
+      )}
 
       <Field label="Context" required>
         <Textarea
