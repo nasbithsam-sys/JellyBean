@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useRef, useEffect } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink } from "lucide-react";
 import { formatDistanceToNow, startOfDay, endOfDay } from "date-fns";
@@ -20,7 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { formatPhone } from "@/lib/crm-lite";
+import { formatPhone, normalizePhone } from "@/lib/crm-lite";
+import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
+import { DuplicateLeadDialog, type DuplicateMatchPreview } from "@/components/duplicate-lead-dialog";
 import {
   LeadForm,
   formatPhoneInput,
@@ -797,6 +800,11 @@ function ForwardedLeadForm({
   const [postLink, setPostLink] = useState(lead.original_lead_link ?? "");
   const [saving, setSaving] = useState(false);
 
+  const checkDuplicate = useServerFn(checkDuplicatePhone);
+  const [isCheckingBeforeSubmit, setIsCheckingBeforeSubmit] = useState(false);
+  const [showDupConfirm, setShowDupConfirm] = useState(false);
+  const [dupConfirmMatches, setDupConfirmMatches] = useState<DuplicateMatchPreview[]>([]);
+
   function addFiles(picked: FileList | null) {
     if (!picked) return;
     const incoming = Array.from(picked);
@@ -845,21 +853,7 @@ function ForwardedLeadForm({
     toast.success(`Pasted ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}`);
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
-    if (!isAdmin && lead.cs_status !== "new") {
-      toast.error("Only pending leads can be edited.");
-      return;
-    }
-    if (!name.trim() || !number.trim()) {
-      toast.error("Name and number are required");
-      return;
-    }
-    if (!passItTo.trim()) {
-      toast.error("Pass it to is required");
-      return;
-    }
+  async function performSave() {
     setSaving(true);
     try {
       const newUploadedUrls = files.length > 0 && auth.user?.id
@@ -896,6 +890,80 @@ function ForwardedLeadForm({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
+    if (!isAdmin && lead.cs_status !== "new") {
+      toast.error("Only pending leads can be edited.");
+      return;
+    }
+    if (!name.trim() || !number.trim()) {
+      toast.error("Name and number are required");
+      return;
+    }
+    if (!passItTo.trim()) {
+      toast.error("Pass it to is required");
+      return;
+    }
+    
+    setIsCheckingBeforeSubmit(true);
+    try {
+      const phoneDigits = [number, ...extraNumbers]
+        .map((p) => normalizePhone(p ?? ""))
+        .filter((d) => d.length >= 7);
+
+      if (phoneDigits.length > 0) {
+        const results = await Promise.all(
+          phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } }))
+        );
+        const allMatches = results.flatMap((r) => (r.matches ?? []));
+        
+        const excludeId = lead.id;
+        const seen = new Set<string>([excludeId]);
+        const freshMatches = allMatches.filter((m) => {
+          if (seen.has(m.id)) return false;
+          seen.add(m.id);
+          return true;
+        });
+
+        if (freshMatches.length > 0) {
+          const targetNumber = normalizePhone(number);
+          const secondTargetNumbers = extraNumbers.map((n) => normalizePhone(n)).filter((n) => n.length >= 7);
+          
+          const previewMatches: DuplicateMatchPreview[] = freshMatches.map((match) => {
+            let sourceLabel = "Primary number";
+            if (
+              secondTargetNumbers.length > 0 &&
+              (secondTargetNumbers.includes(normalizePhone(match.customer_number)) ||
+               (match.customer_number_2 && secondTargetNumbers.includes(normalizePhone(match.customer_number_2))))
+            ) {
+              sourceLabel = "Additional number";
+            }
+            return {
+              source: sourceLabel,
+              match: match as any,
+            };
+          });
+
+          setDupConfirmMatches(previewMatches);
+          setShowDupConfirm(true);
+          return;
+        }
+      }
+    } catch (err) {
+      // Ignore duplicate check errors and proceed to save
+    } finally {
+      setIsCheckingBeforeSubmit(false);
+    }
+
+    await performSave();
+  }
+
+  function continueDespiteDuplicate() {
+    setShowDupConfirm(false);
+    void performSave();
   }
 
   return (
@@ -1097,14 +1165,29 @@ function ForwardedLeadForm({
       </Field>
 
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={saving || isCheckingBeforeSubmit}>
           Cancel
         </Button>
-        <Button type="submit" disabled={saving || !passItTo.trim()}>
-          {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-          Save changes
+        <Button type="submit" disabled={saving || isCheckingBeforeSubmit}>
+          {saving || isCheckingBeforeSubmit ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {saving ? "Saving..." : "Checking duplicate..."}
+            </>
+          ) : (
+            "Save Changes"
+          )}
         </Button>
       </div>
+
+      <DuplicateLeadDialog
+        open={showDupConfirm}
+        onOpenChange={setShowDupConfirm}
+        matches={dupConfirmMatches}
+        isConfirming={saving}
+        onCancel={() => setShowDupConfirm(false)}
+        onConfirm={continueDespiteDuplicate}
+      />
     </form>
   );
 }

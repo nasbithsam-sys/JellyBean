@@ -35,6 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { DuplicateLeadDialog } from "@/components/duplicate-lead-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { LeadForm, type LeadFormValues } from "@/components/lead-form";
 import {
@@ -1545,33 +1546,6 @@ function Inner() {
           }}
         />
       )}
-
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {selected.size} raw lead{selected.size === 1 ? "" : "s"}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently removes the selected leads from the database. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                deleteSelected();
-              }}
-              disabled={deleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleting && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
@@ -1693,15 +1667,54 @@ function LeadDetailDialog({
 
         <div className="space-y-3 text-[12.5px] min-w-0">
           <div className="grid grid-cols-2 gap-3 min-w-0">
-            <DetailField label="Account Name" value={r["Account Name"]} />
-            <DetailField label="Sub Area" value={r["Sub Area / Neighborhood"]} />
-            <DetailField label="Account Area" value={r["Account Area"]} />
-            <DetailField label="Incog Account" value={r["Incog Account"]} />
-            <DetailField label="Posted" value={r["Posted Date & Time"]} />
-            <DetailField
-              label="Captured (UTC)"
-              value={`${r["Captured Date (UTC)"] ?? ""} ${r["Captured Time (UTC)"] ?? ""}`.trim()}
-            />
+            <div className="min-w-0">
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Account Name
+              </Label>
+              <div className="text-foreground truncate" title={r["Account Name"]}>
+                {r["Account Name"] || <span className="text-muted-foreground">—</span>}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Sub Area
+              </Label>
+              <div className="text-foreground truncate" title={r["Sub Area / Neighborhood"]}>
+                {r["Sub Area / Neighborhood"] || <span className="text-muted-foreground">—</span>}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Account Area
+              </Label>
+              <div className="text-foreground truncate" title={r["Account Area"]}>
+                {r["Account Area"] || <span className="text-muted-foreground">—</span>}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Incog Account
+              </Label>
+              <div className="text-foreground truncate" title={r["Incog Account"]}>
+                {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Posted
+              </Label>
+              <div className="text-foreground truncate" title={r["Posted Date & Time"]}>
+                {r["Posted Date & Time"] || <span className="text-muted-foreground">—</span>}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+                Captured (UTC)
+              </Label>
+              <div className="text-foreground truncate" title={`${r["Captured Date (UTC)"] ?? ""} ${r["Captured Time (UTC)"] ?? ""}`.trim()}>
+                {`${r["Captured Date (UTC)"] ?? ""} ${r["Captured Time (UTC)"] ?? ""}`.trim() || <span className="text-muted-foreground">—</span>}
+              </div>
+            </div>
           </div>
 
           <div>
@@ -1851,67 +1864,17 @@ function LeadDetailDialog({
         </DialogFooter>
       </DialogContent>
 
-      <AlertDialog open={duplicateConfirmOpen} onOpenChange={setDuplicateConfirmOpen}>
-        <AlertDialogContent className="max-w-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>This number already exists. Do you still want to continue?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The phone number you entered matches recent qualified leads. Review the previous lead details below before you continue.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto text-[12.5px]">
-            {duplicatePreview.map(({ source, match }) => (
-              <div key={`${source}-${match.id}`} className="rounded-lg border border-destructive/25 bg-destructive/5 p-3 space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-semibold text-destructive">{source} duplicate</div>
-                  <div className="text-muted-foreground">
-                    {format(new Date(match.assigned_at), "MMM d, yyyy h:mm a")}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <DetailField label="Customer" value={match.customer_name} />
-                  <DetailField label="Primary Number" value={formatPhone(match.customer_number)} />
-                  <DetailField label="Second Number" value={formatPhone(match.customer_number_2)} />
-                  <DetailField
-                    label="Area"
-                    value={match.main_area || match.sub_area || "—"}
-                  />
-                  <DetailField label="Service" value={match.service || "—"} />
-                  <DetailField label="Lead ID" value={match.id} />
-                </div>
-                <div>
-                  <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-                    Context
-                  </Label>
-                  <div className="rounded-md border bg-background/70 px-3 py-2 whitespace-pre-wrap">
-                    {match.context || "—"}
-                  </div>
-                </div>
-                {match.original_lead_link && (
-                  <a
-                    href={match.original_lead_link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Open previous lead link
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel / Go back</AlertDialogCancel>
-            <AlertDialogAction onClick={(e) => {
-              e.preventDefault();
-              void continueDespiteDuplicate();
-            }} disabled={busy}>
-              Continue anyway
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DuplicateLeadDialog
+        open={duplicateConfirmOpen}
+        onOpenChange={setDuplicateConfirmOpen}
+        matches={duplicatePreview}
+        isConfirming={busy}
+        onCancel={() => {
+          if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+          setDuplicateConfirmOpen(false);
+        }}
+        onConfirm={() => void continueDespiteDuplicate()}
+      />
     </Dialog>
   );
 }

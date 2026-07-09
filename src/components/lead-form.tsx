@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { formatPhone, normalizePhone } from "@/lib/crm-lite";
 import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
 import { compressVideoInBrowser, MAX_VIDEO_BYTES, ALLOWED_VIDEO_MIME_TYPES, getVideoDimensions } from "@/lib/video-compressor";
+import { DuplicateLeadDialog, type DuplicateMatchPreview } from "@/components/duplicate-lead-dialog";
 
 const BUCKET = "lead-attachments";
 const MAX_IMAGES = 20;
@@ -35,6 +36,11 @@ type DupMatch = {
   customer_number: string;
   customer_number_2: string | null;
   assigned_at: string;
+  main_area: string | null;
+  sub_area: string | null;
+  service: string | null;
+  context: string | null;
+  original_lead_link: string | null;
 };
 
 export type LeadFormValues = {
@@ -164,7 +170,7 @@ export function LeadForm({
   // Duplicate check race condition fix
   const [isCheckingBeforeSubmit, setIsCheckingBeforeSubmit] = useState(false);
   const [showDupConfirm, setShowDupConfirm] = useState(false);
-  const [dupConfirmMatches, setDupConfirmMatches] = useState<DupMatch[]>([]);
+  const [dupConfirmMatches, setDupConfirmMatches] = useState<DuplicateMatchPreview[]>([]);
   // Holds the resolved form values waiting for user to confirm or cancel
   const pendingSubmitValuesRef = useRef<LeadFormValues | null>(null);
 
@@ -434,9 +440,28 @@ export function LeadForm({
       }
 
       if (freshMatches.length > 0) {
+        // Map matches to the preview format required by DuplicateLeadDialog
+        const targetNumber = normalizePhone(customerNumber);
+        const secondTargetNumbers = extraNumbers.map((n) => normalizePhone(n)).filter((n) => n.length >= 7);
+        
+        const previewMatches: DuplicateMatchPreview[] = freshMatches.map((match) => {
+          let sourceLabel = "Primary number";
+          if (
+            secondTargetNumbers.length > 0 &&
+            (secondTargetNumbers.includes(normalizePhone(match.customer_number)) ||
+             (match.customer_number_2 && secondTargetNumbers.includes(normalizePhone(match.customer_number_2))))
+          ) {
+            sourceLabel = "Additional number";
+          }
+          return {
+            source: sourceLabel,
+            match,
+          };
+        });
+
         // Show confirmation dialog – user can Cancel or Continue Anyway
         pendingSubmitValuesRef.current = payload;
-        setDupConfirmMatches(freshMatches);
+        setDupConfirmMatches(previewMatches);
         setShowDupConfirm(true);
         return; // Stop here; submission continues only if user confirms
       }
@@ -783,7 +808,7 @@ export function LeadForm({
         </Button>
         <Button
           type="submit"
-          disabled={submitting || isCompressing || hasDuplicate || isDuplicateCheckPending}
+          disabled={submitting || isCompressing || isDuplicateCheckPending}
         >
           {submitting ? (
             <>
@@ -804,45 +829,17 @@ export function LeadForm({
         </Button>
       </div>
 
-      {/* Duplicate confirmation dialog — appears when a fresh gate-check
-          finds a duplicate. User must explicitly choose to continue or cancel. */}
-      <AlertDialog open={showDupConfirm} onOpenChange={setShowDupConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Duplicate phone number detected</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm">
-                <p>This number was already forwarded to CS in the last 48 hours:</p>
-                <ul className="list-disc pl-5 space-y-1 text-foreground">
-                  {dupConfirmMatches.slice(0, 5).map((m) => (
-                    <li key={m.id} className="font-medium">
-                      {m.customer_name} — {formatPhone(m.customer_number)}
-                      {m.customer_number_2 ? ` / ${formatPhone(m.customer_number_2)}` : ""}
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-muted-foreground">Do you still want to send this lead to CS?</p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => {
-                setShowDupConfirm(false);
-                pendingSubmitValuesRef.current = null;
-              }}
-            >
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-              onClick={() => void continueDespiteDuplicate()}
-            >
-              Continue anyway
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DuplicateLeadDialog
+        open={showDupConfirm}
+        onOpenChange={setShowDupConfirm}
+        matches={dupConfirmMatches}
+        isConfirming={submitting}
+        onCancel={() => {
+          setShowDupConfirm(false);
+          pendingSubmitValuesRef.current = null;
+        }}
+        onConfirm={() => void continueDespiteDuplicate()}
+      />
     </form>
   );
 }
