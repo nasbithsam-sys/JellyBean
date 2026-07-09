@@ -264,6 +264,8 @@ export type Database = {
           assigned_at: string
           assigned_by: string | null
           assigned_to: string | null
+          canonical_lead_link: string | null
+          canonical_post_id: string | null
           context: string | null
           created_at: string
           created_by: string | null
@@ -299,6 +301,8 @@ export type Database = {
           assigned_at?: string
           assigned_by?: string | null
           assigned_to?: string | null
+          canonical_lead_link?: string | null
+          canonical_post_id?: string | null
           context?: string | null
           created_at?: string
           created_by?: string | null
@@ -334,6 +338,8 @@ export type Database = {
           assigned_at?: string
           assigned_by?: string | null
           assigned_to?: string | null
+          canonical_lead_link?: string | null
+          canonical_post_id?: string | null
           context?: string | null
           created_at?: string
           created_by?: string | null
@@ -379,12 +385,20 @@ export type Database = {
         Row: {
           assigned_myself_at: string | null
           assigned_to: string | null
+          canonical_lead_link: string | null
+          canonical_post_id: string | null
           captured_at: string | null
           categorized_at: string | null
           categorized_by: string | null
           category: string | null
           created_at: string
           data: Json
+          duplicate_detected: boolean | null
+          duplicate_key: string | null
+          duplicate_match_type: string | null
+          duplicate_of_qualified_lead_id: string | null
+          duplicate_of_raw_lead_id: string | null
+          duplicate_reason: string | null
           id: string
           lead: string | null
           lead_link: string | null
@@ -396,12 +410,20 @@ export type Database = {
         Insert: {
           assigned_myself_at?: string | null
           assigned_to?: string | null
+          canonical_lead_link?: string | null
+          canonical_post_id?: string | null
           captured_at?: string | null
           categorized_at?: string | null
           categorized_by?: string | null
           category?: string | null
           created_at?: string
           data: Json
+          duplicate_detected?: boolean | null
+          duplicate_key?: string | null
+          duplicate_match_type?: string | null
+          duplicate_of_qualified_lead_id?: string | null
+          duplicate_of_raw_lead_id?: string | null
+          duplicate_reason?: string | null
           id?: string
           lead?: string | null
           lead_link?: string | null
@@ -413,12 +435,20 @@ export type Database = {
         Update: {
           assigned_myself_at?: string | null
           assigned_to?: string | null
+          canonical_lead_link?: string | null
+          canonical_post_id?: string | null
           captured_at?: string | null
           categorized_at?: string | null
           categorized_by?: string | null
           category?: string | null
           created_at?: string
           data?: Json
+          duplicate_detected?: boolean | null
+          duplicate_key?: string | null
+          duplicate_match_type?: string | null
+          duplicate_of_qualified_lead_id?: string | null
+          duplicate_of_raw_lead_id?: string | null
+          duplicate_reason?: string | null
           id?: string
           lead?: string | null
           lead_link?: string | null
