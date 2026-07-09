@@ -23,6 +23,14 @@ export type RawLeadCacheRow = {
   sheet_row: number | null;
   assigned_to: string | null;
   assigned_myself_at: string | null;
+  duplicate_detected?: boolean | null;
+  duplicate_reason?: string | null;
+  duplicate_match_type?: string | null;
+  duplicate_key?: string | null;
+  duplicate_of_raw_lead_id?: string | null;
+  duplicate_of_qualified_lead_id?: string | null;
+  canonical_post_id?: string | null;
+  canonical_lead_link?: string | null;
 };
 
 export type CacheEntry = RawLeadCacheRow;
