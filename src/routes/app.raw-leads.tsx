@@ -71,6 +71,7 @@ import {
 
 import { RawLeadDuplicateDialog } from "@/components/raw-lead-duplicate-dialog";
 import { buildVisibleRawLeadDuplicateMap } from "@/lib/raw-lead-duplicate-detector";
+import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
@@ -107,6 +108,15 @@ type CacheEntry = {
   sheet_row: number | null;
   assigned_to: string | null;
   assigned_myself_at: string | null;
+  id: string;
+  duplicate_detected: boolean | null;
+  duplicate_reason: string | null;
+  duplicate_match_type: string | null;
+  duplicate_key: string | null;
+  duplicate_of_raw_lead_id: string | null;
+  duplicate_of_qualified_lead_id: string | null;
+  canonical_post_id: string | null;
+  canonical_lead_link: string | null;
 };
 type RawLeadPage = {
   entries: CacheEntry[];
@@ -314,7 +324,7 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
 // ── Supabase cache helpers ────────────────────────────────────────────────────
 async function loadCache(limit: number): Promise<CacheEntry[]> {
   const columns =
-    "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to";
+    "id, row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to, assigned_myself_at, duplicate_detected, duplicate_reason, duplicate_match_type, duplicate_key, duplicate_of_raw_lead_id, duplicate_of_qualified_lead_id, canonical_post_id, canonical_lead_link";
 
   const { data, error } = await supabase
     .from(TABLE)
@@ -680,7 +690,6 @@ function Inner() {
   }, [actions, currentUserId, entries, rawLeadSort]);
 
   const shownRows = visible;
-  const duplicateMap = useMemo(() => buildVisibleRawLeadDuplicateMap(shownRows), [shownRows]);
 
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
   // AND no user/AI override), so each click marches through the next 50.
@@ -1249,7 +1258,7 @@ function Inner() {
                         <div className="font-medium truncate w-full" title={r["Account Name"]}>
                           {r["Account Name"] || "—"}
                         </div>
-                        {duplicateMap[e.id] && duplicateMap[e.id].length > 0 && (
+                        {e.duplicate_detected && (
                           <button
                             type="button"
                             onClick={(ev) => {
@@ -1257,7 +1266,7 @@ function Inner() {
                               setDuplicateDetailsFor(e);
                             }}
                             className="inline-flex items-center rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[9px] font-medium text-destructive whitespace-nowrap hover:bg-destructive/20 transition-colors"
-                            title="Click to review duplicate matches"
+                            title="Click to review duplicate match"
                           >
                             Duplicate Lead
                           </button>
@@ -1574,7 +1583,6 @@ function Inner() {
           if (!open) setDuplicateDetailsFor(null);
         }}
         currentLead={duplicateDetailsFor}
-        matches={duplicateDetailsFor ? duplicateMap[duplicateDetailsFor.id] || [] : []}
         onSendToDuplicateFilter={async () => {
           if (!duplicateDetailsFor) return;
           await updateAction(duplicateDetailsFor.row_key, { category: "duplicate" });
@@ -1970,6 +1978,8 @@ function QualifyDialog({
         sub_area: values.area || null,
         main_area: values.area || null,
         original_lead_link: row["Lead Link"] || null,
+        canonical_post_id: extractNextdoorPostId(row["Lead Link"]),
+        canonical_lead_link: canonicalizeLeadLink(row["Lead Link"]),
         assigned_by: actorId,
         created_by: actorId,
         cs_status: "new",

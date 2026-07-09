@@ -5,6 +5,14 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Max-Age": "86400",
 };
 
+import {
+  extractNextdoorPostId,
+  canonicalizeLeadLink,
+  normalizeLeadText,
+  normalizeName,
+  normalizeNeighborhood,
+} from "./lead-link-canonicalizer";
+
 const SCHEMA_VERSION = "2026-04-08.nd.v1";
 
 interface ExtRow {
@@ -175,14 +183,25 @@ export async function handleNextdoorLeadsPost(request: Request) {
 
     const supabaseAdmin = await loadSupabaseAdmin();
     const { unique, duplicateKeys } = uniqueRows(rawRows);
-    const payload = unique.map(({ key, row }) => ({
-      row_key: key,
-      data: toSheetRow(row),
-      lead: null,
-      captured_at: capturedIso(row),
-      lead_link: row.finalLink || row.postLink || row.profileLink || null,
-      sheet_row: null,
-    }));
+    const payload = unique.map(({ key, row }) => {
+      const rawLink = row.finalLink || row.postLink || row.profileLink || null;
+      return {
+        row_key: key,
+        data: toSheetRow(row),
+        lead: null,
+        captured_at: capturedIso(row),
+        lead_link: rawLink,
+        sheet_row: null,
+        canonical_post_id: extractNextdoorPostId(rawLink),
+        canonical_lead_link: canonicalizeLeadLink(rawLink),
+        duplicate_detected: false,
+        duplicate_reason: null as string | null,
+        duplicate_match_type: null as string | null,
+        duplicate_key: null as string | null,
+        duplicate_of_raw_lead_id: null as string | null,
+        duplicate_of_qualified_lead_id: null as string | null,
+      };
+    });
 
     const chunkSize = 100;
     const acceptedIds: string[] = [];
@@ -191,6 +210,107 @@ export async function handleNextdoorLeadsPost(request: Request) {
     for (let index = 0; index < payload.length; index += chunkSize) {
       const slice = payload.slice(index, index + chunkSize);
       const keys = unique.slice(index, index + chunkSize).map(({ key }) => key);
+
+      // --- DUPLICATE DETECTION START ---
+      const postIds = Array.from(new Set(slice.map((r) => r.canonical_post_id).filter(Boolean))) as string[];
+      const leadLinks = Array.from(new Set(slice.map((r) => r.canonical_lead_link).filter(Boolean))) as string[];
+
+      let existingRawPostIdRows: any[] = [];
+      let existingRawLinkRows: any[] = [];
+      let existingQualPostIdRows: any[] = [];
+      let existingQualLinkRows: any[] = [];
+
+      // Bulk queries against raw_lead_cache
+      if (postIds.length > 0) {
+        const { data } = await supabaseAdmin
+          .from("raw_lead_cache")
+          .select("id, canonical_post_id, row_key")
+          .in("canonical_post_id", postIds);
+        if (data) existingRawPostIdRows = data;
+      }
+      if (leadLinks.length > 0) {
+        const { data } = await supabaseAdmin
+          .from("raw_lead_cache")
+          .select("id, canonical_lead_link, row_key")
+          .in("canonical_lead_link", leadLinks);
+        if (data) existingRawLinkRows = data;
+      }
+
+      // Bulk queries against qualified_leads
+      if (postIds.length > 0) {
+        const { data } = await supabaseAdmin
+          .from("qualified_leads")
+          .select("id, canonical_post_id")
+          .in("canonical_post_id", postIds);
+        if (data) existingQualPostIdRows = data;
+      }
+      if (leadLinks.length > 0) {
+        const { data } = await supabaseAdmin
+          .from("qualified_leads")
+          .select("id, canonical_lead_link")
+          .in("canonical_lead_link", leadLinks);
+        if (data) existingQualLinkRows = data;
+      }
+
+      for (const row of slice) {
+        let isDup = false;
+
+        // Priority 1: Canonical Post ID Match
+        if (!isDup && row.canonical_post_id) {
+          // Check qualified first (stronger historical match)
+          const qMatch = existingQualPostIdRows.find((q) => q.canonical_post_id === row.canonical_post_id);
+          if (qMatch) {
+            isDup = true;
+            row.duplicate_detected = true;
+            row.duplicate_reason = "Same Nextdoor post ID (already forwarded)";
+            row.duplicate_match_type = "post_id";
+            row.duplicate_key = row.canonical_post_id;
+            row.duplicate_of_qualified_lead_id = qMatch.id;
+          } else {
+            // Check raw lead cache (skip itself)
+            const rMatch = existingRawPostIdRows.find(
+              (r) => r.canonical_post_id === row.canonical_post_id && r.row_key !== row.row_key
+            );
+            if (rMatch) {
+              isDup = true;
+              row.duplicate_detected = true;
+              row.duplicate_reason = "Same Nextdoor post ID";
+              row.duplicate_match_type = "post_id";
+              row.duplicate_key = row.canonical_post_id;
+              row.duplicate_of_raw_lead_id = rMatch.id;
+            }
+          }
+        }
+
+        // Priority 2: Canonical Lead Link Match
+        if (!isDup && row.canonical_lead_link) {
+          const qMatch = existingQualLinkRows.find((q) => q.canonical_lead_link === row.canonical_lead_link);
+          if (qMatch) {
+            isDup = true;
+            row.duplicate_detected = true;
+            row.duplicate_reason = "Same canonical post link (already forwarded)";
+            row.duplicate_match_type = "canonical_link";
+            row.duplicate_key = row.canonical_lead_link;
+            row.duplicate_of_qualified_lead_id = qMatch.id;
+          } else {
+            const rMatch = existingRawLinkRows.find(
+              (r) => r.canonical_lead_link === row.canonical_lead_link && r.row_key !== row.row_key
+            );
+            if (rMatch) {
+              isDup = true;
+              row.duplicate_detected = true;
+              row.duplicate_reason = "Same canonical post link";
+              row.duplicate_match_type = "canonical_link";
+              row.duplicate_key = row.canonical_lead_link;
+              row.duplicate_of_raw_lead_id = rMatch.id;
+            }
+          }
+        }
+
+        // Priority 3 & 4 (Exact/90% Details Match) are bypassed for ingestion to save compute
+        // and keep webhook fast as requested by user. We can safely rely on IDs/links for Nextdoor.
+      }
+      // --- DUPLICATE DETECTION END ---
 
       const { error } = await supabaseAdmin
         .from("raw_lead_cache")
