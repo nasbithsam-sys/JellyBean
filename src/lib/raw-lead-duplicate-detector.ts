@@ -54,23 +54,23 @@ export function buildVisibleRawLeadDuplicateMap(
       const b = shownRows[j];
       
       // Safety skip
-      if (a.id === b.id) continue;
+      if (a.row_key === b.row_key) continue;
 
       const match = checkMatch(a, b);
       if (match) {
-        if (!map[a.id]) map[a.id] = [];
-        if (!map[b.id]) map[b.id] = [];
+        if (!map[a.row_key]) map[a.row_key] = [];
+        if (!map[b.row_key]) map[b.row_key] = [];
 
-        map[a.id].push({
-          matchedLeadId: b.id,
+        map[a.row_key].push({
+          matchedLeadId: b.row_key,
           matchedLead: b,
           matchType: match.type,
           similarityScore: match.score,
           reasons: [...match.reasons],
         });
 
-        map[b.id].push({
-          matchedLeadId: a.id,
+        map[b.row_key].push({
+          matchedLeadId: a.row_key,
           matchedLead: a,
           matchType: match.type,
           similarityScore: match.score,
