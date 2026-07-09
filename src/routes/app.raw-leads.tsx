@@ -69,6 +69,9 @@ import {
   fetchRawLeadCounts,
 } from "@/lib/raw-leads.functions";
 
+import { RawLeadDuplicateDialog } from "@/components/raw-lead-duplicate-dialog";
+import { buildVisibleRawLeadDuplicateMap } from "@/lib/raw-lead-duplicate-detector";
+
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
 
 const TABLE = "raw_lead_cache";
@@ -414,6 +417,7 @@ function Inner() {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
+  const [duplicateDetailsFor, setDuplicateDetailsFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
   const [qualifySecondPhone, setQualifySecondPhone] = useState("");
   const [aiPrompt, setAiPrompt] = useState(FROZEN_LEAD_PROMPT);
@@ -676,6 +680,8 @@ function Inner() {
   }, [actions, currentUserId, entries, rawLeadSort]);
 
   const shownRows = visible;
+  const duplicateMap = useMemo(() => buildVisibleRawLeadDuplicateMap(shownRows), [shownRows]);
+
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
   // AND no user/AI override), so each click marches through the next 50.
   const aiTargets = visible
@@ -1239,8 +1245,23 @@ function Inner() {
                     </td>
 
                     <td className="border-b border-border px-2.5 py-2">
-                      <div className="font-medium truncate" title={r["Account Name"]}>
-                        {r["Account Name"] || "—"}
+                      <div className="flex flex-col gap-1 items-start min-w-0">
+                        <div className="font-medium truncate w-full" title={r["Account Name"]}>
+                          {r["Account Name"] || "—"}
+                        </div>
+                        {duplicateMap[e.id] && duplicateMap[e.id].length > 0 && (
+                          <button
+                            type="button"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setDuplicateDetailsFor(e);
+                            }}
+                            className="inline-flex items-center rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[9px] font-medium text-destructive whitespace-nowrap hover:bg-destructive/20 transition-colors"
+                            title="Click to review duplicate matches"
+                          >
+                            Duplicate Lead
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td
@@ -1546,6 +1567,21 @@ function Inner() {
           }}
         />
       )}
+
+      <RawLeadDuplicateDialog
+        open={!!duplicateDetailsFor}
+        onOpenChange={(open) => {
+          if (!open) setDuplicateDetailsFor(null);
+        }}
+        currentLead={duplicateDetailsFor}
+        matches={duplicateDetailsFor ? duplicateMap[duplicateDetailsFor.id] || [] : []}
+        onSendToDuplicateFilter={async () => {
+          if (!duplicateDetailsFor) return;
+          await updateAction(duplicateDetailsFor.row_key, { category: "duplicate" });
+          toast.success("Moved to Duplicate");
+          setDuplicateDetailsFor(null);
+        }}
+      />
     </div>
   );
 }
