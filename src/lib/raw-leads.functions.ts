@@ -12,7 +12,7 @@ const ALLOWED_RAW_LEAD_ROLES = [
 
 type RawLeadRole = (typeof ALLOWED_RAW_LEAD_ROLES)[number];
 
-type RawLeadCacheRow = {
+export type RawLeadCacheRow = {
   row_key: string;
   data: Record<string, string>;
   lead: "yes" | "no" | "review" | null;
@@ -24,6 +24,8 @@ type RawLeadCacheRow = {
   assigned_to: string | null;
   assigned_myself_at: string | null;
 };
+
+export type CacheEntry = RawLeadCacheRow;
 
 function normalizeLead(value: string | null): "yes" | "no" | "review" | null {
   return value === "yes" || value === "no" || value === "review" ? value : null;
