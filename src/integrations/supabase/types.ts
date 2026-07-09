@@ -269,8 +269,6 @@ export type Database = {
           created_by: string | null
           cs_notes: Json
           cs_outcome: string | null
-          canonical_post_id: string | null
-          canonical_lead_link: string | null
           cs_status: Database["public"]["Enums"]["cs_status"]
           customer_name: string
           customer_number: string
@@ -306,8 +304,6 @@ export type Database = {
           created_by?: string | null
           cs_notes?: Json
           cs_outcome?: string | null
-          canonical_post_id?: string | null
-          canonical_lead_link?: string | null
           cs_status?: Database["public"]["Enums"]["cs_status"]
           customer_name: string
           customer_number: string
@@ -343,8 +339,6 @@ export type Database = {
           created_by?: string | null
           cs_notes?: Json
           cs_outcome?: string | null
-          canonical_post_id?: string | null
-          canonical_lead_link?: string | null
           cs_status?: Database["public"]["Enums"]["cs_status"]
           customer_name?: string
           customer_number?: string
@@ -391,14 +385,6 @@ export type Database = {
           category: string | null
           created_at: string
           data: Json
-          duplicate_detected: boolean | null
-          duplicate_reason: string | null
-          duplicate_match_type: string | null
-          duplicate_key: string | null
-          duplicate_of_raw_lead_id: string | null
-          duplicate_of_qualified_lead_id: string | null
-          canonical_post_id: string | null
-          canonical_lead_link: string | null
           id: string
           lead: string | null
           lead_link: string | null
@@ -416,14 +402,6 @@ export type Database = {
           category?: string | null
           created_at?: string
           data: Json
-          duplicate_detected?: boolean | null
-          duplicate_reason?: string | null
-          duplicate_match_type?: string | null
-          duplicate_key?: string | null
-          duplicate_of_raw_lead_id?: string | null
-          duplicate_of_qualified_lead_id?: string | null
-          canonical_post_id?: string | null
-          canonical_lead_link?: string | null
           id?: string
           lead?: string | null
           lead_link?: string | null
@@ -441,14 +419,6 @@ export type Database = {
           category?: string | null
           created_at?: string
           data?: Json
-          duplicate_detected?: boolean | null
-          duplicate_reason?: string | null
-          duplicate_match_type?: string | null
-          duplicate_key?: string | null
-          duplicate_of_raw_lead_id?: string | null
-          duplicate_of_qualified_lead_id?: string | null
-          canonical_post_id?: string | null
-          canonical_lead_link?: string | null
           id?: string
           lead?: string | null
           lead_link?: string | null
