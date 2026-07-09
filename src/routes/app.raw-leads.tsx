@@ -57,7 +57,6 @@ import {
   Plus,
   X,
   UserMinus,
-  Copy as CopyIcon2,
   Layers,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
