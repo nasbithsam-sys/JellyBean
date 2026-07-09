@@ -1000,6 +1000,51 @@ function Inner() {
           </Button>
           )}
 
+          {tab === "new" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={async () => {
+              const targets = entries.filter(
+                (e: CacheEntry) => e.category === null && e.duplicate_detected === true,
+              );
+              if (targets.length === 0) {
+                toast.info("No duplicate leads to move.");
+                return;
+              }
+              const keys = targets.map((e) => e.row_key);
+              const keySet = new Set(keys);
+              updateCachedEntries((e) => (keySet.has(e.row_key) ? { ...e, category: "duplicate" } : e));
+              try {
+                const CHUNK = 25;
+                for (let i = 0; i < keys.length; i += CHUNK) {
+                  const slice = keys.slice(i, i + CHUNK);
+                  const { error } = await supabase
+                    .from(TABLE)
+                    .update({
+                      category: "duplicate",
+                      categorized_by: currentUserId,
+                      categorized_at: new Date().toISOString(),
+                    } as RawLeadCacheUpdate)
+                    .in("row_key", slice);
+                  if (error) throw error;
+                }
+                qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+                toast.success(
+                  `Moved ${targets.length} duplicate lead${targets.length === 1 ? "" : "s"} to Duplicate`,
+                );
+              } catch (e) {
+                toast.error(friendlyError(e));
+                cacheQuery.refetch();
+              }
+            }}
+          >
+            <Layers className="h-3.5 w-3.5 mr-1.5" />
+            Move duplicates → Duplicate
+          </Button>
+          )}
+
           <div className="ml-auto flex items-center gap-2">
           <Button
             size="sm"
