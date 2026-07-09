@@ -1271,7 +1271,7 @@ function Inner() {
                         <div className="font-medium truncate w-full" title={r["Account Name"]}>
                           {r["Account Name"] || "—"}
                         </div>
-                        {duplicateMap[e.id] && duplicateMap[e.id].length > 0 && (
+                        {duplicateMap[e.row_key] && duplicateMap[e.row_key].length > 0 && (
                           <button
                             type="button"
                             onClick={(ev) => {
