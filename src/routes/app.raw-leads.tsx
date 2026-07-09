@@ -1596,7 +1596,7 @@ function Inner() {
           if (!open) setDuplicateDetailsFor(null);
         }}
         currentLead={duplicateDetailsFor}
-        matches={duplicateDetailsFor ? duplicateMap[duplicateDetailsFor.id] || [] : []}
+        matches={duplicateDetailsFor ? duplicateMap[duplicateDetailsFor.row_key] || [] : []}
         onSendToDuplicateFilter={async () => {
           if (!duplicateDetailsFor) return;
           await updateAction(duplicateDetailsFor.row_key, { category: "duplicate" });
