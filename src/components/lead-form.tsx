@@ -8,6 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { formatPhone, normalizePhone } from "@/lib/crm-lite";
 import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
@@ -18,6 +28,14 @@ const MAX_IMAGES = 20;
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export type LeadReferenceMode = "manual-dropdown" | "auto-scraping" | "auto-fb" | "manual-text";
+
+type DupMatch = {
+  id: string;
+  customer_name: string;
+  customer_number: string;
+  customer_number_2: string | null;
+  assigned_at: string;
+};
 
 export type LeadFormValues = {
   customerName: string;
@@ -143,6 +161,12 @@ export function LeadForm({
   const originalLeadLink = initialValues?.originalLeadLink ?? null;
   const [isCompressing, setIsCompressing] = useState(false);
   const [compressionProgress, setCompressionProgress] = useState(0);
+  // Duplicate check race condition fix
+  const [isCheckingBeforeSubmit, setIsCheckingBeforeSubmit] = useState(false);
+  const [showDupConfirm, setShowDupConfirm] = useState(false);
+  const [dupConfirmMatches, setDupConfirmMatches] = useState<DupMatch[]>([]);
+  // Holds the resolved form values waiting for user to confirm or cancel
+  const pendingSubmitValuesRef = useRef<LeadFormValues | null>(null);
 
   useEffect(() => {
     return () => {
@@ -164,13 +188,6 @@ export function LeadForm({
         .filter((d) => d.length >= 7),
     [customerNumber, extraNumbers],
   );
-  type DupMatch = {
-    id: string;
-    customer_name: string;
-    customer_number: string;
-    customer_number_2: string | null;
-    assigned_at: string;
-  };
   const duplicateQuery = useQuery({
     queryKey: ["lead-form-duplicate-phone", phoneDigits.join(",")],
     enabled: !disableDuplicateCheck && phoneDigits.length > 0,
@@ -194,6 +211,17 @@ export function LeadForm({
         return true;
       });
   const hasDuplicate = uniqueDuplicates.length > 0;
+
+  // True while the background query is still loading OR we are doing the
+  // final gate-check inside handleSubmit. The submit button must be disabled
+  // during this entire window to prevent the race condition.
+  const isDuplicateCheckPending =
+    !disableDuplicateCheck &&
+    phoneDigits.length > 0 &&
+    (duplicateQuery.isLoading ||
+      duplicateQuery.isFetching ||
+      duplicateQuery.isRefetching ||
+      isCheckingBeforeSubmit);
 
   const isDirty =
     customerName !== (initialValues?.customerName ?? "") ||
@@ -361,12 +389,9 @@ export function LeadForm({
       toast.error("Reference is required");
       return;
     }
-    if (hasDuplicate) {
-      toast.error("Duplicate phone number detected in the last 48 hours.");
-      return;
-    }
 
-    await onSubmit({
+    // Build the payload now so we can reuse it after confirmation
+    const payload: LeadFormValues = {
       customerName: customerName.trim(),
       customerNumber: customerNumber.trim(),
       area: area.trim(),
@@ -379,7 +404,54 @@ export function LeadForm({
       existingImages,
       extraNumbers: extraNumbers.filter((num) => num.trim() !== ""),
       originalLeadLink: originalLeadLink,
-    });
+    };
+
+    if (!disableDuplicateCheck && phoneDigits.length > 0) {
+      // --- RACE-CONDITION FIX ---
+      // Always run a fresh check with the *current* phone digits so we are
+      // never relying on stale React Query cache that may not have resolved yet.
+      setIsCheckingBeforeSubmit(true);
+      let freshMatches: DupMatch[] = [];
+      try {
+        const results = await Promise.all(
+          phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } }))
+        );
+        const allMatches = results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
+        // Exclude the lead being edited (if any) so it doesn't flag itself
+        const excludeId = initialValues?.id;
+        const seen = new Set<string>(excludeId ? [excludeId] : []);
+        freshMatches = allMatches.filter((m) => {
+          if (seen.has(m.id)) return false;
+          seen.add(m.id);
+          return true;
+        });
+      } catch {
+        // If the duplicate check itself fails (network error, etc.) we still
+        // allow submission rather than silently blocking the user.
+        freshMatches = [];
+      } finally {
+        setIsCheckingBeforeSubmit(false);
+      }
+
+      if (freshMatches.length > 0) {
+        // Show confirmation dialog – user can Cancel or Continue Anyway
+        pendingSubmitValuesRef.current = payload;
+        setDupConfirmMatches(freshMatches);
+        setShowDupConfirm(true);
+        return; // Stop here; submission continues only if user confirms
+      }
+    }
+
+    await onSubmit(payload);
+  }
+
+  // Called when the user clicks "Continue Anyway" in the duplicate dialog
+  async function continueDespiteDuplicate() {
+    setShowDupConfirm(false);
+    const payload = pendingSubmitValuesRef.current;
+    pendingSubmitValuesRef.current = null;
+    if (!payload) return;
+    await onSubmit(payload);
   }
 
   return (
@@ -709,11 +781,19 @@ export function LeadForm({
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={submitting || isCompressing || hasDuplicate}>
+        <Button
+          type="submit"
+          disabled={submitting || isCompressing || hasDuplicate || isDuplicateCheckPending}
+        >
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
               Saving...
+            </>
+          ) : isDuplicateCheckPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Checking duplicate...
             </>
           ) : (
             <>
@@ -723,6 +803,46 @@ export function LeadForm({
           )}
         </Button>
       </div>
+
+      {/* Duplicate confirmation dialog — appears when a fresh gate-check
+          finds a duplicate. User must explicitly choose to continue or cancel. */}
+      <AlertDialog open={showDupConfirm} onOpenChange={setShowDupConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Duplicate phone number detected</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>This number was already forwarded to CS in the last 48 hours:</p>
+                <ul className="list-disc pl-5 space-y-1 text-foreground">
+                  {dupConfirmMatches.slice(0, 5).map((m) => (
+                    <li key={m.id} className="font-medium">
+                      {m.customer_name} — {formatPhone(m.customer_number)}
+                      {m.customer_number_2 ? ` / ${formatPhone(m.customer_number_2)}` : ""}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-muted-foreground">Do you still want to send this lead to CS?</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowDupConfirm(false);
+                pendingSubmitValuesRef.current = null;
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              onClick={() => void continueDespiteDuplicate()}
+            >
+              Continue anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }
