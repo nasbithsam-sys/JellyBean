@@ -124,15 +124,33 @@ export async function handleNextdoorLeadsPost(request: Request) {
     const webhookSecret = process.env.NEXTDOOR_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
     // Accept the secret from any of the historical locations the extension
     // has used, so older builds keep working without a URL/config change:
-    //   - X-Webhook-Secret header (current)
-    //   - X-Webhook-Token / X-Api-Key headers (legacy)
-    //   - Authorization: Bearer <secret> (legacy)
-    //   - ?secret= / ?token= query params (legacy)
+    //   - X-Webhook-Secret / X-Webhook-Token / X-Api-Key headers
+    //   - Authorization: Bearer <secret>
+    //   - ?secret= / ?token= / ?key= query params
+    //   - body fields: secret / token / apiKey / webhookSecret
     const url = new URL(request.url);
     const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
     const bearer = authHeader.toLowerCase().startsWith("bearer ")
       ? authHeader.slice(7).trim()
-      : "";
+      : authHeader.trim(); // some extensions send the raw secret with no "Bearer " prefix
+
+    // Parse body once — we may need it for both auth and payload processing.
+    let body: Record<string, unknown> = {};
+    let bodyParsed = false;
+    try {
+      body = (await request.json()) as Record<string, unknown>;
+      bodyParsed = true;
+    } catch {
+      // Non-JSON or empty body — that's fine for auth (secret may be in header/query).
+    }
+
+    const bodySecret =
+      (typeof body.secret === "string" && body.secret) ||
+      (typeof body.token === "string" && body.token) ||
+      (typeof body.apiKey === "string" && body.apiKey) ||
+      (typeof body.webhookSecret === "string" && body.webhookSecret) ||
+      "";
+
     const requestSecret =
       request.headers.get("X-Webhook-Secret") ||
       request.headers.get("x-webhook-secret") ||
@@ -143,6 +161,8 @@ export async function handleNextdoorLeadsPost(request: Request) {
       bearer ||
       url.searchParams.get("secret") ||
       url.searchParams.get("token") ||
+      url.searchParams.get("key") ||
+      bodySecret ||
       "";
 
     if (!webhookSecret) {
@@ -157,7 +177,6 @@ export async function handleNextdoorLeadsPost(request: Request) {
       const b = Buffer.from(webhookSecret);
       if (a.length === b.length) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { timingSafeEqual } = await import("crypto");
           secretsMatch = timingSafeEqual(a, b);
         } catch {
@@ -166,18 +185,26 @@ export async function handleNextdoorLeadsPost(request: Request) {
       }
     }
     if (!secretsMatch) {
+      // Diagnostic: log which header/body keys arrived (names only, never values),
+      // so we can pinpoint where the extension is putting the secret.
+      const headerKeys: string[] = [];
+      request.headers.forEach((_v, k) => headerKeys.push(k));
+      const bodyKeys = bodyParsed ? Object.keys(body).slice(0, 30) : [];
+      const queryKeys = Array.from(url.searchParams.keys());
       await logWebhookActivity("webhook_auth_failed", {
         reason: "secret_mismatch",
         received_present: !!requestSecret,
+        header_keys: headerKeys,
+        body_keys: bodyKeys,
+        query_keys: queryKeys,
+        authorization_present: !!authHeader,
       });
       return json({ ok: false, reason: "unauthorized" }, 401);
     }
 
-    let body: Record<string, unknown>;
-    try {
-      body = await request.json();
-    } catch {
+    if (!bodyParsed) {
       await logWebhookActivity("webhook_parse_failed", { reason: "invalid_json" });
+
       return json({ ok: false, reason: "invalid_json" }, 400);
     }
 
