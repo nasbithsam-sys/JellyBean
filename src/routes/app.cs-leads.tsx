@@ -2539,7 +2539,7 @@ function LeadDrawer({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
-  const isAdmin = auth.primaryRole === "admin";
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const isCs = auth.primaryRole === "cs";
   
   const [isImportant, setIsImportant] = useState(lead.is_important);
