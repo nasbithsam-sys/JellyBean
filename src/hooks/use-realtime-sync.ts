@@ -20,6 +20,7 @@ const ROLE_TABLES: Record<AppRole, string[]> = {
   maturing: ["qualified_leads", "incogniton_profiles", "shared_state"],
   // CS pipeline intentionally avoids background list invalidation.
   cs: [],
+  cs_admin: [],
   acc_handler: ["incogniton_profiles", "shared_state"],
   facebook: ["qualified_leads"],
   seo: ["qualified_leads"],
