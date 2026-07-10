@@ -164,9 +164,10 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       category: CategoryFilter,
     ): T => {
       if (category === "new") {
-        return query
-          .is("category" as never, null as never)
-          .is("assigned_myself_at" as never, null as never);
+        // Show every uncategorized lead. Self-assigning a lead must NOT hide
+        // it from other users' New tab — that caused "leads randomly
+        // disappearing and reappearing" for the rest of the team.
+        return query.is("category" as never, null as never);
       }
       if (
         category === "forwarded" ||
@@ -182,12 +183,13 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       query: T,
       category: CategoryFilter,
     ): T => {
-      // "Assigned Myself" tab: show only leads assigned to the current user.
+      // Only the "Assigned Myself" tab scopes by owner. Every other tab is
+      // shared across the team so a self-assignment by one user never
+      // removes a lead from another user's view.
       if (category === "assigned_myself")
         return query.eq("assigned_to" as never, context.userId as never);
-      if (isAdmin) return query;
-      // For other tabs, non-admins see unassigned + their own leads.
-      return query.or(`assigned_to.is.null,assigned_to.eq.${context.userId}` as never);
+      void isAdmin;
+      return query;
     };
 
     // Paged data
@@ -319,23 +321,20 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
       duplicate: 0,
     };
 
-    let newAdjustedQuery = context.supabase
+    // Count matches the list query: every uncategorized lead is "New",
+    // regardless of who has self-assigned it. Keeps the tab badge in sync
+    // with what the user actually sees in the list.
+    const newAdjustedQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
-      .is("category", null)
-      .is("assigned_myself_at", null);
-    let assignedMyselfQuery = context.supabase
+      .is("category", null);
+    const assignedMyselfQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
       .eq("assigned_to", context.userId)
       .not("assigned_myself_at", "is", null)
       .is("category", null);
-
-    if (!isAdmin) {
-      newAdjustedQuery = newAdjustedQuery.or(
-        `assigned_to.is.null,assigned_to.eq.${context.userId}` as never,
-      );
-    }
+    void isAdmin;
 
     const [
       { count: adjustedNewCount, error: adjustedNewCountError },
