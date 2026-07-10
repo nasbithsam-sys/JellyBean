@@ -2552,6 +2552,8 @@ function LeadDrawer({
     requirement2 !== (lead.requirement_2 ?? "") ||
     followup !== (lead.followup_at ? lead.followup_at.slice(0, 16) : "") ||
     isImportant !== lead.is_important;
+  const isDirtyRef = useRef(isDirty);
+  useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
 
   function handleClose() {
     void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
