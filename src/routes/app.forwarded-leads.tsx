@@ -680,8 +680,8 @@ function UnifiedForwardedLeadForm({
 
   async function save(values: LeadFormValues) {
     const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
-    if (!isAdmin && lead.cs_status !== "new") {
-      toast.error("Only pending leads can be edited.");
+    if (!isAdmin && (lead.cs_status !== "new" || lead.created_by !== auth.user?.id)) {
+      toast.error("You can only edit your own pending leads.");
       return;
     }
     setSaving(true);
