@@ -623,7 +623,7 @@ function ForwardedTable({
               </td>
               <td className="px-3 py-2">
                 <div className="flex justify-end gap-1.5">
-                  {isAdmin || r.cs_status === "new" ? (
+                  {isAdmin || (r.cs_status === "new" && r.created_by === auth.user?.id) ? (
                     <>
                       <Button
                         variant="outline"
