@@ -71,6 +71,7 @@ import {
 } from "@/lib/raw-leads.functions";
 
 import { RawLeadDuplicateDialog } from "@/components/raw-lead-duplicate-dialog";
+import { confirmDialog, confirmDiscardUnsaved } from "@/components/confirm-dialog";
 
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
 
@@ -1723,9 +1724,13 @@ function LeadDetailDialog({
     }
     if (entry.duplicate_detected) {
       const reason = entry.duplicate_reason || "Same post ID already exists in the system.";
-      if (!window.confirm(`Duplicate post detected.\n\n${reason}\n\nForward anyway?`)) {
-        return;
-      }
+      const ok = await confirmDialog({
+        title: "Duplicate post detected",
+        description: `${reason}\n\nForward anyway?`,
+        confirmText: "Forward anyway",
+        tone: "destructive",
+      });
+      if (!ok) return;
     }
     if (hasDuplicate) {
       setDuplicateConfirmOpen(true);
@@ -1756,8 +1761,7 @@ function LeadDetailDialog({
   return (
     <Dialog open onOpenChange={(o) => {
       if (!o && !busy) {
-        if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-        onClose();
+        void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
       }
     }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
@@ -1956,8 +1960,7 @@ function LeadDetailDialog({
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => {
-              if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-              onClose();
+              void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
             }} disabled={busy}>
               Close
             </Button>
@@ -1978,10 +1981,7 @@ function LeadDetailDialog({
         onOpenChange={setDuplicateConfirmOpen}
         matches={duplicatePreview}
         isConfirming={busy}
-        onCancel={() => {
-          if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-          setDuplicateConfirmOpen(false);
-        }}
+        onCancel={() => setDuplicateConfirmOpen(false)}
         onConfirm={() => void continueDespiteDuplicate()}
       />
     </Dialog>
@@ -2067,8 +2067,7 @@ function QualifyDialog({
   return (
     <Dialog open onOpenChange={(o) => {
       if (!o) {
-        if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-        onClose();
+        void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
       }
     }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>

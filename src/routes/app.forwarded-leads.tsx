@@ -29,6 +29,7 @@ import {
 import type { ForwardedStatus } from "@/lib/crm-types";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import { cn } from "@/lib/utils";
+import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
 
 export const Route = createFileRoute("/app/forwarded-leads")({ component: Page });
 
@@ -470,8 +471,7 @@ function Inner() {
 
       <Dialog open={!!editing} onOpenChange={(open) => {
         if (!open) {
-          if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-          setEditing(null);
+          void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) setEditing(null); });
         }
       }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>

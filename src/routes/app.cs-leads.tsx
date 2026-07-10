@@ -77,6 +77,7 @@ import { renderCsComposeSuggestion } from "@/lib/cs-compose-template";
 import { rephraseLeadTemplateWithAi } from "@/lib/raw-leads-ai.functions";
 
 import { cn } from "@/lib/utils";
+import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
 
 export const DEFAULT_REPHRASE_PROMPT = `You are an expert customer service assistant. Your goal is to clean, extract, and normalize three parts of a customer lead request to prepare them for an outbound message.
 
@@ -2514,6 +2515,18 @@ function LeadDrawer({
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        void confirmDiscardUnsaved(isDirtyRef.current).then((ok) => { if (ok) onClose(); });
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
@@ -2539,10 +2552,11 @@ function LeadDrawer({
     requirement2 !== (lead.requirement_2 ?? "") ||
     followup !== (lead.followup_at ? lead.followup_at.slice(0, 16) : "") ||
     isImportant !== lead.is_important;
+  const isDirtyRef = useRef(isDirty);
+  useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
 
   function handleClose() {
-    if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-    onClose();
+    void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
   }
 
   // Lock background body scroll when drawer is open
@@ -2652,6 +2666,10 @@ function LeadDrawer({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-md animate-fade-in-up"
+      onClick={handleClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Lead details"
     >
       <div
         className="bg-card w-full max-w-5xl max-h-[90vh] md:h-[80vh] flex flex-col rounded-2xl border border-border p-6 shadow-2xl overflow-y-auto md:overflow-hidden"
