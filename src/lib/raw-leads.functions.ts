@@ -133,6 +133,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
         query: z.string().max(120).default(""),
         leadFilter: z.enum(LEAD_FILTERS).default("all"),
         areaFilter: z.string().max(120).default("all"),
+        duplicateFilter: z.enum(DUPLICATE_FILTERS).default("all"),
       })
       .parse(input ?? {}),
   )
