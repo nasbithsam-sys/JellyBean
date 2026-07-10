@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { normalizePhone } from "./crm-lite";
 
 const ALLOWED_RAW_LEAD_ROLES = [
   "admin",
