@@ -471,8 +471,7 @@ function Inner() {
 
       <Dialog open={!!editing} onOpenChange={(open) => {
         if (!open) {
-          void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
-          setEditing(null);
+          void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) setEditing(null); });
         }
       }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
