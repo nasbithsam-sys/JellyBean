@@ -441,7 +441,7 @@ export function LeadForm({
 
       if (freshMatches.length > 0) {
         // Map matches to the preview format required by DuplicateLeadDialog
-        const targetNumber = normalizePhone(customerNumber);
+        // Map matches to the preview format required by DuplicateLeadDialog
         const secondTargetNumbers = extraNumbers.map((n) => normalizePhone(n)).filter((n) => n.length >= 7);
         
         const previewMatches: DuplicateMatchPreview[] = freshMatches.map((match) => {
