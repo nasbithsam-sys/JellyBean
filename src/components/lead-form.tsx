@@ -165,6 +165,7 @@ export function LeadForm({
     (initialValues?.isImportant ?? false) ? "yes" : "no",
   );
   const [existingImages, setExistingImages] = useState<string[]>(initialValues?.images ?? []);
+  const existingImageUrls = useSignedLeadUrls(existingImages);
   const [files, setFiles] = useState<File[]>([]);
   const originalLeadLink = initialValues?.originalLeadLink ?? null;
   const [isCompressing, setIsCompressing] = useState(false);
