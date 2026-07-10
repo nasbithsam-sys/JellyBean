@@ -47,7 +47,7 @@ async function ensureRequesterCanAnalyze(userId: string) {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .in("role", ["admin", "sub_admin", "scraping", "maturing"]);
+    .in("role", ["admin", "sub_admin", "maturing"]);
 
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error("Forbidden: Raw Leads access required");
