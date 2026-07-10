@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { addDays, differenceInCalendarDays, format, subDays, startOfDay } from "date-fns";
 import {
   ResponsiveContainer,
-  AreaChart,
+  ComposedChart as _RemovedAreaChart, // placeholder; AreaChart no longer used
   Area,
   XAxis,
   YAxis,
