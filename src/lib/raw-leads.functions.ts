@@ -233,6 +233,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       query: data.query,
       leadFilter: data.leadFilter,
       areaFilter: data.areaFilter,
+      duplicateFilter: data.duplicateFilter,
     }) as typeof totalCountQuery;
     const { count: totalForCategoryRaw, error: totalForCategoryError } = await totalCountQuery;
     if (totalForCategoryError) throw new Error(totalForCategoryError.message);
