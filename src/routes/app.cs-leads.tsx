@@ -362,7 +362,7 @@ function Inner() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
   const isCs = auth.primaryRole === "cs";
-  const isAdmin = auth.primaryRole === "admin";
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
 
   const [bulkTemplateId, setBulkTemplateId] = useState<string>("");
@@ -371,7 +371,8 @@ function Inner() {
   const [promptDirty, setPromptDirty] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
 
-  const canManagePrompt = auth.primaryRole === "admin" || auth.primaryRole === "cs";
+  const canManagePrompt =
+    auth.primaryRole === "admin" || auth.primaryRole === "cs" || auth.primaryRole === "cs_admin";
 
   const promptQuery = useQuery({
     queryKey: ["cs-rephrase-prompt"],
