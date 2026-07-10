@@ -295,10 +295,6 @@ function SortHeader({
   );
 }
 
-function capturedIsoFromRow(r: Row): string | null {
-  const t = parseCapturedAt(r);
-  return t ? new Date(t).toISOString() : null;
-}
 
 function leadValueFromRow(r: Row): "yes" | "no" | null {
   const raw = (r.Lead ?? "").trim().toLowerCase();
