@@ -692,7 +692,10 @@ function Inner() {
       return (data ?? []) as unknown as Lead[];
     },
     placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
+
 
   // ── Lightweight count query — runs only when indexed filter params change ──
   // Uses { count: "exact", head: true } — fetches NO rows. Runs on the same
