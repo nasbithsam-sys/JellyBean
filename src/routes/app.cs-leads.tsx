@@ -327,7 +327,7 @@ function Page() {
         description="Qualified leads handed off to CS — reach out, log the outcome, and add a comment."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "cs"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "cs", "cs_admin"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
