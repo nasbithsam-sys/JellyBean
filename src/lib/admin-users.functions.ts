@@ -9,6 +9,7 @@ const roleSchema = z.enum([
   "sub_admin",
   "maturing",
   "cs",
+  "cs_admin",
   "acc_handler",
   "facebook",
   "seo",
