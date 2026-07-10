@@ -421,6 +421,7 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [leadFilter, setLeadFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [duplicateFilter, setDuplicateFilter] = useState<"all" | "duplicates" | "unique">("all");
   const [rawLeadSort, setRawLeadSort] = useState<RawLeadSort>({
     key: "posted_at",
     direction: "desc",
@@ -520,7 +521,7 @@ function Inner() {
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter],
+    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter],
     queryFn: async () =>
       (await fetchRawLeads({
         data: {
@@ -530,6 +531,7 @@ function Inner() {
           query,
           leadFilter,
           areaFilter,
+          duplicateFilter,
         },
       })) as RawLeadPage,
     placeholderData: keepPreviousData,
@@ -538,8 +540,8 @@ function Inner() {
   });
 
   const cacheKey = useMemo(
-    () => ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter] as const,
-    [tab, pageIndex, pageSize, query, leadFilter, areaFilter],
+    () => ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter] as const,
+    [tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter],
   );
 
   const countsQuery = useQuery({
@@ -950,6 +952,24 @@ function Inner() {
             ))}
           </SelectContent>
           </Select>
+
+          <Select
+          value={duplicateFilter}
+          onValueChange={(value) => {
+            setDuplicateFilter(value as "all" | "duplicates" | "unique");
+            setPageIndex(0);
+          }}
+        >
+          <SelectTrigger className="h-9 w-[140px] text-[12px]">
+            <SelectValue placeholder="Duplicates" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All posts</SelectItem>
+            <SelectItem value="duplicates">Duplicates only</SelectItem>
+            <SelectItem value="unique">Unique only</SelectItem>
+          </SelectContent>
+          </Select>
+
 
           {tab === "new" && (
           <Button

@@ -71,6 +71,9 @@ const DUPLICATE_LOOKBACK_HOURS = 48;
 const LEAD_FILTERS = ["all", "yes", "no", "review"] as const;
 type LeadFilter = (typeof LEAD_FILTERS)[number];
 
+const DUPLICATE_FILTERS = ["all", "duplicates", "unique"] as const;
+type DuplicateFilter = (typeof DUPLICATE_FILTERS)[number];
+
 function escapeIlikeValue(value: string) {
   return value.replace(/[%_]/g, "\\$&").replace(/,/g, " ");
 }
@@ -78,7 +81,7 @@ function escapeIlikeValue(value: string) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applySearchAndFilters<T extends { eq: (...a: never[]) => T; or: (...a: never[]) => T }>(
   query: T,
-  filters: { query: string; leadFilter: LeadFilter; areaFilter: string },
+  filters: { query: string; leadFilter: LeadFilter; areaFilter: string; duplicateFilter: DuplicateFilter },
 ): T {
   let next = query;
   const trimmedQuery = filters.query.trim();
@@ -104,6 +107,13 @@ function applySearchAndFilters<T extends { eq: (...a: never[]) => T; or: (...a: 
       `data->>Account Area.eq.${filters.areaFilter},data->>Sub Area / Neighborhood.eq.${filters.areaFilter}` as never,
     );
   }
+  if (filters.duplicateFilter === "duplicates") {
+    next = (next as unknown as { eq: (c: string, v: boolean) => T }).eq("duplicate_detected", true);
+  } else if (filters.duplicateFilter === "unique") {
+    next = (next as unknown as { or: (s: string) => T }).or(
+      "duplicate_detected.is.null,duplicate_detected.eq.false",
+    );
+  }
   return next;
 }
 
@@ -123,6 +133,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
         query: z.string().max(120).default(""),
         leadFilter: z.enum(LEAD_FILTERS).default("all"),
         areaFilter: z.string().max(120).default("all"),
+        duplicateFilter: z.enum(DUPLICATE_FILTERS).default("all"),
       })
       .parse(input ?? {}),
   )
@@ -201,6 +212,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       query: data.query,
       leadFilter: data.leadFilter,
       areaFilter: data.areaFilter,
+      duplicateFilter: data.duplicateFilter,
     }) as typeof dataQuery;
     const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
@@ -221,6 +233,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       query: data.query,
       leadFilter: data.leadFilter,
       areaFilter: data.areaFilter,
+      duplicateFilter: data.duplicateFilter,
     }) as typeof totalCountQuery;
     const { count: totalForCategoryRaw, error: totalForCategoryError } = await totalCountQuery;
     if (totalForCategoryError) throw new Error(totalForCategoryError.message);
