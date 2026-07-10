@@ -76,7 +76,6 @@ import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import {
   CS_COMPOSE_TEMPLATE_KEY,
   DEFAULT_CS_COMPOSE_TEMPLATE,
-  COMPOSE_TEMPLATES,
   renderCsComposeSuggestion,
 } from "@/lib/cs-compose-template";
 import { rephraseLeadTemplateWithAi } from "@/lib/raw-leads-ai.functions";
