@@ -1723,9 +1723,13 @@ function LeadDetailDialog({
     }
     if (entry.duplicate_detected) {
       const reason = entry.duplicate_reason || "Same post ID already exists in the system.";
-      if (!window.confirm(`Duplicate post detected.\n\n${reason}\n\nForward anyway?`)) {
-        return;
-      }
+      const ok = await confirmDialog({
+        title: "Duplicate post detected",
+        description: `${reason}\n\nForward anyway?`,
+        confirmText: "Forward anyway",
+        tone: "destructive",
+      });
+      if (!ok) return;
     }
     if (hasDuplicate) {
       setDuplicateConfirmOpen(true);
