@@ -59,6 +59,8 @@ export function useSignedLeadUrls(refs: readonly (string | null | undefined)[] |
   }, [key]);
 
   return urls;
+}
+
 
 // Small helper: signs a single image ref (legacy public URL OR storage path) and
 // renders an <img>. Falls back to the raw ref on error.
