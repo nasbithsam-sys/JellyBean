@@ -9,6 +9,7 @@ import { friendlyError } from "@/lib/error-messages";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { useNewLeadAlert } from "@/hooks/use-realtime-sync";
+import { useSignedLeadUrls } from "@/lib/lead-attachments";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
