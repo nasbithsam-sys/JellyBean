@@ -321,23 +321,20 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
       duplicate: 0,
     };
 
-    let newAdjustedQuery = context.supabase
+    // Count matches the list query: every uncategorized lead is "New",
+    // regardless of who has self-assigned it. Keeps the tab badge in sync
+    // with what the user actually sees in the list.
+    const newAdjustedQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
-      .is("category", null)
-      .is("assigned_myself_at", null);
-    let assignedMyselfQuery = context.supabase
+      .is("category", null);
+    const assignedMyselfQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
       .eq("assigned_to", context.userId)
       .not("assigned_myself_at", "is", null)
       .is("category", null);
-
-    if (!isAdmin) {
-      newAdjustedQuery = newAdjustedQuery.or(
-        `assigned_to.is.null,assigned_to.eq.${context.userId}` as never,
-      );
-    }
+    void isAdmin;
 
     const [
       { count: adjustedNewCount, error: adjustedNewCountError },
