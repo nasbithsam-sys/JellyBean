@@ -1201,8 +1201,8 @@ async function deleteForwardedLead(
   qc: ReturnType<typeof useQueryClient>,
 ) {
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
-  if (!isAdmin && lead.cs_status !== "new") {
-    toast.error("Only pending leads can be deleted.");
+  if (!isAdmin && (lead.cs_status !== "new" || lead.created_by !== auth.user?.id)) {
+    toast.error("You can only delete your own pending leads.");
     return;
   }
   if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`)) return;
