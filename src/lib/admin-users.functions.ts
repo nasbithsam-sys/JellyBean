@@ -62,16 +62,26 @@ async function loadActorName(userId: string) {
   }
 }
 
-// Bootstrap: allow creating the FIRST admin only when zero users exist.
+// Bootstrap: allow creating the FIRST admin only when zero admins exist.
+// Checking user_roles (not profiles) closes an escalation window where a
+// profile exists but no admin role has been assigned yet.
 export const bootstrapFirstAdmin = createServerFn({ method: "POST" })
   .inputValidator((input) => createUserSchema.parse(input))
   .handler(async ({ data }) => {
-    // Count existing profiles
-    const { count, error: countErr } = await supabaseAdmin
+    const { count: adminCount, error: adminErr } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id", { count: "exact", head: true })
+      .eq("role", "admin");
+    if (adminErr) throw new Error(adminErr.message);
+    if ((adminCount ?? 0) > 0) throw new Error("Bootstrap is closed; an admin already exists.");
+
+    // Also guard against pre-existing non-admin users to prevent takeover
+    // when someone else has been provisioned but no admin role granted.
+    const { count: profileCount, error: profileErr } = await supabaseAdmin
       .from("profiles")
       .select("id", { count: "exact", head: true });
-    if (countErr) throw new Error(countErr.message);
-    if ((count ?? 0) > 0) throw new Error("Bootstrap is closed; users already exist.");
+    if (profileErr) throw new Error(profileErr.message);
+    if ((profileCount ?? 0) > 0) throw new Error("Bootstrap is closed; users already exist.");
 
     // Force the bootstrap role to admin no matter what was passed
     return await createUserInternal({ ...data, role: "admin" });
