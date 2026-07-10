@@ -8,9 +8,6 @@ const CORS_HEADERS: Record<string, string> = {
 import {
   extractNextdoorPostId,
   canonicalizeLeadLink,
-  normalizeLeadText,
-  normalizeName,
-  normalizeNeighborhood,
 } from "./lead-link-canonicalizer";
 
 const SCHEMA_VERSION = "2026-04-08.nd.v1";

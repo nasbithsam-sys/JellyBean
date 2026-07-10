@@ -15,7 +15,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody } from "@/components/page";
 import { supabase } from "@/integrations/supabase/client";
-import { cn } from "@/lib/utils";
+
 
 export const Route = createFileRoute("/app/")({
   component: DashboardHome,

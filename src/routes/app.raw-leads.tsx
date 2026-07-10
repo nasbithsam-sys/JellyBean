@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
 import { useAuth } from "@/hooks/use-auth";
@@ -71,7 +71,7 @@ import {
 } from "@/lib/raw-leads.functions";
 
 import { RawLeadDuplicateDialog } from "@/components/raw-lead-duplicate-dialog";
-import { buildVisibleRawLeadDuplicateMap } from "@/lib/raw-lead-duplicate-detector";
+
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page });
@@ -198,19 +198,6 @@ function formatPhoneInput(value: string): string {
 }
 
 // ── Row helpers ───────────────────────────────────────────────────────────────
-function keyFor(r: Row) {
-  return (
-    r["Lead Link"] ||
-    `${r["Account Name"] ?? ""}|${r["Posted Date & Time"] ?? ""}|${(r["Post Text"] ?? "").slice(0, 40)}`
-  );
-}
-
-function parseCapturedAt(r: Row): number {
-  const d = r["Captured Date (UTC)"];
-  if (!d) return 0;
-  const t = Date.parse(d);
-  return Number.isNaN(t) ? 0 : t;
-}
 
 function parseDateTime(value?: string | null, time?: string | null): number {
   const joined = [value, time].filter(Boolean).join(" ");
@@ -300,10 +287,6 @@ function SortHeader({
   );
 }
 
-function capturedIsoFromRow(r: Row): string | null {
-  const t = parseCapturedAt(r);
-  return t ? new Date(t).toISOString() : null;
-}
 
 function leadValueFromRow(r: Row): "yes" | "no" | null {
   const raw = (r.Lead ?? "").trim().toLowerCase();
@@ -2005,18 +1988,6 @@ function LeadDetailDialog({
   );
 }
 
-function DetailField({ label, value }: { label: string; value?: string }) {
-  return (
-    <div className="min-w-0">
-      <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-        {label}
-      </Label>
-      <div className="text-foreground truncate" title={value}>
-        {value || <span className="text-muted-foreground">—</span>}
-      </div>
-    </div>
-  );
-}
 
 // ── Forward to CS dialog ──────────────────────────────────────────────────────
 function QualifyDialog({

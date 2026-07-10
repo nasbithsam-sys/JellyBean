@@ -8,16 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { formatPhone, normalizePhone } from "@/lib/crm-lite";
 import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
@@ -451,7 +441,7 @@ export function LeadForm({
 
       if (freshMatches.length > 0) {
         // Map matches to the preview format required by DuplicateLeadDialog
-        const targetNumber = normalizePhone(customerNumber);
+        // Map matches to the preview format required by DuplicateLeadDialog
         const secondTargetNumbers = extraNumbers.map((n) => normalizePhone(n)).filter((n) => n.length >= 7);
         
         const previewMatches: DuplicateMatchPreview[] = freshMatches.map((match) => {

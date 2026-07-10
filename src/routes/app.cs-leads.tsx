@@ -67,18 +67,13 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database, Json } from "@/integrations/supabase/types";
+import type { Json } from "@/integrations/supabase/types";
 import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 import type { CsStatus, LeadNote } from "@/lib/crm-types";
 import { NumberNameSelect } from "@/components/number-name-select";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
-import {
-  CS_COMPOSE_TEMPLATE_KEY,
-  DEFAULT_CS_COMPOSE_TEMPLATE,
-  COMPOSE_TEMPLATES,
-  renderCsComposeSuggestion,
-} from "@/lib/cs-compose-template";
+import { renderCsComposeSuggestion } from "@/lib/cs-compose-template";
 import { rephraseLeadTemplateWithAi } from "@/lib/raw-leads-ai.functions";
 
 import { cn } from "@/lib/utils";
@@ -216,67 +211,7 @@ const PIPELINE_STATUSES = [
   "need_follow_up",
 ] as const satisfies readonly CsStatus[];
 
-type ComposeTemplateValue = {
-  template?: string;
-};
 
-function readComposeTemplate(value: Json | null | undefined) {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const template = (value as ComposeTemplateValue).template;
-    if (typeof template === "string" && template.trim()) return template;
-  }
-  return DEFAULT_CS_COMPOSE_TEMPLATE;
-}
-
-function useCsComposeTemplate(userId: string | undefined) {
-  const qc = useQueryClient();
-  const query = useQuery({
-    queryKey: ["shared_state", CS_COMPOSE_TEMPLATE_KEY],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("shared_state")
-        .select("value")
-        .eq("key", CS_COMPOSE_TEMPLATE_KEY)
-        .maybeSingle();
-      if (error) throw error;
-      return readComposeTemplate(data?.value);
-    },
-  });
-
-  useEffect(() => {
-    const channel = supabase
-      .channel(`cs-compose-template-sync-${crypto.randomUUID()}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "shared_state",
-          filter: `key=eq.${CS_COMPOSE_TEMPLATE_KEY}`,
-        },
-        () => qc.invalidateQueries({ queryKey: ["shared_state", CS_COMPOSE_TEMPLATE_KEY] }),
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
-
-  const save = async (template: string) => {
-    const next = template.trim();
-    if (!next) throw new Error("Template cannot be empty");
-    const { error } = await supabase.from("shared_state").upsert({
-      key: CS_COMPOSE_TEMPLATE_KEY,
-      value: { template: next },
-      updated_by: userId ?? null,
-      updated_at: new Date().toISOString(),
-    });
-    if (error) throw error;
-    await qc.invalidateQueries({ queryKey: ["shared_state", CS_COMPOSE_TEMPLATE_KEY] });
-  };
-
-  return { ...query, template: query.data ?? DEFAULT_CS_COMPOSE_TEMPLATE, save };
-}
 
 type ComposeTemplateItem = {
   id: string;
@@ -427,7 +362,6 @@ function Inner() {
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
   const isCs = auth.primaryRole === "cs";
   const isAdmin = auth.primaryRole === "admin";
-  const composeTemplate = useCsComposeTemplate(auth.user?.id);
   const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
 
   const [bulkTemplateId, setBulkTemplateId] = useState<string>("");
@@ -1676,69 +1610,6 @@ function Inner() {
   );
 }
 
-function ComposeTemplatePanel({
-  template,
-  loading,
-  saving,
-  onSave,
-}: {
-  template: string;
-  loading: boolean;
-  saving: boolean;
-  onSave: (template: string) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState(template);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    setDraft(template);
-  }, [template]);
-
-  async function save() {
-    setBusy(true);
-    try {
-      await onSave(draft);
-      toast.success("Compose template updated");
-    } catch (e) {
-      toast.error(friendlyError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">Compose template</h2>
-          <p className="text-[12px] text-muted-foreground mt-1">
-            Shared suggestion shown on every CS lead compose box.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          className="h-8"
-          onClick={save}
-          disabled={busy || loading || draft.trim() === template.trim()}
-        >
-          {(busy || saving) && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-          Save template
-        </Button>
-      </div>
-      <Textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        rows={3}
-        className="mt-3 text-[12.5px]"
-        placeholder={DEFAULT_CS_COMPOSE_TEMPLATE}
-      />
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        Tokens: (Person first name) and (Service Context) are filled from the lead. (Requirement)
-        stays in the suggestion for CS to write manually.
-      </p>
-    </div>
-  );
-}
 
 function CsLeadsTable({
   leads,
@@ -2656,7 +2527,7 @@ function LeadDrawer({
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
-  const isImportantInitial = lead.is_important;
+  
   const [isImportant, setIsImportant] = useState(lead.is_important);
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
