@@ -1727,7 +1727,7 @@ function LeadCard({
   const [important, setImportant] = useState(lead.is_important);
   const [savingImportant, setSavingImportant] = useState(false);
   const initials = "";
-  const isAdmin = auth.primaryRole === "admin";
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
