@@ -81,7 +81,7 @@ function escapeIlikeValue(value: string) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applySearchAndFilters<T extends { eq: (...a: never[]) => T; or: (...a: never[]) => T }>(
   query: T,
-  filters: { query: string; leadFilter: LeadFilter; areaFilter: string },
+  filters: { query: string; leadFilter: LeadFilter; areaFilter: string; duplicateFilter: DuplicateFilter },
 ): T {
   let next = query;
   const trimmedQuery = filters.query.trim();
@@ -105,6 +105,13 @@ function applySearchAndFilters<T extends { eq: (...a: never[]) => T; or: (...a: 
   if (filters.areaFilter !== "all") {
     next = next.or(
       `data->>Account Area.eq.${filters.areaFilter},data->>Sub Area / Neighborhood.eq.${filters.areaFilter}` as never,
+    );
+  }
+  if (filters.duplicateFilter === "duplicates") {
+    next = (next as unknown as { eq: (c: string, v: boolean) => T }).eq("duplicate_detected", true);
+  } else if (filters.duplicateFilter === "unique") {
+    next = (next as unknown as { or: (s: string) => T }).or(
+      "duplicate_detected.is.null,duplicate_detected.eq.false",
     );
   }
   return next;
