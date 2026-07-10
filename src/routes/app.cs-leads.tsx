@@ -2666,6 +2666,10 @@ function LeadDrawer({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-md animate-fade-in-up"
+      onClick={handleClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Lead details"
     >
       <div
         className="bg-card w-full max-w-5xl max-h-[90vh] md:h-[80vh] flex flex-col rounded-2xl border border-border p-6 shadow-2xl overflow-y-auto md:overflow-hidden"
