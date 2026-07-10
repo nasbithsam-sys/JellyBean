@@ -792,6 +792,7 @@ function ForwardedLeadForm({
   const [existingImages, setExistingImages] = useState<string[]>(
     Array.isArray(lead.images) ? (lead.images as string[]) : []
   );
+  const existingSignedUrls = useSignedLeadUrls(existingImages);
   const [files, setFiles] = useState<File[]>([]);
   const [service, setService] = useState(lead.service ?? "");
   const [passItTo, setPassItTo] = useState(lead.pass_it_to ?? "");
