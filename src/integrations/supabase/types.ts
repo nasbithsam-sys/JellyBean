@@ -579,6 +579,7 @@ export type Database = {
           id: string
         }[]
       }
+      cs_leads_status_counts: { Args: never; Returns: Json }
       current_user_has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean

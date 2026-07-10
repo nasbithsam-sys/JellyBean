@@ -735,32 +735,27 @@ function Inner() {
   const allTimeStatusCounts = useQuery({
     queryKey: ["cs_leads", "status_counts_all_time"],
     queryFn: async () => {
-      const countForStatus = async (status: CsStatus | null) => {
-        let q = supabase.from("qualified_leads").select("id", { count: "exact", head: true });
-        if (status) q = q.eq("cs_status", status);
-        const { count, error } = await q;
-        if (error) throw error;
-        return count ?? 0;
-      };
-
-      const entries = await Promise.all([
-        countForStatus(null),
-        ...PIPELINE_STATUSES.map(async (status) => [status, await countForStatus(status)] as const),
-      ]);
-
+      // Single-query RPC: returns all totals + per-status counts in one
+      // database scan. Previously this fired 5+ separate count(*) queries
+      // per page load — the #1 DB load in the app.
+      const { data, error } = await supabase.rpc("cs_leads_status_counts" as never);
+      if (error) throw error;
+      const payload = (data ?? {}) as { all?: number; statuses?: Record<string, number> };
       const countsByStatus: Record<string, number> = {};
       for (const status of PIPELINE_STATUSES) countsByStatus[status] = 0;
-      for (const entry of entries.slice(1) as Array<readonly [CsStatus, number]>) {
-        countsByStatus[entry[0]] = entry[1];
+      for (const [k, v] of Object.entries(payload.statuses ?? {})) {
+        countsByStatus[k] = Number(v ?? 0);
       }
-
       return {
-        all: entries[0] as number,
+        all: Number(payload.all ?? 0),
         statuses: countsByStatus,
       };
     },
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
+
 
   const totalPages = Math.max(1, Math.ceil((totalCount.data ?? 0) / PAGE_SIZE));
 
