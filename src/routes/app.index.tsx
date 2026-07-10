@@ -51,7 +51,7 @@ function DashboardHome() {
   // Role-based landing redirect
   useEffect(() => {
     if (auth.loading) return;
-    if (role === "cs") navigate({ to: "/app/cs-leads", replace: true });
+    if (role === "cs" || role === "cs_admin") navigate({ to: "/app/cs-leads", replace: true });
     else if (role === "scraping" || role === "maturing")
       navigate({ to: "/app/raw-leads", replace: true });
     else if (role === "acc_handler") navigate({ to: "/app/map", replace: true });
