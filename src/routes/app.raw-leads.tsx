@@ -1761,8 +1761,7 @@ function LeadDetailDialog({
   return (
     <Dialog open onOpenChange={(o) => {
       if (!o && !busy) {
-        void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
-        onClose();
+        void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
       }
     }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
