@@ -2515,6 +2515,18 @@ function LeadDrawer({
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        void confirmDiscardUnsaved(isDirtyRef.current).then((ok) => { if (ok) onClose(); });
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [status, setStatus] = useState<CsStatus>(lead.cs_status);
   const [assignedTo, setAssignedTo] = useState<string | null>(lead.assigned_to);
   const [note, setNote] = useState("");
