@@ -34,6 +34,17 @@ export function confirmDialog(opts: ConfirmOptions = {}): Promise<boolean> {
   });
 }
 
+export async function confirmDiscardUnsaved(isDirty: boolean): Promise<boolean> {
+  if (!isDirty) return true;
+  return confirmDialog({
+    title: "Discard unsaved changes?",
+    description: "You have unsaved changes that will be lost if you close now.",
+    confirmText: "Discard",
+    cancelText: "Keep editing",
+    tone: "destructive",
+  });
+}
+
 export function ConfirmDialogProvider() {
   const [pending, setP] = useState<Pending | null>(null);
 
