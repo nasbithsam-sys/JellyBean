@@ -9,6 +9,7 @@ import { friendlyError } from "@/lib/error-messages";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { useNewLeadAlert } from "@/hooks/use-realtime-sync";
+import { useSignedLeadUrls } from "@/lib/lead-attachments";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2836,29 +2837,7 @@ function LeadDrawer({
               </div>
             )}
             {isAdmin && Array.isArray(lead.images) && lead.images.length > 0 && (
-              <div>
-                <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-                  Attachments ({lead.images.length})
-                </Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {lead.images.map((url) => (
-                    <a
-                      key={url}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block aspect-square rounded-md overflow-hidden border border-border bg-muted hover:opacity-80 transition-opacity"
-                    >
-                      <img
-                        src={url}
-                        alt="Lead attachment"
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    </a>
-                  ))}
-                </div>
-              </div>
+              <LeadAttachmentsGrid refs={lead.images as string[]} />
             )}
           </div>
 
@@ -3466,6 +3445,33 @@ function TemplateRow({
         >
           Delete
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function LeadAttachmentsGrid({ refs }: { refs: string[] }) {
+  const urls = useSignedLeadUrls(refs);
+  return (
+    <div>
+      <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+        Attachments ({refs.length})
+      </Label>
+      <div className="grid grid-cols-3 gap-2">
+        {refs.map((ref, i) => {
+          const url = urls[i] ?? ref;
+          return (
+            <a
+              key={ref + i}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="block aspect-square rounded-md overflow-hidden border border-border bg-muted hover:opacity-80 transition-opacity"
+            >
+              <img src={url} alt="Lead attachment" className="h-full w-full object-cover" loading="lazy" />
+            </a>
+          );
+        })}
       </div>
     </div>
   );

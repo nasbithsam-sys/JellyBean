@@ -3,6 +3,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, ImagePlus, Plus, X, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink } from "lucide-react";
+import { useSignedLeadUrls } from "@/lib/lead-attachments";
 import { formatDistanceToNow, startOfDay, endOfDay } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
@@ -791,6 +792,7 @@ function ForwardedLeadForm({
   const [existingImages, setExistingImages] = useState<string[]>(
     Array.isArray(lead.images) ? (lead.images as string[]) : []
   );
+  const existingSignedUrls = useSignedLeadUrls(existingImages);
   const [files, setFiles] = useState<File[]>([]);
   const [service, setService] = useState(lead.service ?? "");
   const [passItTo, setPassItTo] = useState(lead.pass_it_to ?? "");
@@ -1073,8 +1075,9 @@ function ForwardedLeadForm({
           />
           <div className="flex flex-wrap gap-3 items-start">
             {/* Existing Images from DB */}
-            {existingImages.map((url, idx) => {
-              const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(url);
+            {existingImages.map((ref, idx) => {
+              const url = existingSignedUrls[idx] ?? ref;
+              const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(ref);
               return (
                 <div
                   key={`existing-${idx}`}

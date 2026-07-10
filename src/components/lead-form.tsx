@@ -23,6 +23,7 @@ import { formatPhone, normalizePhone } from "@/lib/crm-lite";
 import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
 import { compressVideoInBrowser, MAX_VIDEO_BYTES, ALLOWED_VIDEO_MIME_TYPES, getVideoDimensions } from "@/lib/video-compressor";
 import { DuplicateLeadDialog, type DuplicateMatchPreview } from "@/components/duplicate-lead-dialog";
+import { useSignedLeadUrls } from "@/lib/lead-attachments";
 
 const BUCKET = "lead-attachments";
 const MAX_IMAGES = 20;
@@ -95,7 +96,6 @@ export function uploadLeadImages({
           file: File,
           options: { cacheControl: string; upsert: boolean; contentType: string },
         ) => Promise<{ error: { message: string } | null }>;
-        getPublicUrl: (path: string) => { data: { publicUrl: string } };
       };
     };
   };
@@ -110,10 +110,12 @@ export function uploadLeadImages({
         contentType: file.type,
       });
       if (error) throw new Error(`Upload failed: ${error.message}`);
-      return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+      // Store the storage path (bucket is private; render via signed URLs).
+      return path;
     }),
   );
 }
+
 
 export function LeadForm({
   title = "Lead form",
@@ -163,6 +165,7 @@ export function LeadForm({
     (initialValues?.isImportant ?? false) ? "yes" : "no",
   );
   const [existingImages, setExistingImages] = useState<string[]>(initialValues?.images ?? []);
+  const existingImageUrls = useSignedLeadUrls(existingImages);
   const [files, setFiles] = useState<File[]>([]);
   const originalLeadLink = initialValues?.originalLeadLink ?? null;
   const [isCompressing, setIsCompressing] = useState(false);
@@ -668,8 +671,9 @@ export function LeadForm({
             />
             <div className="flex flex-wrap gap-3 items-start">
               {/* Existing Images from DB */}
-              {existingImages.map((url, idx) => {
-                const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(url);
+              {existingImages.map((ref, idx) => {
+                const url = existingImageUrls[idx] ?? ref;
+                const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(ref);
                 return (
                   <div
                     key={`existing-${idx}`}
