@@ -38,6 +38,7 @@ import {
   type LeadFormValues,
   type LeadReferenceMode,
 } from "@/components/lead-form";
+import { SignedLeadImage } from "@/lib/lead-attachments";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { DateRange } from "react-day-picker";
