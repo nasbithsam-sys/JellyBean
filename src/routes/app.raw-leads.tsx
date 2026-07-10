@@ -1805,6 +1805,15 @@ function LeadDetailDialog({
         </DialogHeader>
 
         <div className="space-y-3 text-[12.5px] min-w-0">
+          {entry.duplicate_detected && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+              <div className="font-semibold">Duplicate post detected</div>
+              <div className="text-destructive/90">
+                {entry.duplicate_reason || "This post ID already exists in the system."}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 min-w-0">
             <div className="min-w-0">
               <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
