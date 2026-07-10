@@ -426,7 +426,6 @@ function Inner() {
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
   const isCs = auth.primaryRole === "cs";
   const isAdmin = auth.primaryRole === "admin";
-  const composeTemplate = useCsComposeTemplate(auth.user?.id);
   const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
 
   const [bulkTemplateId, setBulkTemplateId] = useState<string>("");
