@@ -329,7 +329,8 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
     const newAdjustedQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
-      .is("category", null);
+      .is("category", null)
+      .is("assigned_myself_at", null);
     const assignedMyselfQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
