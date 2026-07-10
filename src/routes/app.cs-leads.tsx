@@ -782,6 +782,8 @@ function Inner() {
       if (error) throw error;
       return count ?? 0;
     },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   // CS team — used to display assignee names and (for admins) to reassign.
@@ -789,7 +791,10 @@ function Inner() {
   const team = useQuery({
     queryKey: ["cs_team"],
     queryFn: () => listTeam(),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
+
   const teamById = useMemo(() => {
     const map = new Map<string, CsTeamMember>();
     for (const m of team.data ?? []) map.set(m.user_id, m);
