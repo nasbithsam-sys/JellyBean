@@ -50,6 +50,7 @@ type Role =
   | "scraping"
   | "maturing"
   | "cs"
+  | "cs_admin"
   | "acc_handler"
   | "facebook"
   | "seo";

@@ -666,6 +666,7 @@ export type Database = {
         | "facebook"
         | "seo"
         | "sub_admin"
+        | "cs_admin"
       cs_status:
         | "new"
         | "called"
@@ -830,6 +831,7 @@ export const Constants = {
         "facebook",
         "seo",
         "sub_admin",
+        "cs_admin",
       ],
       cs_status: [
         "new",

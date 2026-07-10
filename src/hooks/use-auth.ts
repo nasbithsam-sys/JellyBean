@@ -17,6 +17,7 @@ export type AppRole =
   | "scraping"
   | "maturing"
   | "cs"
+  | "cs_admin"
   | "acc_handler"
   | "facebook"
   | "seo";
@@ -136,19 +137,21 @@ export function useAuthState(): AuthState {
     ? "admin"
     : roles.includes("sub_admin")
       ? "sub_admin"
-      : roles.includes("scraping")
-        ? "scraping"
-        : roles.includes("maturing")
-          ? "maturing"
-          : roles.includes("cs")
-            ? "cs"
-            : roles.includes("acc_handler")
-              ? "acc_handler"
-              : roles.includes("facebook")
-                ? "facebook"
-                : roles.includes("seo")
-                  ? "seo"
-                  : null;
+      : roles.includes("cs_admin")
+        ? "cs_admin"
+        : roles.includes("scraping")
+          ? "scraping"
+          : roles.includes("maturing")
+            ? "maturing"
+            : roles.includes("cs")
+              ? "cs"
+              : roles.includes("acc_handler")
+                ? "acc_handler"
+                : roles.includes("facebook")
+                  ? "facebook"
+                  : roles.includes("seo")
+                    ? "seo"
+                    : null;
 
   return { loading, session, user, profile, roles, primaryRole, refresh, signOut };
 }

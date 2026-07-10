@@ -327,7 +327,7 @@ function Page() {
         description="Qualified leads handed off to CS — reach out, log the outcome, and add a comment."
       />
       <PageBody className="!pt-5">
-        <RoleGate allow={["admin", "cs"]} current={auth.primaryRole}>
+        <RoleGate allow={["admin", "cs", "cs_admin"]} current={auth.primaryRole}>
           <Inner />
         </RoleGate>
       </PageBody>
@@ -362,7 +362,7 @@ function Inner() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
   const isCs = auth.primaryRole === "cs";
-  const isAdmin = auth.primaryRole === "admin";
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
 
   const [bulkTemplateId, setBulkTemplateId] = useState<string>("");
@@ -371,7 +371,8 @@ function Inner() {
   const [promptDirty, setPromptDirty] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
 
-  const canManagePrompt = auth.primaryRole === "admin" || auth.primaryRole === "cs";
+  const canManagePrompt =
+    auth.primaryRole === "admin" || auth.primaryRole === "cs" || auth.primaryRole === "cs_admin";
 
   const promptQuery = useQuery({
     queryKey: ["cs-rephrase-prompt"],
@@ -1726,7 +1727,7 @@ function LeadCard({
   const [important, setImportant] = useState(lead.is_important);
   const [savingImportant, setSavingImportant] = useState(false);
   const initials = "";
-  const isAdmin = auth.primaryRole === "admin";
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const isCs = auth.primaryRole === "cs";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
@@ -2538,7 +2539,7 @@ function LeadDrawer({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
-  const isAdmin = auth.primaryRole === "admin";
+  const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const isCs = auth.primaryRole === "cs";
   
   const [isImportant, setIsImportant] = useState(lead.is_important);
