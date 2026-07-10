@@ -733,7 +733,10 @@ function Inner() {
       return count ?? 0;
     },
     placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
+
 
   const allTimeStatusCounts = useQuery({
     queryKey: ["cs_leads", "status_counts_all_time"],
