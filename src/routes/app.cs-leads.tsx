@@ -811,7 +811,10 @@ function Inner() {
       if (error) throw error;
       return data ?? [];
     },
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
+
 
   const profilesById = useMemo(() => {
     const map = new Map<string, { full_name: string | null; email: string }>();
