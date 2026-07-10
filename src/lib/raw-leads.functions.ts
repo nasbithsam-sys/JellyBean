@@ -212,6 +212,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       query: data.query,
       leadFilter: data.leadFilter,
       areaFilter: data.areaFilter,
+      duplicateFilter: data.duplicateFilter,
     }) as typeof dataQuery;
     const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
