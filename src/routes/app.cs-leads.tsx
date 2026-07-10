@@ -2654,7 +2654,7 @@ function LeadDrawer({
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
   const isAdmin = auth.primaryRole === "admin";
   const isCs = auth.primaryRole === "cs";
-  const isImportantInitial = lead.is_important;
+  
   const [isImportant, setIsImportant] = useState(lead.is_important);
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
