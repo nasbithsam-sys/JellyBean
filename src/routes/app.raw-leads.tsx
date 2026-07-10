@@ -1960,8 +1960,7 @@ function LeadDetailDialog({
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => {
-              void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
-              onClose();
+              void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
             }} disabled={busy}>
               Close
             </Button>
@@ -1982,10 +1981,7 @@ function LeadDetailDialog({
         onOpenChange={setDuplicateConfirmOpen}
         matches={duplicatePreview}
         isConfirming={busy}
-        onCancel={() => {
-          void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
-          setDuplicateConfirmOpen(false);
-        }}
+        onCancel={() => setDuplicateConfirmOpen(false)}
         onConfirm={() => void continueDespiteDuplicate()}
       />
     </Dialog>
