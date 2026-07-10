@@ -607,6 +607,7 @@ export type Database = {
       raw_lead_cache_category_counts: {
         Args: { _is_admin?: boolean; _user_id: string }
         Returns: {
+          assigned_myself: number
           duplicate: number
           forwarded: number
           new: number
