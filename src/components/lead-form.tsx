@@ -95,7 +95,6 @@ export function uploadLeadImages({
           file: File,
           options: { cacheControl: string; upsert: boolean; contentType: string },
         ) => Promise<{ error: { message: string } | null }>;
-        getPublicUrl: (path: string) => { data: { publicUrl: string } };
       };
     };
   };
@@ -110,10 +109,12 @@ export function uploadLeadImages({
         contentType: file.type,
       });
       if (error) throw new Error(`Upload failed: ${error.message}`);
-      return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+      // Store the storage path (bucket is private; render via signed URLs).
+      return path;
     }),
   );
 }
+
 
 export function LeadForm({
   title = "Lead form",
