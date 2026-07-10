@@ -67,7 +67,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database, Json } from "@/integrations/supabase/types";
+import type { Json } from "@/integrations/supabase/types";
 import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 import type { CsStatus, LeadNote } from "@/lib/crm-types";
