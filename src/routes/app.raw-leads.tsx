@@ -521,7 +521,7 @@ function Inner() {
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter],
+    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter],
     queryFn: async () =>
       (await fetchRawLeads({
         data: {
@@ -531,6 +531,7 @@ function Inner() {
           query,
           leadFilter,
           areaFilter,
+          duplicateFilter,
         },
       })) as RawLeadPage,
     placeholderData: keepPreviousData,
@@ -539,8 +540,8 @@ function Inner() {
   });
 
   const cacheKey = useMemo(
-    () => ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter] as const,
-    [tab, pageIndex, pageSize, query, leadFilter, areaFilter],
+    () => ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter] as const,
+    [tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter],
   );
 
   const countsQuery = useQuery({
