@@ -199,14 +199,6 @@ function formatPhoneInput(value: string): string {
 
 // ── Row helpers ───────────────────────────────────────────────────────────────
 
-
-function parseCapturedAt(r: Row): number {
-  const d = r["Captured Date (UTC)"];
-  if (!d) return 0;
-  const t = Date.parse(d);
-  return Number.isNaN(t) ? 0 : t;
-}
-
 function parseDateTime(value?: string | null, time?: string | null): number {
   const joined = [value, time].filter(Boolean).join(" ");
   if (!joined.trim()) return 0;
