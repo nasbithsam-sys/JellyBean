@@ -89,6 +89,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <Outlet />
       <Toaster richColors position="bottom-right" />
+      <ConfirmDialogProvider />
     </QueryClientProvider>
   );
 }
