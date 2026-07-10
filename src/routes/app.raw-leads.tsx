@@ -1996,18 +1996,6 @@ function LeadDetailDialog({
   );
 }
 
-function DetailField({ label, value }: { label: string; value?: string }) {
-  return (
-    <div className="min-w-0">
-      <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
-        {label}
-      </Label>
-      <div className="text-foreground truncate" title={value}>
-        {value || <span className="text-muted-foreground">—</span>}
-      </div>
-    </div>
-  );
-}
 
 // ── Forward to CS dialog ──────────────────────────────────────────────────────
 function QualifyDialog({
