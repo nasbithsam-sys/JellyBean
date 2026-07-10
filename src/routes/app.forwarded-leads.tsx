@@ -747,25 +747,6 @@ function UnifiedForwardedLeadForm({
   );
 }
 
-function Field({
-  label,
-  required = false,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-w-0">
-      <Label className="block mb-1.5">
-        {label}
-        {required ? <span className="text-destructive"> (Required)</span> : null}
-      </Label>
-      {children}
-    </div>
-  );
-}
 
 
 async function deleteForwardedLead(
