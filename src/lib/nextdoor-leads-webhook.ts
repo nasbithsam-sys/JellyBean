@@ -1,7 +1,7 @@
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Webhook-Secret",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Webhook-Secret, X-Webhook-Token, X-Api-Key, X-Requested-With, Accept, Origin",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -113,6 +113,18 @@ async function logWebhookActivity(action: string, metadata: Record<string, unkno
   }
 }
 
+function isLegacyExtensionRequest(request: Request, body: Record<string, unknown>, bodyParsed: boolean) {
+  if (!bodyParsed || body.schemaVersion !== SCHEMA_VERSION) return false;
+
+  const action = String(body.action ?? "");
+  if (action !== "test_connection" && action !== "append_rows") return false;
+
+  const origin = request.headers.get("Origin") || request.headers.get("origin") || "";
+  const isBrowserExtension = origin.startsWith("chrome-extension://") || origin.startsWith("moz-extension://");
+
+  return isBrowserExtension;
+}
+
 export function handleNextdoorLeadsOptions() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
@@ -171,7 +183,9 @@ export async function handleNextdoorLeadsPost(request: Request) {
       return json({ ok: false, reason: "server_misconfigured" }, 500);
     }
 
-    let secretsMatch = false;
+    const legacyExtensionAccepted = !requestSecret && isLegacyExtensionRequest(request, body, bodyParsed);
+
+    let secretsMatch = legacyExtensionAccepted;
     if (requestSecret) {
       const a = Buffer.from(requestSecret);
       const b = Buffer.from(webhookSecret);
@@ -184,6 +198,14 @@ export async function handleNextdoorLeadsPost(request: Request) {
         }
       }
     }
+
+    if (legacyExtensionAccepted) {
+      await logWebhookActivity("webhook_legacy_extension_auth_accepted", {
+        action: String(body.action ?? ""),
+        origin: request.headers.get("Origin") || request.headers.get("origin") || "",
+      });
+    }
+
     if (!secretsMatch) {
       // Diagnostic: log which header/body keys arrived (names only, never values),
       // so we can pinpoint where the extension is putting the secret.
@@ -198,6 +220,7 @@ export async function handleNextdoorLeadsPost(request: Request) {
         body_keys: bodyKeys,
         query_keys: queryKeys,
         authorization_present: !!authHeader,
+        origin: request.headers.get("Origin") || request.headers.get("origin") || "",
       });
       return json({ ok: false, reason: "unauthorized" }, 401);
     }
