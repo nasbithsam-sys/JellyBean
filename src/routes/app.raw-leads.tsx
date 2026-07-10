@@ -323,33 +323,11 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
 }
 
 // ── Supabase cache helpers ────────────────────────────────────────────────────
-async function loadCache(limit: number): Promise<CacheEntry[]> {
-  const columns =
-    "id, row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to, assigned_myself_at, duplicate_detected, duplicate_reason, duplicate_match_type, duplicate_key, duplicate_of_raw_lead_id, duplicate_of_qualified_lead_id, canonical_post_id, canonical_lead_link";
+// NOTE: Raw-lead reads go through the `fetchRawLeadCache` server function.
+// A previous `loadCache()` helper here fetched the table twice (all rows + a
+// second query for uncategorised rows) and was unused — removed to prevent
+// accidental reintroduction of that double-scan pattern.
 
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select(columns)
-    .order("captured_at", { ascending: false, nullsFirst: false })
-    .limit(limit);
-  if (error) throw error;
-
-  const { data: newData, error: newError } = await supabase
-    .from(TABLE)
-    .select(columns)
-    .is("category", null)
-    .order("captured_at", { ascending: false, nullsFirst: false })
-    .limit(limit);
-  if (newError) throw newError;
-
-  const merged = new Map<string, CacheEntry>();
-  for (const entry of [...(data ?? []), ...(newData ?? [])] as CacheEntry[]) {
-    merged.set(entry.row_key, entry);
-  }
-  return Array.from(merged.values()).sort(
-    (a, b) => new Date(b.captured_at ?? 0).getTime() - new Date(a.captured_at ?? 0).getTime(),
-  );
-}
 
 async function patchEntry(row_key: string, patch: Partial<CacheEntry>) {
   const { error } = await supabase
