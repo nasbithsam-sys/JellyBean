@@ -402,7 +402,7 @@ function Page() {
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
-  const { newLeadCount, clearAlert } = useNewLeadAlert();
+  const { newLeadCount, clearAlert } = useNewLeadAlert(auth.primaryRole);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   useEffect(() => {
