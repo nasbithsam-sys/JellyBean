@@ -1674,69 +1674,6 @@ function Inner() {
   );
 }
 
-function ComposeTemplatePanel({
-  template,
-  loading,
-  saving,
-  onSave,
-}: {
-  template: string;
-  loading: boolean;
-  saving: boolean;
-  onSave: (template: string) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState(template);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    setDraft(template);
-  }, [template]);
-
-  async function save() {
-    setBusy(true);
-    try {
-      await onSave(draft);
-      toast.success("Compose template updated");
-    } catch (e) {
-      toast.error(friendlyError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">Compose template</h2>
-          <p className="text-[12px] text-muted-foreground mt-1">
-            Shared suggestion shown on every CS lead compose box.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          className="h-8"
-          onClick={save}
-          disabled={busy || loading || draft.trim() === template.trim()}
-        >
-          {(busy || saving) && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-          Save template
-        </Button>
-      </div>
-      <Textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        rows={3}
-        className="mt-3 text-[12.5px]"
-        placeholder={DEFAULT_CS_COMPOSE_TEMPLATE}
-      />
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        Tokens: (Person first name) and (Service Context) are filled from the lead. (Requirement)
-        stays in the suggestion for CS to write manually.
-      </p>
-    </div>
-  );
-}
 
 function CsLeadsTable({
   leads,
