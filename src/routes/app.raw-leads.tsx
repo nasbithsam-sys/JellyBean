@@ -421,6 +421,7 @@ function Inner() {
   const [query, setQuery] = useState("");
   const [leadFilter, setLeadFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [duplicateFilter, setDuplicateFilter] = useState<"all" | "duplicates" | "unique">("all");
   const [rawLeadSort, setRawLeadSort] = useState<RawLeadSort>({
     key: "posted_at",
     direction: "desc",
