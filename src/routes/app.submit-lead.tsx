@@ -303,9 +303,8 @@ function Dashboard() {
               {leads.slice(0, 30).map((lead) => (
                 <div key={lead.id} className="glass-card p-3 flex items-start gap-3">
                   {Array.isArray(lead.images) && lead.images.length > 0 ? (
-                    <img
-                      src={lead.images[0]}
-                      alt=""
+                    <SignedLeadImage
+                      refValue={lead.images[0]}
                       className="h-12 w-12 rounded object-cover border border-border shrink-0"
                     />
                   ) : (
