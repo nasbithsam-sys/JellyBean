@@ -71,6 +71,9 @@ const DUPLICATE_LOOKBACK_HOURS = 48;
 const LEAD_FILTERS = ["all", "yes", "no", "review"] as const;
 type LeadFilter = (typeof LEAD_FILTERS)[number];
 
+const DUPLICATE_FILTERS = ["all", "duplicates", "unique"] as const;
+type DuplicateFilter = (typeof DUPLICATE_FILTERS)[number];
+
 function escapeIlikeValue(value: string) {
   return value.replace(/[%_]/g, "\\$&").replace(/,/g, " ");
 }
