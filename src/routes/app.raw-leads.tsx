@@ -1760,6 +1760,12 @@ function LeadDetailDialog({
       toast.error("Enter a phone number — or click Number not found.");
       return;
     }
+    if (entry.duplicate_detected) {
+      const reason = entry.duplicate_reason || "Same post ID already exists in the system.";
+      if (!window.confirm(`Duplicate post detected.\n\n${reason}\n\nForward anyway?`)) {
+        return;
+      }
+    }
     if (hasDuplicate) {
       setDuplicateConfirmOpen(true);
       return;
@@ -1771,6 +1777,7 @@ function LeadDetailDialog({
       setBusy(false);
     }
   }
+
 
   const isDirty = phone.trim() !== "" || secondPhone.trim() !== "";
 
