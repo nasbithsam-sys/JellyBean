@@ -194,16 +194,23 @@ export function LeadForm({
         .filter((d) => d.length >= 7),
     [customerNumber, extraNumbers],
   );
+  // Debounce phone digits so the duplicate-check RPC does not fire on every
+  // keystroke while the user is still typing.
+  const [debouncedPhoneDigits, setDebouncedPhoneDigits] = useState<string[]>(phoneDigits);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPhoneDigits(phoneDigits), 400);
+    return () => clearTimeout(t);
+  }, [phoneDigits]);
   const duplicateQuery = useQuery({
-    queryKey: ["lead-form-duplicate-phone", phoneDigits.join(",")],
-    enabled: !disableDuplicateCheck && phoneDigits.length > 0,
+    queryKey: ["lead-form-duplicate-phone", debouncedPhoneDigits.join(",")],
+    enabled: !disableDuplicateCheck && debouncedPhoneDigits.length > 0,
     queryFn: async () => {
       const results = await Promise.all(
-        phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } })),
+        debouncedPhoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } })),
       );
       return results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
     },
-    staleTime: 15_000,
+    staleTime: 60_000,
   });
   const seenDup = new Set<string>();
   if (initialValues?.id) {
