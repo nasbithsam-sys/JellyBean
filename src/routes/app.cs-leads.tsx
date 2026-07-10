@@ -77,6 +77,7 @@ import { renderCsComposeSuggestion } from "@/lib/cs-compose-template";
 import { rephraseLeadTemplateWithAi } from "@/lib/raw-leads-ai.functions";
 
 import { cn } from "@/lib/utils";
+import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
 
 export const DEFAULT_REPHRASE_PROMPT = `You are an expert customer service assistant. Your goal is to clean, extract, and normalize three parts of a customer lead request to prepare them for an outbound message.
 
