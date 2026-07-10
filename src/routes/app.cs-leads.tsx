@@ -74,7 +74,6 @@ import type { CsStatus, LeadNote } from "@/lib/crm-types";
 import { NumberNameSelect } from "@/components/number-name-select";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import {
-  CS_COMPOSE_TEMPLATE_KEY,
   DEFAULT_CS_COMPOSE_TEMPLATE,
   renderCsComposeSuggestion,
 } from "@/lib/cs-compose-template";
