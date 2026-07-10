@@ -3449,3 +3449,30 @@ function TemplateRow({
     </div>
   );
 }
+
+function LeadAttachmentsGrid({ refs }: { refs: string[] }) {
+  const urls = useSignedLeadUrls(refs);
+  return (
+    <div>
+      <Label className="block mb-2 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
+        Attachments ({refs.length})
+      </Label>
+      <div className="grid grid-cols-3 gap-2">
+        {refs.map((ref, i) => {
+          const url = urls[i] ?? ref;
+          return (
+            <a
+              key={ref + i}
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="block aspect-square rounded-md overflow-hidden border border-border bg-muted hover:opacity-80 transition-opacity"
+            >
+              <img src={url} alt="Lead attachment" className="h-full w-full object-cover" loading="lazy" />
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
