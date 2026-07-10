@@ -85,15 +85,25 @@ function Inner() {
   const profiles = useQuery({
     queryKey: ["incog-profiles-map"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("incogniton_profiles")
-        .select(
-          "id, profile_name, account_area, latitude, longitude, last_launched_at, launch_history, notes, is_active",
-        )
-        .order("last_launched_at", { ascending: false, nullsFirst: false })
-        .limit(1000);
-      if (error) throw error;
-      return (data ?? []) as BrowserProfile[];
+      // Page past PostgREST's default 1000-row ceiling so large fleets render fully.
+      const all: BrowserProfile[] = [];
+      const pageSize = 1000;
+      for (let page = 0; page < 20; page++) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error } = await supabase
+          .from("incogniton_profiles")
+          .select(
+            "id, profile_name, account_area, latitude, longitude, last_launched_at, launch_history, notes, is_active",
+          )
+          .order("last_launched_at", { ascending: false, nullsFirst: false })
+          .range(from, to);
+        if (error) throw error;
+        const rows = (data ?? []) as BrowserProfile[];
+        all.push(...rows);
+        if (rows.length < pageSize) break;
+      }
+      return all;
     },
   });
 
