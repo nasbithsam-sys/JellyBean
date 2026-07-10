@@ -2541,7 +2541,7 @@ function LeadDrawer({
     isImportant !== lead.is_important;
 
   function handleClose() {
-    if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+    void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
     onClose();
   }
 

@@ -1761,7 +1761,7 @@ function LeadDetailDialog({
   return (
     <Dialog open onOpenChange={(o) => {
       if (!o && !busy) {
-        if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+        void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
         onClose();
       }
     }}>
@@ -1961,7 +1961,7 @@ function LeadDetailDialog({
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => {
-              if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+              void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
               onClose();
             }} disabled={busy}>
               Close
@@ -1984,7 +1984,7 @@ function LeadDetailDialog({
         matches={duplicatePreview}
         isConfirming={busy}
         onCancel={() => {
-          if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+          void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
           setDuplicateConfirmOpen(false);
         }}
         onConfirm={() => void continueDespiteDuplicate()}
@@ -2072,7 +2072,7 @@ function QualifyDialog({
   return (
     <Dialog open onOpenChange={(o) => {
       if (!o) {
-        if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+        void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
         onClose();
       }
     }}>

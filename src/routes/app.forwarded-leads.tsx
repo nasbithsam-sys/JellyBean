@@ -470,7 +470,7 @@ function Inner() {
 
       <Dialog open={!!editing} onOpenChange={(open) => {
         if (!open) {
-          if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+          void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
           setEditing(null);
         }
       }}>
