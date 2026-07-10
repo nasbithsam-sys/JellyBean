@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { normalizePhone } from "./crm-lite";
 
 const ALLOWED_RAW_LEAD_ROLES = [
   "admin",
@@ -117,10 +118,8 @@ function applySearchAndFilters<T extends { eq: (...a: never[]) => T; or: (...a: 
   return next;
 }
 
-function normalizePhoneDigits(value: string | null | undefined): string {
-  const digits = (value ?? "").replace(/\D/g, "");
-  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
-}
+// Alias for local readability — canonical implementation is in crm-lite.
+const normalizePhoneDigits = normalizePhone;
 
 export const fetchRawLeadCache = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])

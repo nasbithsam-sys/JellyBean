@@ -1,4 +1,5 @@
 import { CacheEntry } from "./raw-leads.functions";
+import { normalizePhone as sharedNormalizePhone } from "./crm-lite";
 
 export type MatchType = "Exact Match" | "90% Similar";
 
@@ -10,10 +11,9 @@ export interface FrontendDuplicateMatch {
   reasons: string[];
 }
 
-export function normalizePhone(phone: string | null | undefined): string {
-  if (!phone) return "";
-  return phone.replace(/\D/g, "");
-}
+// Single source of truth for phone normalization lives in crm-lite; re-exported
+// so existing callers keep working.
+export const normalizePhone = sharedNormalizePhone;
 
 export function normalizeText(text: string | null | undefined): string {
   if (!text) return "";

@@ -91,10 +91,17 @@ export function useRealtimeSync(role: AppRole | null) {
  * Listens for new qualified_leads inserts and keeps track of count.
  * Exposes a function to clear the count alert.
  */
-export function useNewLeadAlert() {
+export function useNewLeadAlert(role?: AppRole | null) {
   const [newLeadCount, setNewLeadCount] = useState(0);
 
+  // Only CS-facing roles (cs, admin, sub_admin) should see the "new leads" banner
+  // — other roles never open the CS pipeline, so we skip the subscription entirely.
+  const enabled = role === undefined || role === null
+    ? true
+    : role === "cs" || role === "admin" || role === "sub_admin";
+
   useEffect(() => {
+    if (!enabled) return;
     const channel = supabase.channel("cs-new-leads-realtime");
     (channel as unknown as { on: (...args: unknown[]) => typeof channel }).on(
       "postgres_changes",
@@ -107,7 +114,7 @@ export function useNewLeadAlert() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [enabled]);
 
   const clearAlert = () => setNewLeadCount(0);
 

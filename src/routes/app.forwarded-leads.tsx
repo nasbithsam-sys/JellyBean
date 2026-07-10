@@ -623,7 +623,7 @@ function ForwardedTable({
               </td>
               <td className="px-3 py-2">
                 <div className="flex justify-end gap-1.5">
-                  {isAdmin || r.cs_status === "new" ? (
+                  {isAdmin || (r.cs_status === "new" && r.created_by === auth.user?.id) ? (
                     <>
                       <Button
                         variant="outline"
@@ -680,8 +680,8 @@ function UnifiedForwardedLeadForm({
 
   async function save(values: LeadFormValues) {
     const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
-    if (!isAdmin && lead.cs_status !== "new") {
-      toast.error("Only pending leads can be edited.");
+    if (!isAdmin && (lead.cs_status !== "new" || lead.created_by !== auth.user?.id)) {
+      toast.error("You can only edit your own pending leads.");
       return;
     }
     setSaving(true);
@@ -897,8 +897,8 @@ function ForwardedLeadForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
-    if (!isAdmin && lead.cs_status !== "new") {
-      toast.error("Only pending leads can be edited.");
+    if (!isAdmin && (lead.cs_status !== "new" || lead.created_by !== auth.user?.id)) {
+      toast.error("You can only edit your own pending leads.");
       return;
     }
     if (!name.trim() || !number.trim()) {
@@ -1201,8 +1201,8 @@ async function deleteForwardedLead(
   qc: ReturnType<typeof useQueryClient>,
 ) {
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "sub_admin";
-  if (!isAdmin && lead.cs_status !== "new") {
-    toast.error("Only pending leads can be deleted.");
+  if (!isAdmin && (lead.cs_status !== "new" || lead.created_by !== auth.user?.id)) {
+    toast.error("You can only delete your own pending leads.");
     return;
   }
   if (!confirm(`Delete lead for "${lead.customer_name}"? This cannot be undone.`)) return;
