@@ -554,6 +554,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
       | "sub_admin"
       | "maturing"
       | "cs"
+      | "cs_admin"
       | "acc_handler"
       | "facebook"
       | "seo",
