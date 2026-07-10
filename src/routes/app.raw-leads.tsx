@@ -198,12 +198,7 @@ function formatPhoneInput(value: string): string {
 }
 
 // ── Row helpers ───────────────────────────────────────────────────────────────
-function keyFor(r: Row) {
-  return (
-    r["Lead Link"] ||
-    `${r["Account Name"] ?? ""}|${r["Posted Date & Time"] ?? ""}|${(r["Post Text"] ?? "").slice(0, 40)}`
-  );
-}
+
 
 function parseCapturedAt(r: Row): number {
   const d = r["Captured Date (UTC)"];
