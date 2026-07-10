@@ -1074,8 +1074,9 @@ function ForwardedLeadForm({
           />
           <div className="flex flex-wrap gap-3 items-start">
             {/* Existing Images from DB */}
-            {existingImages.map((url, idx) => {
-              const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(url);
+            {existingImages.map((ref, idx) => {
+              const url = existingSignedUrls[idx] ?? ref;
+              const isVideo = /\.(mp4|webm|mov)(\?.*)?$/i.test(ref);
               return (
                 <div
                   key={`existing-${idx}`}
