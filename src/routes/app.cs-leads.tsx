@@ -2542,8 +2542,7 @@ function LeadDrawer({
     isImportant !== lead.is_important;
 
   function handleClose() {
-    void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); }); return;
-    onClose();
+    void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
   }
 
   // Lock background body scroll when drawer is open
