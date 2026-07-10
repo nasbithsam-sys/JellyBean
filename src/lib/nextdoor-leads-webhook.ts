@@ -122,7 +122,28 @@ export async function handleNextdoorLeadsPost(request: Request) {
     // Fail-closed: require the secret env var to be present. Prefer
     // NEXTDOOR_WEBHOOK_SECRET; fall back to WEBHOOK_SECRET for legacy setups.
     const webhookSecret = process.env.NEXTDOOR_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
-    const requestSecret = request.headers.get("X-Webhook-Secret");
+    // Accept the secret from any of the historical locations the extension
+    // has used, so older builds keep working without a URL/config change:
+    //   - X-Webhook-Secret header (current)
+    //   - X-Webhook-Token / X-Api-Key headers (legacy)
+    //   - Authorization: Bearer <secret> (legacy)
+    //   - ?secret= / ?token= query params (legacy)
+    const url = new URL(request.url);
+    const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
+    const bearer = authHeader.toLowerCase().startsWith("bearer ")
+      ? authHeader.slice(7).trim()
+      : "";
+    const requestSecret =
+      request.headers.get("X-Webhook-Secret") ||
+      request.headers.get("x-webhook-secret") ||
+      request.headers.get("X-Webhook-Token") ||
+      request.headers.get("x-webhook-token") ||
+      request.headers.get("X-Api-Key") ||
+      request.headers.get("x-api-key") ||
+      bearer ||
+      url.searchParams.get("secret") ||
+      url.searchParams.get("token") ||
+      "";
 
     if (!webhookSecret) {
       console.error("[Nextdoor webhook] NEXTDOOR_WEBHOOK_SECRET is not configured");
