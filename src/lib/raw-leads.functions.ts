@@ -164,10 +164,12 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       category: CategoryFilter,
     ): T => {
       if (category === "new") {
-        // Show every uncategorized lead. Self-assigning a lead must NOT hide
-        // it from other users' New tab — that caused "leads randomly
-        // disappearing and reappearing" for the rest of the team.
-        return query.is("category" as never, null as never);
+        // Uncategorized AND not yet claimed. Claimed leads move to
+        // "Assigned Myself" (for the owner) and are hidden from New for
+        // everyone — same filter for all users so the list stays stable.
+        return query
+          .is("category" as never, null as never)
+          .is("assigned_myself_at" as never, null as never);
       }
       if (
         category === "forwarded" ||
