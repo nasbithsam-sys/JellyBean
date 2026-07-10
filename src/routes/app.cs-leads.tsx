@@ -214,17 +214,6 @@ const PIPELINE_STATUSES = [
   "need_follow_up",
 ] as const satisfies readonly CsStatus[];
 
-type ComposeTemplateValue = {
-  template?: string;
-};
-
-function readComposeTemplate(value: Json | null | undefined) {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const template = (value as ComposeTemplateValue).template;
-    if (typeof template === "string" && template.trim()) return template;
-  }
-  return DEFAULT_CS_COMPOSE_TEMPLATE;
-}
 
 
 type ComposeTemplateItem = {
