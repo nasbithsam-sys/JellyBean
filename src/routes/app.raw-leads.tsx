@@ -953,6 +953,24 @@ function Inner() {
           </SelectContent>
           </Select>
 
+          <Select
+          value={duplicateFilter}
+          onValueChange={(value) => {
+            setDuplicateFilter(value as "all" | "duplicates" | "unique");
+            setPageIndex(0);
+          }}
+        >
+          <SelectTrigger className="h-9 w-[140px] text-[12px]">
+            <SelectValue placeholder="Duplicates" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All posts</SelectItem>
+            <SelectItem value="duplicates">Duplicates only</SelectItem>
+            <SelectItem value="unique">Unique only</SelectItem>
+          </SelectContent>
+          </Select>
+
+
           {tab === "new" && (
           <Button
             size="sm"
