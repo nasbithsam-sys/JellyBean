@@ -227,55 +227,6 @@ function readComposeTemplate(value: Json | null | undefined) {
   return DEFAULT_CS_COMPOSE_TEMPLATE;
 }
 
-function useCsComposeTemplate(userId: string | undefined) {
-  const qc = useQueryClient();
-  const query = useQuery({
-    queryKey: ["shared_state", CS_COMPOSE_TEMPLATE_KEY],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("shared_state")
-        .select("value")
-        .eq("key", CS_COMPOSE_TEMPLATE_KEY)
-        .maybeSingle();
-      if (error) throw error;
-      return readComposeTemplate(data?.value);
-    },
-  });
-
-  useEffect(() => {
-    const channel = supabase
-      .channel(`cs-compose-template-sync-${crypto.randomUUID()}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "shared_state",
-          filter: `key=eq.${CS_COMPOSE_TEMPLATE_KEY}`,
-        },
-        () => qc.invalidateQueries({ queryKey: ["shared_state", CS_COMPOSE_TEMPLATE_KEY] }),
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
-
-  const save = async (template: string) => {
-    const next = template.trim();
-    if (!next) throw new Error("Template cannot be empty");
-    const { error } = await supabase.from("shared_state").upsert({
-      key: CS_COMPOSE_TEMPLATE_KEY,
-      value: { template: next },
-      updated_by: userId ?? null,
-      updated_at: new Date().toISOString(),
-    });
-    if (error) throw error;
-    await qc.invalidateQueries({ queryKey: ["shared_state", CS_COMPOSE_TEMPLATE_KEY] });
-  };
-
-  return { ...query, template: query.data ?? DEFAULT_CS_COMPOSE_TEMPLATE, save };
-}
 
 type ComposeTemplateItem = {
   id: string;
