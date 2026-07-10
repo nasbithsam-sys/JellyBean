@@ -122,12 +122,32 @@ export function handleNextdoorLeadsOptions() {
 
 export async function handleNextdoorLeadsPost(request: Request) {
   try {
-    const webhookSecret = process.env.WEBHOOK_SECRET;
-    
-    // Read headers safely
+    // Fail-closed: require the secret env var to be present. Prefer
+    // NEXTDOOR_WEBHOOK_SECRET; fall back to WEBHOOK_SECRET for legacy setups.
+    const webhookSecret = process.env.NEXTDOOR_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
     const requestSecret = request.headers.get("X-Webhook-Secret");
 
-    if (webhookSecret && requestSecret !== webhookSecret) {
+    if (!webhookSecret) {
+      console.error("[Nextdoor webhook] NEXTDOOR_WEBHOOK_SECRET is not configured");
+      await logWebhookActivity("webhook_misconfigured", { reason: "secret_env_missing" });
+      return json({ ok: false, reason: "server_misconfigured" }, 500);
+    }
+
+    let secretsMatch = false;
+    if (requestSecret) {
+      const a = Buffer.from(requestSecret);
+      const b = Buffer.from(webhookSecret);
+      if (a.length === b.length) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { timingSafeEqual } = await import("crypto");
+          secretsMatch = timingSafeEqual(a, b);
+        } catch {
+          secretsMatch = requestSecret === webhookSecret;
+        }
+      }
+    }
+    if (!secretsMatch) {
       await logWebhookActivity("webhook_auth_failed", {
         reason: "secret_mismatch",
         received_present: !!requestSecret,
