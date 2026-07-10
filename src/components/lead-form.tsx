@@ -23,6 +23,7 @@ import { formatPhone, normalizePhone } from "@/lib/crm-lite";
 import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
 import { compressVideoInBrowser, MAX_VIDEO_BYTES, ALLOWED_VIDEO_MIME_TYPES, getVideoDimensions } from "@/lib/video-compressor";
 import { DuplicateLeadDialog, type DuplicateMatchPreview } from "@/components/duplicate-lead-dialog";
+import { useSignedLeadUrls } from "@/lib/lead-attachments";
 
 const BUCKET = "lead-attachments";
 const MAX_IMAGES = 20;
