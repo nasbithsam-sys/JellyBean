@@ -153,7 +153,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
 
     const isAdmin = roles.includes("admin") || roles.includes("sub_admin");
     const columns =
-      "row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to, assigned_myself_at";
+      "id, row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to, assigned_myself_at, duplicate_detected, duplicate_reason, duplicate_match_type, duplicate_key, duplicate_of_raw_lead_id, duplicate_of_qualified_lead_id, canonical_post_id, canonical_lead_link";
 
     const applyCategory = <T extends {
       is: (...a: never[]) => T;
@@ -241,6 +241,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
 
     const entries: RawLeadCacheRow[] = (rows ?? []).map((entry) => ({
       row_key: entry.row_key,
+      id: (entry as Record<string, unknown>).id as string,
       data: normalizeData(entry.data),
       lead: normalizeLead(entry.lead),
       phone: entry.phone,
@@ -250,6 +251,14 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       sheet_row: entry.sheet_row,
       assigned_to: entry.assigned_to,
       assigned_myself_at: (entry as Record<string, unknown>).assigned_myself_at as string | null ?? null,
+      duplicate_detected: ((entry as Record<string, unknown>).duplicate_detected as boolean | null) ?? null,
+      duplicate_reason: ((entry as Record<string, unknown>).duplicate_reason as string | null) ?? null,
+      duplicate_match_type: ((entry as Record<string, unknown>).duplicate_match_type as string | null) ?? null,
+      duplicate_key: ((entry as Record<string, unknown>).duplicate_key as string | null) ?? null,
+      duplicate_of_raw_lead_id: ((entry as Record<string, unknown>).duplicate_of_raw_lead_id as string | null) ?? null,
+      duplicate_of_qualified_lead_id: ((entry as Record<string, unknown>).duplicate_of_qualified_lead_id as string | null) ?? null,
+      canonical_post_id: ((entry as Record<string, unknown>).canonical_post_id as string | null) ?? null,
+      canonical_lead_link: ((entry as Record<string, unknown>).canonical_lead_link as string | null) ?? null,
     }));
 
     return {
