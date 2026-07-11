@@ -187,6 +187,36 @@ export type Database = {
           },
         ]
       }
+      lead_drafts: {
+        Row: {
+          created_at: string
+          created_by: string
+          form_data: Json
+          id: string
+          source_lead_id: string | null
+          source_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          form_data?: Json
+          id?: string
+          source_lead_id?: string | null
+          source_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          form_data?: Json
+          id?: string
+          source_lead_id?: string | null
+          source_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       map_snapshots: {
         Row: {
           captured_at: string
