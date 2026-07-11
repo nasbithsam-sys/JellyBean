@@ -382,14 +382,69 @@ function QuickRange({ label, onClick }: { label: string; onClick: () => void }) 
   );
 }
 
-function SubmitForm({ role, onDone, onDirtyChange }: { role: string; onDone: () => void; onDirtyChange?: (isDirty: boolean) => void }) {
+function SubmitForm({
+  role,
+  onDone,
+  onDirtyChange,
+  initialDraft,
+}: {
+  role: string;
+  onDone: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
+  initialDraft?: LeadDraft | null;
+}) {
   const auth = useAuth();
   const qc = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
   const referenceMode: LeadReferenceMode =
     role === "facebook" ? "auto-fb" : role === "seo" ? "manual-text" : "manual-dropdown";
   const forwardedBy =
     auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? "Current user";
+
+  const draftFd = initialDraft?.form_data ?? {};
+  const initialValues = initialDraft
+    ? {
+        customerName: (draftFd.customerName as string) ?? "",
+        customerNumber: (draftFd.customerNumber as string) ?? "",
+        extraNumbers: (draftFd.extraNumbers as string[]) ?? [],
+        area: (draftFd.area as string) ?? "",
+        service: (draftFd.service as string) ?? "",
+        context: (draftFd.context as string) ?? "",
+        exactCustomerText: (draftFd.exactCustomerText as string) ?? "",
+        reference: (draftFd.reference as string) ?? "",
+        isImportant: (draftFd.isImportant as boolean) ?? false,
+        originalLeadLink: (draftFd.originalLeadLink as string | null) ?? null,
+      }
+    : undefined;
+
+  async function handleSaveDraft(values: LeadFormValues) {
+    if (!auth.user?.id) return;
+    try {
+      const saved = await saveDraft({
+        id: draftId,
+        source_type: "manual_lead",
+        source_lead_id: null,
+        created_by: auth.user.id,
+        form_data: {
+          customerName: values.customerName,
+          customerNumber: values.customerNumber,
+          extraNumbers: values.extraNumbers,
+          area: values.area,
+          service: values.service,
+          context: values.context,
+          exactCustomerText: values.exactCustomerText,
+          reference: values.reference,
+          isImportant: values.isImportant,
+          role,
+        },
+      });
+      setDraftId(saved.id);
+      toast.success("Draft saved");
+    } catch (err) {
+      toast.error(friendlyError(err));
+    }
+  }
 
   async function submit(values: LeadFormValues) {
     if (!auth.user?.id) return;
@@ -440,6 +495,13 @@ function SubmitForm({ role, onDone, onDirtyChange }: { role: string; onDone: () 
           submitted_by_role: role,
         },
       });
+      if (draftId) {
+        try {
+          await deleteDraft(draftId);
+        } catch {
+          // best-effort
+        }
+      }
       toast.success("Lead sent to CS");
       qc.invalidateQueries({ queryKey: ["my-submitted-leads"] });
       onDone();
@@ -462,6 +524,9 @@ function SubmitForm({ role, onDone, onDirtyChange }: { role: string; onDone: () 
       onDirtyChange={onDirtyChange}
       onCancel={onDone}
       onSubmit={submit}
+      onSaveDraft={handleSaveDraft}
+      initialValues={initialValues}
     />
   );
 }
+
