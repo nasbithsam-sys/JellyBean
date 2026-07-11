@@ -44,7 +44,9 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { DateRange } from "react-day-picker";
 import { formatPhone } from "@/lib/crm-lite";
-import { DraftsDialog } from "@/components/drafts-dialog";
+const DraftsDialog = lazy(() =>
+  import("@/components/drafts-dialog").then((m) => ({ default: m.DraftsDialog })),
+);
 import { saveDraft, deleteDraft, type LeadDraft } from "@/lib/lead-drafts";
 import { friendlyError } from "@/lib/error-messages";
 
