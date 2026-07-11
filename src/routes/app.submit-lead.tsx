@@ -19,6 +19,7 @@ import {
   TrendingUp,
   CalendarDays,
   Send,
+  FolderOpen,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
@@ -43,6 +44,10 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { DateRange } from "react-day-picker";
 import { formatPhone } from "@/lib/crm-lite";
+import { DraftsDialog } from "@/components/drafts-dialog";
+import { saveDraft, deleteDraft, type LeadDraft } from "@/lib/lead-drafts";
+import { friendlyError } from "@/lib/error-messages";
+
 
 export const Route = createFileRoute("/app/submit-lead")({ component: Page });
 
