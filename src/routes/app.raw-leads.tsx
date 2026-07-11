@@ -86,8 +86,6 @@ const RawLeadDuplicateDialog = lazy(() =>
 const DraftsDialog = lazy(() =>
   import("@/components/drafts-dialog").then((m) => ({ default: m.DraftsDialog })),
 );
-import { saveDraft, deleteDraftForSource, type LeadDraft } from "@/lib/lead-drafts";
-import { FolderOpen } from "lucide-react";
 
 
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
