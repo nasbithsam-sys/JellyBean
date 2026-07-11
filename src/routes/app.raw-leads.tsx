@@ -1718,10 +1718,6 @@ function LeadDetailDialog({
   }
   async function handleForward() {
     const p = phone.trim();
-    if (!p) {
-      toast.error("Enter a phone number — or click Number not found.");
-      return;
-    }
     if (entry.duplicate_detected) {
       const reason = entry.duplicate_reason || "Same post ID already exists in the system.";
       const ok = await confirmDialog({
@@ -2082,7 +2078,6 @@ function QualifyDialog({
           areaRequired
           referenceMode="auto-scraping"
           submitting={busy}
-          disableDuplicateCheck
           onDirtyChange={setIsDirty}
           initialValues={{
             customerName: row["Account Name"] ?? "",
