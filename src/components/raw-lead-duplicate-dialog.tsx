@@ -49,9 +49,25 @@ type QualifiedMatch = {
     created_at: string | null;
   };
   assignee: { name: string | null; email: string | null } | null;
+  fallback?: boolean;
 };
 
-type MatchState = RawMatch | QualifiedMatch;
+type SnapshotMatch = {
+  type: "snapshot";
+  data: Record<string, string | null>;
+  match_type: string | null;
+  duplicate_key: string | null;
+  reason: string | null;
+};
+
+type MissingMatch = {
+  type: "missing";
+  match_type: string | null;
+  duplicate_key: string | null;
+  reason: string | null;
+};
+
+type MatchState = (RawMatch & { fallback?: boolean }) | QualifiedMatch | SnapshotMatch | MissingMatch;
 
 function rawCategoryLocation(row: RawMatch["data"]): string {
   const c = (row.category || "").toLowerCase();
