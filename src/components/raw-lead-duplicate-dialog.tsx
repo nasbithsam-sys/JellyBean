@@ -89,6 +89,13 @@ function currentLeadLocation(row: CacheEntry): string {
   return c;
 }
 
+function labelForMatchType(match: string | null | undefined): string {
+  if (match === "post_id") return "Post ID";
+  if (match === "canonical_link") return "Canonical Link";
+  if (match === "details_all_four") return "Account + Area + Time + Text";
+  return match || "—";
+}
+
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const parsed = Date.parse(value);
