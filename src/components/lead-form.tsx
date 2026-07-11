@@ -169,6 +169,8 @@ export function LeadForm({
   const [dupConfirmMatches, setDupConfirmMatches] = useState<DuplicateMatchPreview[]>([]);
   // Holds the resolved form values waiting for user to confirm or cancel
   const pendingSubmitValuesRef = useRef<LeadFormValues | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+
 
   useEffect(() => {
     return () => {
