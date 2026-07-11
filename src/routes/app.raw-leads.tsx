@@ -1621,18 +1621,46 @@ function Inner() {
           }
           actorRole={auth.primaryRole}
           initialSecondPhone={qualifySecondPhone}
+          draft={qualifyDraft}
           onClose={() => {
             setQualifyFor(null);
             setQualifySecondPhone("");
+            setQualifyDraft(null);
           }}
           onSent={async () => {
+            // Clean up the related draft only AFTER the forward succeeds.
+            if (auth.user?.id) {
+              await deleteDraftForSource({
+                userId: auth.user.id,
+                draftId: qualifyDraft?.id ?? null,
+                source_type: "raw_lead",
+                source_lead_id: qualifyFor.id ?? null,
+              });
+            }
             await updateAction(qualifyFor.row_key, { category: "forwarded" });
             setQualifyFor(null);
             setQualifySecondPhone("");
+            setQualifyDraft(null);
             toast.success("Forwarded to CS");
           }}
         />
       )}
+
+      <DraftsDialog
+        open={draftsOpen}
+        onOpenChange={setDraftsOpen}
+        filterSource="raw_lead"
+        onOpenDraft={(draft) => {
+          const snapshot = draft.form_data?.entrySnapshot as CacheEntry | undefined;
+          if (!snapshot) {
+            toast.error("This draft is missing its raw lead reference.");
+            return;
+          }
+          setQualifyDraft(draft);
+          setQualifySecondPhone("");
+          setQualifyFor(snapshot);
+        }}
+      />
 
       <RawLeadDuplicateDialog
         open={!!duplicateDetailsFor}
@@ -1647,6 +1675,7 @@ function Inner() {
           setDuplicateDetailsFor(null);
         }}
       />
+
     </div>
   );
 }
