@@ -338,14 +338,14 @@ export async function handleNextdoorLeadsPost(request: Request) {
       if (postIds.length > 0) {
         const { data } = await supabaseAdmin
           .from("raw_lead_cache")
-          .select("id, canonical_post_id, row_key")
+          .select("id, canonical_post_id, canonical_lead_link, row_key, data, category, captured_at, assigned_myself_at")
           .in("canonical_post_id", postIds);
         if (data) existingRawPostIdRows = data;
       }
       if (leadLinks.length > 0) {
         const { data } = await supabaseAdmin
           .from("raw_lead_cache")
-          .select("id, canonical_lead_link, row_key")
+          .select("id, canonical_post_id, canonical_lead_link, row_key, data, category, captured_at, assigned_myself_at")
           .in("canonical_lead_link", leadLinks);
         if (data) existingRawLinkRows = data;
       }
@@ -354,14 +354,14 @@ export async function handleNextdoorLeadsPost(request: Request) {
       if (postIds.length > 0) {
         const { data } = await supabaseAdmin
           .from("qualified_leads")
-          .select("id, canonical_post_id")
+          .select("id, canonical_post_id, canonical_lead_link, customer_name, sub_area, post_text, cs_status, created_at, assigned_at")
           .in("canonical_post_id", postIds);
         if (data) existingQualPostIdRows = data;
       }
       if (leadLinks.length > 0) {
         const { data } = await supabaseAdmin
           .from("qualified_leads")
-          .select("id, canonical_lead_link")
+          .select("id, canonical_post_id, canonical_lead_link, customer_name, sub_area, post_text, cs_status, created_at, assigned_at")
           .in("canonical_lead_link", leadLinks);
         if (data) existingQualLinkRows = data;
       }
