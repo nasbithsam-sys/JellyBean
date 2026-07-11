@@ -21,6 +21,69 @@ interface RawLeadDuplicateDialogProps {
   onSendToDuplicateFilter: () => Promise<void>;
 }
 
+type RawMatch = {
+  type: "raw";
+  data: {
+    id: string;
+    category: string | null;
+    assigned_myself_at: string | null;
+    assigned_to: string | null;
+    phone: string | null;
+    captured_at: string | null;
+    data: Record<string, string>;
+  };
+  location: string;
+};
+
+type QualifiedMatch = {
+  type: "qualified";
+  data: {
+    id: string;
+    customer_name: string | null;
+    customer_number: string | null;
+    sub_area: string | null;
+    post_text: string | null;
+    cs_status: string | null;
+    assigned_to: string | null;
+    assigned_at: string | null;
+    created_at: string | null;
+  };
+  assignee: { name: string | null; email: string | null } | null;
+};
+
+type MatchState = RawMatch | QualifiedMatch;
+
+function rawCategoryLocation(row: RawMatch["data"]): string {
+  const c = (row.category || "").toLowerCase();
+  if (c === "forwarded") return "Forwarded";
+  if (c === "wrong") return "Wrong Post";
+  if (c === "not_found") return "Number Not Found";
+  if (c === "duplicate") return "Duplicate";
+  if (!c) return row.assigned_myself_at ? "Assigned Myself" : "New";
+  return c;
+}
+
+function currentLeadLocation(row: CacheEntry): string {
+  const c = (row.category || "").toLowerCase();
+  if (c === "forwarded") return "Forwarded";
+  if (c === "wrong") return "Wrong Post";
+  if (c === "not_found") return "Number Not Found";
+  if (c === "duplicate") return "Duplicate";
+  if (!c) return row.assigned_myself_at ? "Assigned Myself" : "New";
+  return c;
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) return value;
+  try {
+    return new Date(parsed).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
 export function RawLeadDuplicateDialog({
   open,
   onOpenChange,
@@ -29,7 +92,7 @@ export function RawLeadDuplicateDialog({
 }: RawLeadDuplicateDialogProps) {
   const [isBusy, setIsBusy] = useState(false);
   const [isLoadingMatch, setIsLoadingMatch] = useState(false);
-  const [matchData, setMatchData] = useState<any | null>(null);
+  const [matchData, setMatchData] = useState<MatchState | null>(null);
 
   useEffect(() => {
     if (!open || !currentLead) {
@@ -43,17 +106,39 @@ export function RawLeadDuplicateDialog({
         if (currentLead?.duplicate_of_qualified_lead_id) {
           const { data } = await supabase
             .from("qualified_leads")
-            .select("*")
+            .select("id, customer_name, customer_number, sub_area, post_text, cs_status, assigned_to, assigned_at, created_at")
             .eq("id", currentLead.duplicate_of_qualified_lead_id)
-            .single();
-          if (data) setMatchData({ type: "qualified", data });
+            .maybeSingle();
+          if (data) {
+            let assignee: QualifiedMatch["assignee"] = null;
+            if (data.assigned_to) {
+              const { data: prof } = await supabase
+                .from("profiles")
+                .select("full_name, username, email")
+                .eq("user_id", data.assigned_to)
+                .maybeSingle();
+              if (prof) {
+                assignee = {
+                  name: prof.full_name || prof.username || null,
+                  email: prof.email || null,
+                };
+              }
+            }
+            setMatchData({ type: "qualified", data, assignee });
+          }
         } else if (currentLead?.duplicate_of_raw_lead_id) {
           const { data } = await supabase
             .from("raw_lead_cache")
-            .select("*")
+            .select("id, category, assigned_myself_at, assigned_to, phone, captured_at, data")
             .eq("id", currentLead.duplicate_of_raw_lead_id)
-            .single();
-          if (data) setMatchData({ type: "raw", data });
+            .maybeSingle();
+          if (data) {
+            setMatchData({
+              type: "raw",
+              data: data as RawMatch["data"],
+              location: rawCategoryLocation(data as RawMatch["data"]),
+            });
+          }
         }
       } catch (err) {
         console.error("Failed to fetch match details", err);
@@ -76,158 +161,178 @@ export function RawLeadDuplicateDialog({
     }
   }
 
-  function formatPhone(p: string | null | undefined) {
-    if (!p) return "—";
-    return p;
-  }
+  const curName = currentLead.data["Account Name"] || "—";
+  const curArea = currentLead.data["Sub Area / Neighborhood"] || "—";
+  const curPosted = currentLead.data["Posted Date & Time"] || "—";
+  const curText = currentLead.data["Post Text"] || "—";
+  const curLoc = currentLeadLocation(currentLead);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => {
-      if (!isBusy) onOpenChange(o);
-    }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0">
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!isBusy) onOpenChange(o);
+      }}
+    >
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col gap-0 p-0">
         <DialogHeader className="p-6 pb-4">
-          <DialogTitle className="text-xl text-destructive flex items-center gap-2">
-            Duplicate Lead Detected
-          </DialogTitle>
+          <DialogTitle className="text-xl text-destructive">Duplicate Lead Detected</DialogTitle>
           <DialogDescription>
-            This lead matched an existing record during import.
+            This incoming lead matched an existing record during import.
+            {currentLead.duplicate_match_type && (
+              <span className="ml-1">
+                Match type:{" "}
+                <span className="font-medium text-foreground">{currentLead.duplicate_match_type}</span>
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="flex-1 px-6 pb-2">
           <div className="space-y-6">
-            {/* Current Lead Summary */}
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <h4 className="text-sm font-semibold mb-2 text-foreground">Current Lead</h4>
-              <div className="grid grid-cols-2 gap-4 text-[12px]">
-                <div>
-                  <span className="text-muted-foreground block mb-1">Account / Name</span>
-                  <span className="font-medium">{currentLead.data["Account Name"] || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block mb-1">Phone</span>
-                  <span className="font-medium">{formatPhone(currentLead.phone)}</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-muted-foreground block mb-1">Lead Snippet</span>
-                  <span className="line-clamp-2 text-muted-foreground/80 italic">
-                    {currentLead.data["Post Text"] || "—"}
-                  </span>
-                </div>
+            {/* NEW / CURRENT LEAD */}
+            <section className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                  New Duplicate Lead
+                </h4>
+                <span className="text-[11px] rounded-full bg-destructive/15 text-destructive px-2 py-0.5 font-medium">
+                  {curLoc}
+                </span>
               </div>
-            </div>
+              <DetailGrid
+                items={[
+                  { label: "Account Name", value: curName },
+                  { label: "Sub Area / Neighborhood", value: curArea },
+                  { label: "Posted Date & Time", value: curPosted },
+                  { label: "Phone", value: currentLead.phone || "—" },
+                ]}
+              />
+              <div className="mt-3">
+                <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Post Text</span>
+                <p className="text-[12px] whitespace-pre-wrap text-foreground/90">{curText}</p>
+              </div>
+            </section>
 
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-foreground">Matched Database Record</h4>
-              
+            {/* PREVIOUS MATCHED LEAD */}
+            <section className="rounded-lg border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Previous Matched Lead
+                </h4>
+                {matchData?.type === "qualified" ? (
+                  <span className="text-[11px] rounded-full bg-primary/15 text-primary px-2 py-0.5 font-medium">
+                    Forwarded to CS
+                    {matchData.data.cs_status ? ` · ${matchData.data.cs_status}` : ""}
+                  </span>
+                ) : matchData?.type === "raw" ? (
+                  <span className="text-[11px] rounded-full bg-muted text-foreground/80 px-2 py-0.5 font-medium">
+                    {matchData.location}
+                  </span>
+                ) : null}
+              </div>
+
               {isLoadingMatch && (
-                <div className="flex items-center justify-center p-8 text-muted-foreground">
-                  <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                  Loading match details...
+                <div className="flex items-center justify-center p-6 text-muted-foreground text-[12px]">
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Loading match details…
                 </div>
               )}
 
-              {!isLoadingMatch && currentLead.duplicate_reason && (
-                <div className="rounded-lg border p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-destructive/15 text-destructive">
-                          Exact Match
-                        </span>
-                      </div>
-                      <div className="text-[11.5px] text-muted-foreground flex flex-wrap gap-x-2 gap-y-1 mt-1">
-                        <span className="flex items-center gap-1">
-                          <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
-                          {currentLead.duplicate_reason}
-                        </span>
-                        {currentLead.duplicate_match_type && (
-                          <span className="flex items-center gap-1">
-                            <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
-                            {currentLead.duplicate_match_type}: {currentLead.duplicate_key}
-                          </span>
-                        )}
-                        {matchData?.type === "qualified" && (
-                          <span className="flex items-center gap-1 text-primary font-medium">
-                            <span className="w-1 h-1 rounded-full bg-primary/50" />
-                            Already Forwarded to CS
-                          </span>
-                        )}
-                      </div>
-                    </div>
+              {!isLoadingMatch && !matchData && (
+                <p className="text-[12px] text-muted-foreground italic">
+                  {currentLead.duplicate_reason || "Match record could not be loaded."}
+                </p>
+              )}
+
+              {matchData?.type === "raw" && (
+                <>
+                  <DetailGrid
+                    items={[
+                      { label: "Account Name", value: matchData.data.data?.["Account Name"] || "—" },
+                      {
+                        label: "Sub Area / Neighborhood",
+                        value: matchData.data.data?.["Sub Area / Neighborhood"] || "—",
+                      },
+                      {
+                        label: "Posted Date & Time",
+                        value: matchData.data.data?.["Posted Date & Time"] || "—",
+                      },
+                      { label: "Phone", value: matchData.data.phone || "—" },
+                    ]}
+                  />
+                  <div className="mt-3">
+                    <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Post Text</span>
+                    <p className="text-[12px] whitespace-pre-wrap text-foreground/90">
+                      {matchData.data.data?.["Post Text"] || "—"}
+                    </p>
                   </div>
-                  
-                  {matchData && matchData.type === "raw" && (
-                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-[12px] bg-muted/20 p-3 rounded-md">
-                      <div>
-                        <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Account</span>
-                        <span className="font-medium truncate block" title={matchData.data.data["Account Name"]}>
-                          {matchData.data.data["Account Name"] || "—"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Phone</span>
-                        <span className="font-medium truncate block">
-                          {formatPhone(matchData.data.phone)}
-                        </span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Snippet</span>
-                        <span className="line-clamp-2 text-muted-foreground/80 italic">
-                          {matchData.data.data["Post Text"] || "—"}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {matchData && matchData.type === "qualified" && (
-                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-[12px] bg-muted/20 p-3 rounded-md">
-                      <div>
-                        <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Customer Name</span>
-                        <span className="font-medium truncate block">
-                          {matchData.data.customer_name || "—"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Phone</span>
-                        <span className="font-medium truncate block">
-                          {formatPhone(matchData.data.customer_number)}
-                        </span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Snippet / Text</span>
-                        <span className="line-clamp-2 text-muted-foreground/80 italic">
-                          {matchData.data.post_text || "—"}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                </div>
+                </>
               )}
-            </div>
+
+              {matchData?.type === "qualified" && (
+                <>
+                  <DetailGrid
+                    items={[
+                      { label: "Customer Name", value: matchData.data.customer_name || "—" },
+                      { label: "Sub Area / Neighborhood", value: matchData.data.sub_area || "—" },
+                      { label: "Forwarded / Assigned At", value: formatDateTime(matchData.data.assigned_at || matchData.data.created_at) },
+                      { label: "Phone", value: matchData.data.customer_number || "—" },
+                      { label: "CS Status", value: matchData.data.cs_status || "—" },
+                      {
+                        label: "Assigned CS",
+                        value:
+                          matchData.assignee?.name ||
+                          matchData.assignee?.email ||
+                          (matchData.data.assigned_to ? "Assigned" : "Unassigned"),
+                      },
+                    ]}
+                  />
+                  <div className="mt-3">
+                    <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Post Text</span>
+                    <p className="text-[12px] whitespace-pre-wrap text-foreground/90">
+                      {matchData.data.post_text || "—"}
+                    </p>
+                  </div>
+                </>
+              )}
+            </section>
+
+            {currentLead.duplicate_reason && (
+              <p className="text-[11.5px] text-muted-foreground">
+                <span className="font-medium text-foreground/80">Reason: </span>
+                {currentLead.duplicate_reason}
+                {currentLead.duplicate_key ? ` · key: ${currentLead.duplicate_key}` : ""}
+              </p>
+            )}
           </div>
         </ScrollArea>
 
         <DialogFooter className="p-6 pt-4 bg-background border-t">
-          <Button 
-            variant="outline" 
-            onClick={() => onOpenChange(false)}
-            disabled={isBusy}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isBusy}>
             Continue
           </Button>
-          <Button 
-            variant="destructive" 
-            onClick={handleSendToDuplicate}
-            disabled={isBusy}
-          >
+          <Button variant="destructive" onClick={handleSendToDuplicate} disabled={isBusy}>
             {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Send to Duplicate Filter
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function DetailGrid({ items }: { items: Array<{ label: string; value: string }> }) {
+  return (
+    <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-[12px]">
+      {items.map((item) => (
+        <div key={item.label}>
+          <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">{item.label}</span>
+          <span className="font-medium truncate block" title={item.value}>
+            {item.value}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }

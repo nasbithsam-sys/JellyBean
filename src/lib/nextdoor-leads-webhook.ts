@@ -88,6 +88,31 @@ function uniqueRows(rows: ExtRow[]) {
   return { unique, duplicateKeys };
 }
 
+function normalizeIdentifier(value: string | null | undefined): string {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizePostText(value: string | null | undefined): string {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u201C\u201D]/g, "'")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizePostedTime(value: string | null | undefined): string {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  const parsed = Date.parse(raw);
+  if (!Number.isNaN(parsed)) return String(parsed);
+  return raw.toLowerCase().replace(/\s+/g, " ");
+}
+
 async function loadSupabaseAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
@@ -394,10 +419,66 @@ export async function handleNextdoorLeadsPost(request: Request) {
             }
           }
         }
-
-        // Priority 3 & 4 (Exact/90% Details Match) are bypassed for ingestion to save compute
-        // and keep webhook fast as requested by user. We can safely rely on IDs/links for Nextdoor.
       }
+
+      // Priority 3: Fallback — all four fields must match exactly (normalized)
+      // when neither canonical_post_id nor canonical_lead_link produced a hit.
+      // Narrow candidates via a single bulk query keyed by "Posted Date & Time"
+      // (highly selective, avoids full-table scan of raw_lead_cache).
+      const fallbackRows = slice.filter((r) => !r.duplicate_detected);
+      const postedTimes = Array.from(
+        new Set(
+          fallbackRows
+            .map((r) => (r.data["Posted Date & Time"] || "").trim())
+            .filter((v) => v.length > 0)
+        )
+      );
+      let fallbackCandidates: Array<{ id: string; row_key: string; data: Record<string, string> }> = [];
+      if (postedTimes.length > 0) {
+        const { data } = await supabaseAdmin
+          .from("raw_lead_cache")
+          .select("id, row_key, data")
+          .in("data->>Posted Date & Time", postedTimes);
+        if (data) fallbackCandidates = data as never;
+      }
+
+      if (fallbackCandidates.length > 0) {
+        // Group candidates by normalized posted time for O(1) lookup.
+        const byPosted = new Map<string, typeof fallbackCandidates>();
+        for (const c of fallbackCandidates) {
+          const key = normalizePostedTime(c.data?.["Posted Date & Time"] || "");
+          if (!key) continue;
+          const arr = byPosted.get(key) || [];
+          arr.push(c);
+          byPosted.set(key, arr);
+        }
+
+        for (const row of fallbackRows) {
+          const postedKey = normalizePostedTime(row.data["Posted Date & Time"] || "");
+          const nameKey = normalizeIdentifier(row.data["Account Name"] || "");
+          const areaKey = normalizeIdentifier(row.data["Sub Area / Neighborhood"] || "");
+          const textKey = normalizePostText(row.data["Post Text"] || "");
+          if (!postedKey || !nameKey || !areaKey || !textKey) continue;
+
+          const candidates = byPosted.get(postedKey);
+          if (!candidates) continue;
+          const match = candidates.find((c) => {
+            if (c.row_key === row.row_key) return false;
+            const cName = normalizeIdentifier(c.data?.["Account Name"] || "");
+            const cArea = normalizeIdentifier(c.data?.["Sub Area / Neighborhood"] || "");
+            const cText = normalizePostText(c.data?.["Post Text"] || "");
+            return cName === nameKey && cArea === areaKey && cText === textKey;
+          });
+          if (match) {
+            row.duplicate_detected = true;
+            row.duplicate_reason = "Same account, area, posted time & post text";
+            row.duplicate_match_type = "details_all_four";
+            row.duplicate_key = `${nameKey}|${areaKey}|${postedKey}`;
+            row.duplicate_of_raw_lead_id = match.id;
+          }
+        }
+      }
+      // --- FALLBACK DETECTION END ---
       // --- DUPLICATE DETECTION END ---
 
       const { error } = await supabaseAdmin
