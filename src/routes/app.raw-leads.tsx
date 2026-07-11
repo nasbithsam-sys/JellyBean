@@ -222,32 +222,52 @@ function isPostOlderThan24h(value?: string | null): boolean {
   if (!raw) return false;
   const DAY_MS = 24 * 60 * 60 * 1000;
 
-  // "just now", "moments ago", "a few seconds ago"
   if (/(just now|moments? ago|few seconds ago)/.test(raw)) return false;
-  if (raw === "yesterday") return true;
+  if (raw === "yesterday" || /\bday before yesterday\b/.test(raw)) return true;
 
-  // "a minute ago" / "an hour ago" / "a day ago" / "a week ago" / etc.
+  const unitMs: Record<string, number> = {
+    second: 1000,
+    minute: 60 * 1000,
+    hour: 60 * 60 * 1000,
+    day: DAY_MS,
+    week: 7 * DAY_MS,
+    month: 30 * DAY_MS,
+    year: 365 * DAY_MS,
+  };
+  const unitAlias: Record<string, keyof typeof unitMs> = {
+    s: "second", sec: "second", secs: "second", second: "second", seconds: "second",
+    m: "minute", min: "minute", mins: "minute", minute: "minute", minutes: "minute",
+    h: "hour", hr: "hour", hrs: "hour", hour: "hour", hours: "hour",
+    d: "day", day: "day", days: "day",
+    w: "week", wk: "week", wks: "week", week: "week", weeks: "week",
+    mo: "month", mos: "month", month: "month", months: "month",
+    y: "year", yr: "year", yrs: "year", year: "year", years: "year",
+  };
   const wordNum: Record<string, number> = { a: 1, an: 1 };
-  const relMatch = raw.match(
-    /^(?:about\s+|around\s+|over\s+|almost\s+)?(\d+|a|an)\s*(second|minute|hour|day|week|month|year)s?\s*ago\b/,
+
+  // "5 hours ago", "3 hr ago", "an hour ago", "about 2 days ago"
+  const rel = raw.match(
+    /^(?:about\s+|around\s+|over\s+|almost\s+)?(\d+|a|an)\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|wks?|w|months?|mos?|mo|years?|yrs?|y)\s*ago\b/,
   );
-  if (relMatch) {
-    const n = wordNum[relMatch[1]] ?? Number(relMatch[1]);
-    const unit = relMatch[2];
-    if (!Number.isFinite(n)) return false;
-    const unitMs: Record<string, number> = {
-      second: 1000,
-      minute: 60 * 1000,
-      hour: 60 * 60 * 1000,
-      day: DAY_MS,
-      week: 7 * DAY_MS,
-      month: 30 * DAY_MS,
-      year: 365 * DAY_MS,
-    };
+  if (rel) {
+    const n = wordNum[rel[1]] ?? Number(rel[1]);
+    const unit = unitAlias[rel[2]];
+    if (!Number.isFinite(n) || !unit) return false;
     return n * unitMs[unit] > DAY_MS;
   }
 
-  // Fallback: try parsing as an absolute timestamp.
+  // Short forms without "ago": "2d", "6d", "3h", "45m", "2w", "1mo", "1y"
+  const short = raw.match(
+    /^(\d+)\s*(s|sec|secs|m|min|mins|h|hr|hrs|d|day|days|w|wk|wks|mo|mos|month|months|y|yr|yrs)$/,
+  );
+  if (short) {
+    const n = Number(short[1]);
+    const unit = unitAlias[short[2]];
+    if (!Number.isFinite(n) || !unit) return false;
+    return n * unitMs[unit] > DAY_MS;
+  }
+
+  // Fallback: absolute timestamp
   const parsed = Date.parse(value);
   if (!Number.isNaN(parsed)) {
     return Date.now() - parsed > DAY_MS;
