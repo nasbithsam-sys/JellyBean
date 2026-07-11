@@ -484,6 +484,33 @@ export function LeadForm({
     await onSubmit(payload);
   }
 
+  // Save Draft: capture current values WITHOUT running required-field
+  // validation or duplicate checks. onSaveDraft owns persistence.
+  async function handleSaveDraft() {
+    if (!onSaveDraft) return;
+    const payload: LeadFormValues = {
+      customerName: customerName.trim(),
+      customerNumber: customerNumber.trim(),
+      area: area.trim(),
+      service: service.trim(),
+      context: context.trim(),
+      exactCustomerText: exactCustomerText.trim(),
+      reference: reference.trim(),
+      isImportant: importantValue === "yes",
+      files,
+      existingImages,
+      extraNumbers: (extraNumbers ?? []).filter((n) => n.trim() !== ""),
+      originalLeadLink,
+    };
+    setSavingDraft(true);
+    try {
+      await onSaveDraft(payload);
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+
   return (
     <form onSubmit={handleSubmit} onPaste={handlePaste} className="space-y-5">
       <div className="space-y-1">
