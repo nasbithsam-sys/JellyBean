@@ -374,6 +374,61 @@ export async function handleNextdoorLeadsPost(request: Request) {
       const batchByLink = new Map<string, string>();
       const pendingBatchRefs: Array<{ row_key: string; first_row_key: string }> = [];
 
+      // Build a snapshot of an existing raw or qualified match. Kept narrow —
+      // used later only when the original referenced row can no longer be
+      // resolved and no exact replacement exists.
+      function snapshotFromRaw(rec: {
+        data?: Record<string, string> | null;
+        category?: string | null;
+        captured_at?: string | null;
+        assigned_myself_at?: string | null;
+        canonical_post_id?: string | null;
+        canonical_lead_link?: string | null;
+      }): Record<string, string | null> {
+        const c = (rec.category || "").toLowerCase();
+        const loc =
+          c === "forwarded" ? "Forwarded" :
+          c === "wrong" ? "Wrong Post" :
+          c === "not_found" ? "Number Not Found" :
+          c === "duplicate" ? "Duplicate" :
+          !c ? (rec.assigned_myself_at ? "Assigned Myself" : "New") : c;
+        return {
+          source: "raw",
+          account_name: rec.data?.["Account Name"] ?? null,
+          sub_area: rec.data?.["Sub Area / Neighborhood"] ?? null,
+          posted_date_time: rec.data?.["Posted Date & Time"] ?? null,
+          post_text: rec.data?.["Post Text"] ?? null,
+          original_category: rec.category ?? null,
+          original_location: loc,
+          canonical_post_id: rec.canonical_post_id ?? null,
+          canonical_lead_link: rec.canonical_lead_link ?? null,
+          captured_at: rec.captured_at ?? null,
+        };
+      }
+      function snapshotFromQualified(rec: {
+        customer_name?: string | null;
+        sub_area?: string | null;
+        post_text?: string | null;
+        cs_status?: string | null;
+        canonical_post_id?: string | null;
+        canonical_lead_link?: string | null;
+        created_at?: string | null;
+        assigned_at?: string | null;
+      }): Record<string, string | null> {
+        return {
+          source: "qualified",
+          account_name: rec.customer_name ?? null,
+          sub_area: rec.sub_area ?? null,
+          posted_date_time: null,
+          post_text: rec.post_text ?? null,
+          original_category: "forwarded",
+          original_location: rec.cs_status ? `Forwarded to CS · ${rec.cs_status}` : "Forwarded to CS",
+          canonical_post_id: rec.canonical_post_id ?? null,
+          canonical_lead_link: rec.canonical_lead_link ?? null,
+          captured_at: rec.assigned_at ?? rec.created_at ?? null,
+        };
+      }
+
       for (const row of slice) {
         let isDup = false;
 
@@ -387,6 +442,7 @@ export async function handleNextdoorLeadsPost(request: Request) {
             row.duplicate_match_type = "post_id";
             row.duplicate_key = row.canonical_post_id;
             row.duplicate_of_qualified_lead_id = qMatch.id;
+            row.duplicate_snapshot = snapshotFromQualified(qMatch);
           } else {
             const rMatch = existingRawPostIdRows.find(
               (r) => r.canonical_post_id === row.canonical_post_id && r.row_key !== row.row_key
@@ -398,6 +454,7 @@ export async function handleNextdoorLeadsPost(request: Request) {
               row.duplicate_match_type = "post_id";
               row.duplicate_key = row.canonical_post_id;
               row.duplicate_of_raw_lead_id = rMatch.id;
+              row.duplicate_snapshot = snapshotFromRaw(rMatch);
             }
           }
         }
@@ -412,6 +469,7 @@ export async function handleNextdoorLeadsPost(request: Request) {
             row.duplicate_match_type = "canonical_link";
             row.duplicate_key = row.canonical_lead_link;
             row.duplicate_of_qualified_lead_id = qMatch.id;
+            row.duplicate_snapshot = snapshotFromQualified(qMatch);
           } else {
             const rMatch = existingRawLinkRows.find(
               (r) => r.canonical_lead_link === row.canonical_lead_link && r.row_key !== row.row_key
@@ -423,6 +481,7 @@ export async function handleNextdoorLeadsPost(request: Request) {
               row.duplicate_match_type = "canonical_link";
               row.duplicate_key = row.canonical_lead_link;
               row.duplicate_of_raw_lead_id = rMatch.id;
+              row.duplicate_snapshot = snapshotFromRaw(rMatch);
             }
           }
         }
@@ -438,6 +497,8 @@ export async function handleNextdoorLeadsPost(request: Request) {
             row.duplicate_match_type = "post_id";
             row.duplicate_key = row.canonical_post_id;
             pendingBatchRefs.push({ row_key: row.row_key, first_row_key: firstKey });
+            const firstRow = slice.find((s) => s.row_key === firstKey);
+            if (firstRow) row.duplicate_snapshot = snapshotFromRaw(firstRow);
           } else if (!firstKey) {
             batchByPostId.set(row.canonical_post_id, row.row_key);
           }
@@ -451,6 +512,8 @@ export async function handleNextdoorLeadsPost(request: Request) {
             row.duplicate_match_type = "canonical_link";
             row.duplicate_key = row.canonical_lead_link;
             pendingBatchRefs.push({ row_key: row.row_key, first_row_key: firstKey });
+            const firstRow = slice.find((s) => s.row_key === firstKey);
+            if (firstRow) row.duplicate_snapshot = snapshotFromRaw(firstRow);
           } else if (!firstKey) {
             batchByLink.set(row.canonical_lead_link, row.row_key);
           }
@@ -470,11 +533,20 @@ export async function handleNextdoorLeadsPost(request: Request) {
             .filter((v) => v.length > 0)
         )
       );
-      let fallbackCandidates: Array<{ id: string; row_key: string; data: Record<string, string> }> = [];
+      let fallbackCandidates: Array<{
+        id: string;
+        row_key: string;
+        data: Record<string, string>;
+        category: string | null;
+        captured_at: string | null;
+        assigned_myself_at: string | null;
+        canonical_post_id: string | null;
+        canonical_lead_link: string | null;
+      }> = [];
       if (postedTimes.length > 0) {
         const { data } = await supabaseAdmin
           .from("raw_lead_cache")
-          .select("id, row_key, data")
+          .select("id, row_key, data, category, captured_at, assigned_myself_at, canonical_post_id, canonical_lead_link")
           .in("data->>Posted Date & Time", postedTimes);
         if (data) fallbackCandidates = data as never;
       }
@@ -512,11 +584,13 @@ export async function handleNextdoorLeadsPost(request: Request) {
             row.duplicate_match_type = "details_all_four";
             row.duplicate_key = `${nameKey}|${areaKey}|${postedKey}`;
             row.duplicate_of_raw_lead_id = match.id;
+            row.duplicate_snapshot = snapshotFromRaw(match);
           }
         }
       }
       // --- FALLBACK DETECTION END ---
       // --- DUPLICATE DETECTION END ---
+
 
       const { error } = await supabaseAdmin
         .from("raw_lead_cache")
