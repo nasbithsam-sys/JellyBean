@@ -835,13 +835,30 @@ export function LeadForm({
             setCompressionProgress(0);
             onCancel();
           }}
-          disabled={submitting}
+          disabled={submitting || savingDraft}
         >
           Cancel
         </Button>
+        {onSaveDraft ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleSaveDraft()}
+            disabled={submitting || savingDraft || isCompressing}
+          >
+            {savingDraft ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Saving draft...
+              </>
+            ) : (
+              "Draft"
+            )}
+          </Button>
+        ) : null}
         <Button
           type="submit"
-          disabled={submitting || isCompressing || isDuplicateCheckPending}
+          disabled={submitting || savingDraft || isCompressing || isDuplicateCheckPending}
         >
           {submitting ? (
             <>
@@ -861,6 +878,7 @@ export function LeadForm({
           )}
         </Button>
       </div>
+
 
       <DuplicateLeadDialog
         open={showDupConfirm}
