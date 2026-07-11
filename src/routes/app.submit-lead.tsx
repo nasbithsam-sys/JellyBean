@@ -164,25 +164,41 @@ function Dashboard() {
         title="Submissions dashboard"
         description={`Track the leads you sent to CS${role === "facebook" || role === "seo" ? ` as ${role.toUpperCase()}` : ""}.`}
         actions={
-          <Dialog open={open} onOpenChange={(newOpen) => {
-            if (!newOpen && isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-            setOpen(newOpen);
-          }}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1.5" />
-                New lead
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
-              <DialogHeader>
-                <DialogTitle>Send a new lead to CS</DialogTitle>
-              </DialogHeader>
-              <SubmitForm role={role} onDone={() => { setOpen(false); setIsDirty(false); }} onDirtyChange={setIsDirty} />
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setDraftsOpen(true)}>
+              <FolderOpen className="h-4 w-4 mr-1.5" />
+              Drafts
+            </Button>
+            <Dialog open={open} onOpenChange={(newOpen) => {
+              if (!newOpen && isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+              setOpen(newOpen);
+              if (!newOpen) setActiveDraft(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  New lead
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
+                <DialogHeader>
+                  <DialogTitle>
+                    {activeDraft ? "Send lead to CS (Draft)" : "Send a new lead to CS"}
+                  </DialogTitle>
+                </DialogHeader>
+                <SubmitForm
+                  key={activeDraft?.id ?? "new"}
+                  role={role}
+                  initialDraft={activeDraft}
+                  onDone={() => { setOpen(false); setIsDirty(false); setActiveDraft(null); }}
+                  onDirtyChange={setIsDirty}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
         }
       />
+
       <PageBody className="space-y-6">
         <div className="crm-section-panel">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
