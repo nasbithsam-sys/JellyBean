@@ -301,12 +301,12 @@ function Inner() {
                 <th className="px-4 py-2.5 font-medium">CS Agent</th>
                 <th className="px-4 py-2.5 font-medium text-right">Total Assigned</th>
                 <th className="px-4 py-2.5 font-medium text-right">
-                  <span title="Leads still at 'New' status — never been contacted at all">Still New ⓘ</span>
+                  <span title="Leads still at 'New' status — never been contacted at all">New To Contact ⓘ</span>
                 </th>
                 <th className="px-4 py-2.5 font-medium text-right">
                   <span title="Leads marked 'Need Follow-Up' — already contacted but need a callback">Need Follow-Up ⓘ</span>
                 </th>
-                <th className="px-4 py-2.5 font-medium text-right">Contacted %</th>
+                <th className="px-4 py-2.5 font-medium text-right">Contacted</th>
               </tr>
             </thead>
             <tbody>
