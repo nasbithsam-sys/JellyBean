@@ -2078,7 +2078,6 @@ function QualifyDialog({
           areaRequired
           referenceMode="auto-scraping"
           submitting={busy}
-          disableDuplicateCheck
           onDirtyChange={setIsDirty}
           initialValues={{
             customerName: row["Account Name"] ?? "",
