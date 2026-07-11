@@ -80,10 +80,13 @@ function Dashboard() {
   const role = auth.primaryRole ?? "submitter";
   const [open, setOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [activeDraft, setActiveDraft] = useState<LeadDraft | null>(null);
   const [range, setRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 29),
     to: new Date(),
   });
+
 
   const all = useQuery({
     queryKey: ["my-submitted-leads", auth.user?.id],
