@@ -211,6 +211,50 @@ function parseDateTime(value?: string | null, time?: string | null): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+// Detects whether a "Posted Date & Time" string represents a moment more than
+// 24 hours in the past. Supports relative formats ("5 hours ago", "2 days ago",
+// "1 week ago", "yesterday", "a month ago", etc.) as well as parseable
+// absolute timestamps. Returns false when the value is empty/unrecognized so
+// that unknown formats don't get an incorrect badge.
+function isPostOlderThan24h(value?: string | null): boolean {
+  if (!value) return false;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return false;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  // "just now", "moments ago", "a few seconds ago"
+  if (/(just now|moments? ago|few seconds ago)/.test(raw)) return false;
+  if (raw === "yesterday") return true;
+
+  // "a minute ago" / "an hour ago" / "a day ago" / "a week ago" / etc.
+  const wordNum: Record<string, number> = { a: 1, an: 1 };
+  const relMatch = raw.match(
+    /^(?:about\s+|around\s+|over\s+|almost\s+)?(\d+|a|an)\s*(second|minute|hour|day|week|month|year)s?\s*ago\b/,
+  );
+  if (relMatch) {
+    const n = wordNum[relMatch[1]] ?? Number(relMatch[1]);
+    const unit = relMatch[2];
+    if (!Number.isFinite(n)) return false;
+    const unitMs: Record<string, number> = {
+      second: 1000,
+      minute: 60 * 1000,
+      hour: 60 * 60 * 1000,
+      day: DAY_MS,
+      week: 7 * DAY_MS,
+      month: 30 * DAY_MS,
+      year: 365 * DAY_MS,
+    };
+    return n * unitMs[unit] > DAY_MS;
+  }
+
+  // Fallback: try parsing as an absolute timestamp.
+  const parsed = Date.parse(value);
+  if (!Number.isNaN(parsed)) {
+    return Date.now() - parsed > DAY_MS;
+  }
+  return false;
+}
+
 function compareText(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
@@ -1353,7 +1397,18 @@ function Inner() {
                       className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground truncate"
                       title={r["Posted Date & Time"]}
                     >
-                      {r["Posted Date & Time"] || "—"}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate">{r["Posted Date & Time"] || "—"}</span>
+                        {isPostOlderThan24h(r["Posted Date & Time"]) && (
+                          <span
+                            aria-label="Old Post"
+                            title="Posted more than 24 hours ago"
+                            className="shrink-0 select-none pointer-events-none inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                          >
+                            Old Post
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="border-b border-border px-2.5 py-2">
                       <div className="line-clamp-3 whitespace-pre-wrap" title={r["Post Text"]}>
@@ -1859,8 +1914,19 @@ function LeadDetailDialog({
               <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
                 Posted
               </Label>
-              <div className="text-foreground truncate" title={r["Posted Date & Time"]}>
-                {r["Posted Date & Time"] || <span className="text-muted-foreground">—</span>}
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="text-foreground truncate" title={r["Posted Date & Time"]}>
+                  {r["Posted Date & Time"] || <span className="text-muted-foreground">—</span>}
+                </div>
+                {isPostOlderThan24h(r["Posted Date & Time"]) && (
+                  <span
+                    aria-label="Old Post"
+                    title="Posted more than 24 hours ago"
+                    className="shrink-0 select-none pointer-events-none inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                  >
+                    Old Post
+                  </span>
+                )}
               </div>
             </div>
             <div className="min-w-0">
