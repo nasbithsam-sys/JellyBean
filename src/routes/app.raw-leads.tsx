@@ -72,6 +72,10 @@ import {
 
 import { RawLeadDuplicateDialog } from "@/components/raw-lead-duplicate-dialog";
 import { confirmDialog, confirmDiscardUnsaved } from "@/components/confirm-dialog";
+import { DraftsDialog } from "@/components/drafts-dialog";
+import { saveDraft, deleteDraftForSource, type LeadDraft } from "@/lib/lead-drafts";
+import { FolderOpen } from "lucide-react";
+
 
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
 
