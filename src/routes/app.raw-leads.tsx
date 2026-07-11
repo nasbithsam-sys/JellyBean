@@ -2116,14 +2116,18 @@ function LeadDetailDialog({
         </DialogFooter>
       </DialogContent>
 
-      <DuplicateLeadDialog
-        open={duplicateConfirmOpen}
-        onOpenChange={setDuplicateConfirmOpen}
-        matches={duplicatePreview}
-        isConfirming={busy}
-        onCancel={() => setDuplicateConfirmOpen(false)}
-        onConfirm={() => void continueDespiteDuplicate()}
-      />
+      {duplicateConfirmOpen && (
+        <Suspense fallback={null}>
+          <DuplicateLeadDialog
+            open={duplicateConfirmOpen}
+            onOpenChange={setDuplicateConfirmOpen}
+            matches={duplicatePreview}
+            isConfirming={busy}
+            onCancel={() => setDuplicateConfirmOpen(false)}
+            onConfirm={() => void continueDespiteDuplicate()}
+          />
+        </Suspense>
+      )}
     </Dialog>
   );
 }
