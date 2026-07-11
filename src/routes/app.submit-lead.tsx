@@ -360,15 +360,19 @@ function Dashboard() {
           )}
         </div>
       </PageBody>
-      <DraftsDialog
-        open={draftsOpen}
-        onOpenChange={setDraftsOpen}
-        filterSource="manual_lead"
-        onOpenDraft={(d) => {
-          setActiveDraft(d);
-          setOpen(true);
-        }}
-      />
+      {draftsOpen && (
+        <Suspense fallback={null}>
+          <DraftsDialog
+            open={draftsOpen}
+            onOpenChange={setDraftsOpen}
+            filterSource="manual_lead"
+            onOpenDraft={(d) => {
+              setActiveDraft(d);
+              setOpen(true);
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
