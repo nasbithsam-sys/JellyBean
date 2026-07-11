@@ -178,7 +178,7 @@ function Inner() {
   function exportCsv() {
     downloadCsv(
       "cs-reports.csv",
-      ["CS Agent", "Email", "Total Assigned", "Still New (never contacted)", "Need Follow-Up"],
+      ["CS Agent", "Email", "Total Assigned", "New To Contact (never contacted)", "Need Follow-Up"],
       stats.map((s) => [s.name, s.email, s.total, s.still_new, s.need_contact]),
     );
   }
@@ -272,7 +272,7 @@ function Inner() {
         />
         <SummaryCard
           icon={<PhoneOff className="h-4 w-4" />}
-          label="Still New"
+          label="New To Contact"
           value={totals.still_new}
           color="text-amber-500"
           tooltip="Leads still at 'New' status — CS has never contacted these customers yet."
@@ -301,12 +301,12 @@ function Inner() {
                 <th className="px-4 py-2.5 font-medium">CS Agent</th>
                 <th className="px-4 py-2.5 font-medium text-right">Total Assigned</th>
                 <th className="px-4 py-2.5 font-medium text-right">
-                  <span title="Leads still at 'New' status — never been contacted at all">Still New ⓘ</span>
+                  <span title="Leads still at 'New' status — never been contacted at all">New To Contact ⓘ</span>
                 </th>
                 <th className="px-4 py-2.5 font-medium text-right">
                   <span title="Leads marked 'Need Follow-Up' — already contacted but need a callback">Need Follow-Up ⓘ</span>
                 </th>
-                <th className="px-4 py-2.5 font-medium text-right">Contacted %</th>
+                <th className="px-4 py-2.5 font-medium text-right">Contacted</th>
               </tr>
             </thead>
             <tbody>
@@ -326,8 +326,9 @@ function Inner() {
                 </tr>
               )}
               {stats.map((s) => {
+                const contactedCount = s.total > 0 ? s.total - s.need_contact : null;
                 const contactedPct =
-                  s.total > 0 ? (((s.total - s.need_contact) / s.total) * 100).toFixed(1) : null;
+                  s.total > 0 ? ((s.total - s.need_contact) / s.total) * 100 : null;
                 return (
                   <tr key={s.user_id} className="border-t hover:bg-muted/30">
                     <td className="px-4 py-3">
@@ -354,20 +355,20 @@ function Inner() {
                       {s.need_contact}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      {contactedPct === null ? (
+                      {contactedCount === null || contactedPct === null ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
                         <span
                           className={cn(
                             "font-medium",
-                            Number(contactedPct) >= 80
+                            contactedPct >= 80
                               ? "text-emerald-600"
-                              : Number(contactedPct) >= 50
+                              : contactedPct >= 50
                                 ? "text-amber-500"
                                 : "text-red-500",
                           )}
                         >
-                          {contactedPct}%
+                          {contactedCount}
                         </span>
                       )}
                     </td>
@@ -402,7 +403,7 @@ function Inner() {
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
                     {totals.total > 0
-                      ? `${(((totals.total - totals.need_contact) / totals.total) * 100).toFixed(1)}%`
+                      ? `${totals.total - totals.need_contact}`
                       : "—"}
                   </td>
                 </tr>
