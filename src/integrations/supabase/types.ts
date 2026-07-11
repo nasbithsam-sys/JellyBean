@@ -598,6 +598,10 @@ export type Database = {
           wrong_count: number
         }[]
       }
+      get_raw_lead_duplicate_match_preview: {
+        Args: { _current_raw_lead_id: string }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
