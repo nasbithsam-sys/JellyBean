@@ -634,17 +634,18 @@ function Inner() {
 
 
   // ── Lightweight count query — runs only when indexed filter params change ──
-  // Uses { count: "exact", head: true } — fetches NO rows. Runs on the same
-  // indexed columns (assigned_at, assigned_to, cs_status) so cost is low.
-  // Search (ilike) and area (unindexed) are intentionally excluded from the
-  // count to keep it fast. Count is therefore a "filtered dataset size" for
-  // paginating, not an absolute match count.
+  // Uses { count: "planned", head: true } — returns Postgres' planner estimate
+  // instead of scanning the full filtered set. The exact count for a filtered
+  // qualified_leads scan was the #1 slow query in the DB (mean ~3s over 28K
+  // calls). Pagination UI tolerates a slightly approximate total; per-status
+  // badges still come from the exact `cs_leads_status_counts` RPC below.
   const totalCount = useQuery({
     queryKey: ["cs_leads_count", { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch }],
     queryFn: async () => {
       let q = supabase
         .from("qualified_leads")
-        .select("id", { count: "exact", head: true });
+        .select("id", { count: "planned", head: true });
+
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
       if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
