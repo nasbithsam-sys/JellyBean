@@ -221,9 +221,12 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
 
+    // Planner-estimated count — was the top-ranked slow query when set to
+    // "exact" (mean 2.4s over 2.3K+ calls). Pagination uses this only to
+    // decide "has more"; tab badges still come from the RPC counts below.
     let totalCountQuery = context.supabase
       .from("raw_lead_cache")
-      .select("row_key", { count: "exact", head: true });
+      .select("row_key", { count: "planned", head: true });
     if (data.category === "assigned_myself") {
       totalCountQuery = totalCountQuery
         .eq("assigned_to" as never, context.userId as never)
