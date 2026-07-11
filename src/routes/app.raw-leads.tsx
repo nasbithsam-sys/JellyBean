@@ -2262,38 +2262,40 @@ function QualifyDialog({
         <DialogHeader>
           <DialogTitle>{draft ? "Forward to CS (Draft)" : "Forward to CS"}</DialogTitle>
         </DialogHeader>
-        <LeadForm
-          title="Raw lead to CS"
-          submitLabel="Send"
-          forwardedBy={actorName ?? "Current user"}
-          showAttachments={false}
-          areaRequired
-          referenceMode="auto-scraping"
-          submitting={busy}
-          onDirtyChange={setIsDirty}
-          initialValues={{
-            customerName: (draftData?.customerName as string | undefined) ?? row["Account Name"] ?? "",
-            customerNumber:
-              (draftData?.customerNumber as string | undefined) ?? formatPhoneInput(entry.phone ?? ""),
-            extraNumbers:
-              (draftData?.extraNumbers as string[] | undefined) ??
-              (initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : []),
-            area:
-              (draftData?.area as string | undefined) ??
-              row["Account Area"] ??
-              row["Sub Area / Neighborhood"] ??
-              "",
-            service: (draftData?.service as string | undefined) ?? "",
-            context: (draftData?.context as string | undefined) ?? "",
-            exactCustomerText:
-              (draftData?.exactCustomerText as string | undefined) ?? row["Post Text"] ?? "",
-            reference: (draftData?.reference as string | undefined),
-            isImportant: (draftData?.isImportant as boolean | undefined) ?? false,
-          }}
-          onCancel={onClose}
-          onSubmit={send}
-          onSaveDraft={handleSaveDraft}
-        />
+        <Suspense fallback={<div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
+          <LeadForm
+            title="Raw lead to CS"
+            submitLabel="Send"
+            forwardedBy={actorName ?? "Current user"}
+            showAttachments={false}
+            areaRequired
+            referenceMode="auto-scraping"
+            submitting={busy}
+            onDirtyChange={setIsDirty}
+            initialValues={{
+              customerName: (draftData?.customerName as string | undefined) ?? row["Account Name"] ?? "",
+              customerNumber:
+                (draftData?.customerNumber as string | undefined) ?? formatPhoneInput(entry.phone ?? ""),
+              extraNumbers:
+                (draftData?.extraNumbers as string[] | undefined) ??
+                (initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : []),
+              area:
+                (draftData?.area as string | undefined) ??
+                row["Account Area"] ??
+                row["Sub Area / Neighborhood"] ??
+                "",
+              service: (draftData?.service as string | undefined) ?? "",
+              context: (draftData?.context as string | undefined) ?? "",
+              exactCustomerText:
+                (draftData?.exactCustomerText as string | undefined) ?? row["Post Text"] ?? "",
+              reference: (draftData?.reference as string | undefined),
+              isImportant: (draftData?.isImportant as boolean | undefined) ?? false,
+            }}
+            onCancel={onClose}
+            onSubmit={send}
+            onSaveDraft={handleSaveDraft}
+          />
+        </Suspense>
 
       </DialogContent>
     </Dialog>
