@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "sonner";
@@ -35,9 +35,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { DuplicateLeadDialog } from "@/components/duplicate-lead-dialog";
+import type { LeadFormValues } from "@/components/lead-form";
 import { Checkbox } from "@/components/ui/checkbox";
-import { LeadForm, type LeadFormValues } from "@/components/lead-form";
 import {
   Loader2,
   ExternalLink,
@@ -70,11 +69,23 @@ import {
   fetchRawLeadCounts,
 } from "@/lib/raw-leads.functions";
 
-import { RawLeadDuplicateDialog } from "@/components/raw-lead-duplicate-dialog";
 import { confirmDialog, confirmDiscardUnsaved } from "@/components/confirm-dialog";
-import { DraftsDialog } from "@/components/drafts-dialog";
 import { saveDraft, deleteDraftForSource, type LeadDraft } from "@/lib/lead-drafts";
 import { FolderOpen } from "lucide-react";
+
+// Lazy-loaded heavy dialogs — deferred until user opens them
+const LeadForm = lazy(() =>
+  import("@/components/lead-form").then((m) => ({ default: m.LeadForm })),
+);
+const DuplicateLeadDialog = lazy(() =>
+  import("@/components/duplicate-lead-dialog").then((m) => ({ default: m.DuplicateLeadDialog })),
+);
+const RawLeadDuplicateDialog = lazy(() =>
+  import("@/components/raw-lead-duplicate-dialog").then((m) => ({ default: m.RawLeadDuplicateDialog })),
+);
+const DraftsDialog = lazy(() =>
+  import("@/components/drafts-dialog").then((m) => ({ default: m.DraftsDialog })),
+);
 
 
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
@@ -1732,35 +1743,43 @@ function Inner() {
         />
       )}
 
-      <DraftsDialog
-        open={draftsOpen}
-        onOpenChange={setDraftsOpen}
-        filterSource="raw_lead"
-        onOpenDraft={(draft) => {
-          const snapshot = draft.form_data?.entrySnapshot as CacheEntry | undefined;
-          if (!snapshot) {
-            toast.error("This draft is missing its raw lead reference.");
-            return;
-          }
-          setQualifyDraft(draft);
-          setQualifySecondPhone("");
-          setQualifyFor(snapshot);
-        }}
-      />
+      {draftsOpen && (
+        <Suspense fallback={null}>
+          <DraftsDialog
+            open={draftsOpen}
+            onOpenChange={setDraftsOpen}
+            filterSource="raw_lead"
+            onOpenDraft={(draft) => {
+              const snapshot = draft.form_data?.entrySnapshot as CacheEntry | undefined;
+              if (!snapshot) {
+                toast.error("This draft is missing its raw lead reference.");
+                return;
+              }
+              setQualifyDraft(draft);
+              setQualifySecondPhone("");
+              setQualifyFor(snapshot);
+            }}
+          />
+        </Suspense>
+      )}
 
-      <RawLeadDuplicateDialog
-        open={!!duplicateDetailsFor}
-        onOpenChange={(open) => {
-          if (!open) setDuplicateDetailsFor(null);
-        }}
-        currentLead={duplicateDetailsFor}
-        onSendToDuplicateFilter={async () => {
-          if (!duplicateDetailsFor) return;
-          await updateAction(duplicateDetailsFor.row_key, { category: "duplicate" });
-          toast.success("Moved to Duplicate");
-          setDuplicateDetailsFor(null);
-        }}
-      />
+      {duplicateDetailsFor && (
+        <Suspense fallback={null}>
+          <RawLeadDuplicateDialog
+            open={!!duplicateDetailsFor}
+            onOpenChange={(open) => {
+              if (!open) setDuplicateDetailsFor(null);
+            }}
+            currentLead={duplicateDetailsFor}
+            onSendToDuplicateFilter={async () => {
+              if (!duplicateDetailsFor) return;
+              await updateAction(duplicateDetailsFor.row_key, { category: "duplicate" });
+              toast.success("Moved to Duplicate");
+              setDuplicateDetailsFor(null);
+            }}
+          />
+        </Suspense>
+      )}
 
     </div>
   );
@@ -2105,14 +2124,18 @@ function LeadDetailDialog({
         </DialogFooter>
       </DialogContent>
 
-      <DuplicateLeadDialog
-        open={duplicateConfirmOpen}
-        onOpenChange={setDuplicateConfirmOpen}
-        matches={duplicatePreview}
-        isConfirming={busy}
-        onCancel={() => setDuplicateConfirmOpen(false)}
-        onConfirm={() => void continueDespiteDuplicate()}
-      />
+      {duplicateConfirmOpen && (
+        <Suspense fallback={null}>
+          <DuplicateLeadDialog
+            open={duplicateConfirmOpen}
+            onOpenChange={setDuplicateConfirmOpen}
+            matches={duplicatePreview}
+            isConfirming={busy}
+            onCancel={() => setDuplicateConfirmOpen(false)}
+            onConfirm={() => void continueDespiteDuplicate()}
+          />
+        </Suspense>
+      )}
     </Dialog>
   );
 }
@@ -2239,38 +2262,40 @@ function QualifyDialog({
         <DialogHeader>
           <DialogTitle>{draft ? "Forward to CS (Draft)" : "Forward to CS"}</DialogTitle>
         </DialogHeader>
-        <LeadForm
-          title="Raw lead to CS"
-          submitLabel="Send"
-          forwardedBy={actorName ?? "Current user"}
-          showAttachments={false}
-          areaRequired
-          referenceMode="auto-scraping"
-          submitting={busy}
-          onDirtyChange={setIsDirty}
-          initialValues={{
-            customerName: (draftData?.customerName as string | undefined) ?? row["Account Name"] ?? "",
-            customerNumber:
-              (draftData?.customerNumber as string | undefined) ?? formatPhoneInput(entry.phone ?? ""),
-            extraNumbers:
-              (draftData?.extraNumbers as string[] | undefined) ??
-              (initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : []),
-            area:
-              (draftData?.area as string | undefined) ??
-              row["Account Area"] ??
-              row["Sub Area / Neighborhood"] ??
-              "",
-            service: (draftData?.service as string | undefined) ?? "",
-            context: (draftData?.context as string | undefined) ?? "",
-            exactCustomerText:
-              (draftData?.exactCustomerText as string | undefined) ?? row["Post Text"] ?? "",
-            reference: (draftData?.reference as string | undefined),
-            isImportant: (draftData?.isImportant as boolean | undefined) ?? false,
-          }}
-          onCancel={onClose}
-          onSubmit={send}
-          onSaveDraft={handleSaveDraft}
-        />
+        <Suspense fallback={<div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
+          <LeadForm
+            title="Raw lead to CS"
+            submitLabel="Send"
+            forwardedBy={actorName ?? "Current user"}
+            showAttachments={false}
+            areaRequired
+            referenceMode="auto-scraping"
+            submitting={busy}
+            onDirtyChange={setIsDirty}
+            initialValues={{
+              customerName: (draftData?.customerName as string | undefined) ?? row["Account Name"] ?? "",
+              customerNumber:
+                (draftData?.customerNumber as string | undefined) ?? formatPhoneInput(entry.phone ?? ""),
+              extraNumbers:
+                (draftData?.extraNumbers as string[] | undefined) ??
+                (initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : []),
+              area:
+                (draftData?.area as string | undefined) ??
+                row["Account Area"] ??
+                row["Sub Area / Neighborhood"] ??
+                "",
+              service: (draftData?.service as string | undefined) ?? "",
+              context: (draftData?.context as string | undefined) ?? "",
+              exactCustomerText:
+                (draftData?.exactCustomerText as string | undefined) ?? row["Post Text"] ?? "",
+              reference: (draftData?.reference as string | undefined),
+              isImportant: (draftData?.isImportant as boolean | undefined) ?? false,
+            }}
+            onCancel={onClose}
+            onSubmit={send}
+            onSaveDraft={handleSaveDraft}
+          />
+        </Suspense>
 
       </DialogContent>
     </Dialog>

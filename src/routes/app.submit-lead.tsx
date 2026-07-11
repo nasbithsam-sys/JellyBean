@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -44,7 +44,9 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { DateRange } from "react-day-picker";
 import { formatPhone } from "@/lib/crm-lite";
-import { DraftsDialog } from "@/components/drafts-dialog";
+const DraftsDialog = lazy(() =>
+  import("@/components/drafts-dialog").then((m) => ({ default: m.DraftsDialog })),
+);
 import { saveDraft, deleteDraft, type LeadDraft } from "@/lib/lead-drafts";
 import { friendlyError } from "@/lib/error-messages";
 
@@ -358,15 +360,19 @@ function Dashboard() {
           )}
         </div>
       </PageBody>
-      <DraftsDialog
-        open={draftsOpen}
-        onOpenChange={setDraftsOpen}
-        filterSource="manual_lead"
-        onOpenDraft={(d) => {
-          setActiveDraft(d);
-          setOpen(true);
-        }}
-      />
+      {draftsOpen && (
+        <Suspense fallback={null}>
+          <DraftsDialog
+            open={draftsOpen}
+            onOpenChange={setDraftsOpen}
+            filterSource="manual_lead"
+            onOpenDraft={(d) => {
+              setActiveDraft(d);
+              setOpen(true);
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
