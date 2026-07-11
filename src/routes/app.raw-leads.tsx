@@ -2028,6 +2028,7 @@ function QualifyDialog({
   actorName,
   actorRole,
   initialSecondPhone,
+  draft,
   onClose,
   onSent,
 }: {
@@ -2036,6 +2037,7 @@ function QualifyDialog({
   actorName: string | null;
   actorRole: string | null;
   initialSecondPhone: string;
+  draft: LeadDraft | null;
   onClose: () => void;
   onSent: () => void;
 }) {
@@ -2096,6 +2098,40 @@ function QualifyDialog({
     }
   }
 
+  async function handleSaveDraft(values: LeadFormValues) {
+    if (!actorId) {
+      toast.error("You must be signed in to save a draft.");
+      return;
+    }
+    try {
+      await saveDraft({
+        id: draft?.id ?? null,
+        source_type: "raw_lead",
+        source_lead_id: entry.id ?? null,
+        created_by: actorId,
+        form_data: {
+          customerName: values.customerName,
+          customerNumber: values.customerNumber,
+          extraNumbers: values.extraNumbers ?? [],
+          area: values.area,
+          service: values.service,
+          context: values.context,
+          exactCustomerText: values.exactCustomerText,
+          reference: values.reference,
+          isImportant: values.isImportant,
+          originalLeadLink: values.originalLeadLink ?? null,
+          entrySnapshot: entry,
+        },
+      });
+      toast.success("Draft saved successfully.");
+      setIsDirty(false);
+    } catch (e) {
+      toast.error(friendlyError(e));
+    }
+  }
+
+  const draftData = draft?.form_data ?? null;
+
   return (
     <Dialog open onOpenChange={(o) => {
       if (!o) {
@@ -2104,7 +2140,7 @@ function QualifyDialog({
     }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>Forward to CS</DialogTitle>
+          <DialogTitle>{draft ? "Forward to CS (Draft)" : "Forward to CS"}</DialogTitle>
         </DialogHeader>
         <LeadForm
           title="Raw lead to CS"
@@ -2116,18 +2152,29 @@ function QualifyDialog({
           submitting={busy}
           onDirtyChange={setIsDirty}
           initialValues={{
-            customerName: row["Account Name"] ?? "",
-            customerNumber: formatPhoneInput(entry.phone ?? ""),
-            extraNumbers: initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : [],
-            area: row["Account Area"] ?? row["Sub Area / Neighborhood"] ?? "",
-            service: "",
-            context: "",
-            exactCustomerText: row["Post Text"] ?? "",
-            isImportant: false,
+            customerName: (draftData?.customerName as string | undefined) ?? row["Account Name"] ?? "",
+            customerNumber:
+              (draftData?.customerNumber as string | undefined) ?? formatPhoneInput(entry.phone ?? ""),
+            extraNumbers:
+              (draftData?.extraNumbers as string[] | undefined) ??
+              (initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : []),
+            area:
+              (draftData?.area as string | undefined) ??
+              row["Account Area"] ??
+              row["Sub Area / Neighborhood"] ??
+              "",
+            service: (draftData?.service as string | undefined) ?? "",
+            context: (draftData?.context as string | undefined) ?? "",
+            exactCustomerText:
+              (draftData?.exactCustomerText as string | undefined) ?? row["Post Text"] ?? "",
+            reference: (draftData?.reference as string | undefined),
+            isImportant: (draftData?.isImportant as boolean | undefined) ?? false,
           }}
           onCancel={onClose}
           onSubmit={send}
+          onSaveDraft={handleSaveDraft}
         />
+
       </DialogContent>
     </Dialog>
   );
