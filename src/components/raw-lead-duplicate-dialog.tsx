@@ -118,8 +118,7 @@ export function RawLeadDuplicateDialog({
       return;
     }
 
-    const hasRef = !!(currentLead.duplicate_of_qualified_lead_id || currentLead.duplicate_of_raw_lead_id);
-    if (!hasRef || !currentLead.id) {
+    if (!currentLead.id) {
       setMatchData(null);
       return;
     }
@@ -134,20 +133,46 @@ export function RawLeadDuplicateDialog({
           { _current_raw_lead_id: currentId } as never,
         );
         if (error) throw error;
-        const payload = data as { type: string | null; data?: unknown; assignee?: unknown } | null;
-        if (!payload || !payload.type || !payload.data) {
+        const payload = data as {
+          type: string | null;
+          data?: unknown;
+          assignee?: unknown;
+          fallback?: boolean;
+          match_type?: string | null;
+          duplicate_key?: string | null;
+          reason?: string | null;
+        } | null;
+        if (!payload || !payload.type) {
           setMatchData(null);
           return;
         }
-        if (payload.type === "qualified") {
+        if (payload.type === "qualified" && payload.data) {
           setMatchData({
             type: "qualified",
             data: payload.data as QualifiedMatch["data"],
             assignee: (payload.assignee as QualifiedMatch["assignee"]) ?? null,
+            fallback: !!payload.fallback,
           });
-        } else if (payload.type === "raw") {
+        } else if (payload.type === "raw" && payload.data) {
           const raw = payload.data as RawMatch["data"];
-          setMatchData({ type: "raw", data: raw, location: rawCategoryLocation(raw) });
+          setMatchData({ type: "raw", data: raw, location: rawCategoryLocation(raw), fallback: !!payload.fallback });
+        } else if (payload.type === "snapshot" && payload.data) {
+          setMatchData({
+            type: "snapshot",
+            data: payload.data as Record<string, string | null>,
+            match_type: payload.match_type ?? null,
+            duplicate_key: payload.duplicate_key ?? null,
+            reason: payload.reason ?? null,
+          });
+        } else if (payload.type === "missing") {
+          setMatchData({
+            type: "missing",
+            match_type: payload.match_type ?? null,
+            duplicate_key: payload.duplicate_key ?? null,
+            reason: payload.reason ?? "Previous matched lead is no longer available",
+          });
+        } else {
+          setMatchData(null);
         }
       } catch (err) {
         if (import.meta.env.DEV) {
