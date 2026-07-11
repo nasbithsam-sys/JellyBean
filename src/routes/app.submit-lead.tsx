@@ -358,6 +358,15 @@ function Dashboard() {
           )}
         </div>
       </PageBody>
+      <DraftsDialog
+        open={draftsOpen}
+        onOpenChange={setDraftsOpen}
+        filterSource="manual_lead"
+        onOpenDraft={(d) => {
+          setActiveDraft(d);
+          setOpen(true);
+        }}
+      />
     </div>
   );
 }
