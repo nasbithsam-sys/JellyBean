@@ -326,8 +326,9 @@ function Inner() {
                 </tr>
               )}
               {stats.map((s) => {
+                const contactedCount = s.total > 0 ? s.total - s.need_contact : null;
                 const contactedPct =
-                  s.total > 0 ? (((s.total - s.need_contact) / s.total) * 100).toFixed(1) : null;
+                  s.total > 0 ? ((s.total - s.need_contact) / s.total) * 100 : null;
                 return (
                   <tr key={s.user_id} className="border-t hover:bg-muted/30">
                     <td className="px-4 py-3">
@@ -354,20 +355,20 @@ function Inner() {
                       {s.need_contact}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      {contactedPct === null ? (
+                      {contactedCount === null || contactedPct === null ? (
                         <span className="text-muted-foreground">—</span>
                       ) : (
                         <span
                           className={cn(
                             "font-medium",
-                            Number(contactedPct) >= 80
+                            contactedPct >= 80
                               ? "text-emerald-600"
-                              : Number(contactedPct) >= 50
+                              : contactedPct >= 50
                                 ? "text-amber-500"
                                 : "text-red-500",
                           )}
                         >
-                          {contactedPct}%
+                          {contactedCount}
                         </span>
                       )}
                     </td>
