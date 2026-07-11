@@ -398,6 +398,9 @@ function Inner() {
   const [duplicateDetailsFor, setDuplicateDetailsFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
   const [qualifySecondPhone, setQualifySecondPhone] = useState("");
+  const [qualifyDraft, setQualifyDraft] = useState<LeadDraft | null>(null);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+
   const [aiPrompt, setAiPrompt] = useState(FROZEN_LEAD_PROMPT);
   const [promptDirty, setPromptDirty] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
