@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteSkeleton } from "@/components/route-skeleton";
 import { useServerFn } from "@tanstack/react-start";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";

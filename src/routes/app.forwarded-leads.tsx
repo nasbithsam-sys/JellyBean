@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteSkeleton } from "@/components/route-skeleton";
 import { useMemo, useState, useEffect } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink } from "lucide-react";
