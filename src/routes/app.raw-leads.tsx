@@ -69,9 +69,23 @@ import {
   fetchRawLeadCounts,
 } from "@/lib/raw-leads.functions";
 
-import { RawLeadDuplicateDialog } from "@/components/raw-lead-duplicate-dialog";
 import { confirmDialog, confirmDiscardUnsaved } from "@/components/confirm-dialog";
-import { DraftsDialog } from "@/components/drafts-dialog";
+import { saveDraft, deleteDraftForSource, type LeadDraft } from "@/lib/lead-drafts";
+import { FolderOpen } from "lucide-react";
+
+// Lazy-loaded heavy dialogs — deferred until user opens them
+const LeadForm = lazy(() =>
+  import("@/components/lead-form").then((m) => ({ default: m.LeadForm })),
+);
+const DuplicateLeadDialog = lazy(() =>
+  import("@/components/duplicate-lead-dialog").then((m) => ({ default: m.DuplicateLeadDialog })),
+);
+const RawLeadDuplicateDialog = lazy(() =>
+  import("@/components/raw-lead-duplicate-dialog").then((m) => ({ default: m.RawLeadDuplicateDialog })),
+);
+const DraftsDialog = lazy(() =>
+  import("@/components/drafts-dialog").then((m) => ({ default: m.DraftsDialog })),
+);
 import { saveDraft, deleteDraftForSource, type LeadDraft } from "@/lib/lead-drafts";
 import { FolderOpen } from "lucide-react";
 
