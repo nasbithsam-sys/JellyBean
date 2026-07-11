@@ -115,7 +115,7 @@ export function RawLeadDuplicateDialog({
       try {
         const { data, error } = await supabase.rpc(
           "get_raw_lead_duplicate_match_preview" as never,
-          { _current_raw_lead_id: currentLead!.id } as never,
+          { _current_raw_lead_id: currentId } as never,
         );
         if (error) throw error;
         const payload = data as { type: string | null; data?: unknown; assignee?: unknown } | null;
