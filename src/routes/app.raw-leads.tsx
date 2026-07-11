@@ -35,9 +35,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { DuplicateLeadDialog } from "@/components/duplicate-lead-dialog";
+import type { LeadFormValues } from "@/components/lead-form";
 import { Checkbox } from "@/components/ui/checkbox";
-import { LeadForm, type LeadFormValues } from "@/components/lead-form";
 import {
   Loader2,
   ExternalLink,
