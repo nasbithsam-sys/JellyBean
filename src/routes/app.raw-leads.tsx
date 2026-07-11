@@ -1058,6 +1058,17 @@ function Inner() {
             )}
             Refresh
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={() => setDraftsOpen(true)}
+            title="View saved drafts"
+          >
+            <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
+            Drafts
+          </Button>
+
           {auth.primaryRole === "admin" && (
             <Button size="sm" variant="outline" className="h-9" onClick={exportRows}>
               <Download className="h-3.5 w-3.5 mr-1.5" />
