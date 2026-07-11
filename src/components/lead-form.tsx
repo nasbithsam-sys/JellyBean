@@ -119,6 +119,7 @@ export function LeadForm({
   onDirtyChange,
   onCancel,
   onSubmit,
+  onSaveDraft,
   disableDuplicateCheck = false,
 }: {
   title?: string;
@@ -132,8 +133,10 @@ export function LeadForm({
   onDirtyChange?: (isDirty: boolean) => void;
   onCancel: () => void;
   onSubmit: (values: LeadFormValues) => Promise<void>;
+  onSaveDraft?: (values: LeadFormValues) => Promise<void>;
   disableDuplicateCheck?: boolean;
 }) {
+
   const fileRef = useRef<HTMLInputElement | null>(null);
   const videoFileRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
