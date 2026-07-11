@@ -93,55 +93,51 @@ export function RawLeadDuplicateDialog({
   const [isBusy, setIsBusy] = useState(false);
   const [isLoadingMatch, setIsLoadingMatch] = useState(false);
   const [matchData, setMatchData] = useState<MatchState | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !currentLead) {
       setMatchData(null);
+      setLoadError(null);
       return;
     }
 
+    const hasRef = !!(currentLead.duplicate_of_qualified_lead_id || currentLead.duplicate_of_raw_lead_id);
+    if (!hasRef || !currentLead.id) {
+      setMatchData(null);
+      return;
+    }
+    const currentId = currentLead.id;
+
     async function fetchMatch() {
       setIsLoadingMatch(true);
+      setLoadError(null);
       try {
-        if (currentLead?.duplicate_of_qualified_lead_id) {
-          const { data } = await supabase
-            .from("qualified_leads")
-            .select("id, customer_name, customer_number, sub_area, post_text, cs_status, assigned_to, assigned_at, created_at")
-            .eq("id", currentLead.duplicate_of_qualified_lead_id)
-            .maybeSingle();
-          if (data) {
-            let assignee: QualifiedMatch["assignee"] = null;
-            if (data.assigned_to) {
-              const { data: prof } = await supabase
-                .from("profiles")
-                .select("full_name, username, email")
-                .eq("user_id", data.assigned_to)
-                .maybeSingle();
-              if (prof) {
-                assignee = {
-                  name: prof.full_name || prof.username || null,
-                  email: prof.email || null,
-                };
-              }
-            }
-            setMatchData({ type: "qualified", data, assignee });
-          }
-        } else if (currentLead?.duplicate_of_raw_lead_id) {
-          const { data } = await supabase
-            .from("raw_lead_cache")
-            .select("id, category, assigned_myself_at, assigned_to, phone, captured_at, data")
-            .eq("id", currentLead.duplicate_of_raw_lead_id)
-            .maybeSingle();
-          if (data) {
-            setMatchData({
-              type: "raw",
-              data: data as RawMatch["data"],
-              location: rawCategoryLocation(data as RawMatch["data"]),
-            });
-          }
+        const { data, error } = await supabase.rpc(
+          "get_raw_lead_duplicate_match_preview" as never,
+          { _current_raw_lead_id: currentId } as never,
+        );
+        if (error) throw error;
+        const payload = data as { type: string | null; data?: unknown; assignee?: unknown } | null;
+        if (!payload || !payload.type || !payload.data) {
+          setMatchData(null);
+          return;
+        }
+        if (payload.type === "qualified") {
+          setMatchData({
+            type: "qualified",
+            data: payload.data as QualifiedMatch["data"],
+            assignee: (payload.assignee as QualifiedMatch["assignee"]) ?? null,
+          });
+        } else if (payload.type === "raw") {
+          const raw = payload.data as RawMatch["data"];
+          setMatchData({ type: "raw", data: raw, location: rawCategoryLocation(raw) });
         }
       } catch (err) {
-        console.error("Failed to fetch match details", err);
+        if (import.meta.env.DEV) {
+          console.error("Failed to fetch duplicate match details", err);
+        }
+        setLoadError("Previous lead details could not be loaded.");
       } finally {
         setIsLoadingMatch(false);
       }
@@ -241,7 +237,7 @@ export function RawLeadDuplicateDialog({
 
               {!isLoadingMatch && !matchData && (
                 <p className="text-[12px] text-muted-foreground italic">
-                  {currentLead.duplicate_reason || "Match record could not be loaded."}
+                  {loadError || currentLead.duplicate_reason || "Previous lead details could not be loaded."}
                 </p>
               )}
 

@@ -365,12 +365,19 @@ export async function handleNextdoorLeadsPost(request: Request) {
         if (data) existingQualLinkRows = data;
       }
 
+      // Track same-batch first-occurrences by canonical key, so a later row in
+      // the same chunk with the same post ID / canonical link is flagged as
+      // duplicate. Stores the row_key of the first occurrence; we resolve it
+      // to a real raw_lead_cache id after the upsert.
+      const batchByPostId = new Map<string, string>();
+      const batchByLink = new Map<string, string>();
+      const pendingBatchRefs: Array<{ row_key: string; first_row_key: string }> = [];
+
       for (const row of slice) {
         let isDup = false;
 
-        // Priority 1: Canonical Post ID Match
+        // Priority 1: Canonical Post ID Match (existing qualified, then existing raw)
         if (!isDup && row.canonical_post_id) {
-          // Check qualified first (stronger historical match)
           const qMatch = existingQualPostIdRows.find((q) => q.canonical_post_id === row.canonical_post_id);
           if (qMatch) {
             isDup = true;
@@ -380,7 +387,6 @@ export async function handleNextdoorLeadsPost(request: Request) {
             row.duplicate_key = row.canonical_post_id;
             row.duplicate_of_qualified_lead_id = qMatch.id;
           } else {
-            // Check raw lead cache (skip itself)
             const rMatch = existingRawPostIdRows.find(
               (r) => r.canonical_post_id === row.canonical_post_id && r.row_key !== row.row_key
             );
@@ -395,7 +401,7 @@ export async function handleNextdoorLeadsPost(request: Request) {
           }
         }
 
-        // Priority 2: Canonical Lead Link Match
+        // Priority 2: Canonical Lead Link Match (existing qualified, then existing raw)
         if (!isDup && row.canonical_lead_link) {
           const qMatch = existingQualLinkRows.find((q) => q.canonical_lead_link === row.canonical_lead_link);
           if (qMatch) {
@@ -419,7 +425,37 @@ export async function handleNextdoorLeadsPost(request: Request) {
             }
           }
         }
+
+        // Same-batch dedup: process rows in order — first occurrence stays the
+        // original, later occurrences with the same canonical key are marked.
+        if (!isDup && row.canonical_post_id) {
+          const firstKey = batchByPostId.get(row.canonical_post_id);
+          if (firstKey && firstKey !== row.row_key) {
+            isDup = true;
+            row.duplicate_detected = true;
+            row.duplicate_reason = "Same Nextdoor post ID (same import batch)";
+            row.duplicate_match_type = "post_id";
+            row.duplicate_key = row.canonical_post_id;
+            pendingBatchRefs.push({ row_key: row.row_key, first_row_key: firstKey });
+          } else if (!firstKey) {
+            batchByPostId.set(row.canonical_post_id, row.row_key);
+          }
+        }
+        if (!isDup && row.canonical_lead_link) {
+          const firstKey = batchByLink.get(row.canonical_lead_link);
+          if (firstKey && firstKey !== row.row_key) {
+            isDup = true;
+            row.duplicate_detected = true;
+            row.duplicate_reason = "Same canonical post link (same import batch)";
+            row.duplicate_match_type = "canonical_link";
+            row.duplicate_key = row.canonical_lead_link;
+            pendingBatchRefs.push({ row_key: row.row_key, first_row_key: firstKey });
+          } else if (!firstKey) {
+            batchByLink.set(row.canonical_lead_link, row.row_key);
+          }
+        }
       }
+
 
       // Priority 3: Fallback — all four fields must match exactly (normalized)
       // when neither canonical_post_id nor canonical_lead_link produced a hit.
@@ -488,6 +524,26 @@ export async function handleNextdoorLeadsPost(request: Request) {
       if (error) {
         await logWebhookActivity("webhook_upsert_failed", { error: error.message });
         return json({ ok: false, reason: error.message }, 500);
+      }
+
+      // Same-batch dedup: resolve the first-occurrence row_keys to real ids
+      // and back-fill duplicate_of_raw_lead_id on the duplicate rows.
+      if (pendingBatchRefs.length > 0) {
+        const firstKeys = Array.from(new Set(pendingBatchRefs.map((p) => p.first_row_key)));
+        const { data: firstRows } = await supabaseAdmin
+          .from("raw_lead_cache")
+          .select("id, row_key")
+          .in("row_key", firstKeys);
+        const keyToId = new Map((firstRows ?? []).map((r) => [r.row_key, r.id as string]));
+        for (const ref of pendingBatchRefs) {
+          const firstId = keyToId.get(ref.first_row_key);
+          if (!firstId) continue;
+          await supabaseAdmin
+            .from("raw_lead_cache")
+            .update({ duplicate_of_raw_lead_id: firstId })
+            .eq("row_key", ref.row_key)
+            .is("duplicate_of_raw_lead_id", null);
+        }
       }
 
       // Determine which keys were actually inserted by checking which already existed
