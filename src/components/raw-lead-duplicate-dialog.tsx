@@ -237,7 +237,7 @@ export function RawLeadDuplicateDialog({
 
               {!isLoadingMatch && !matchData && (
                 <p className="text-[12px] text-muted-foreground italic">
-                  {currentLead.duplicate_reason || "Match record could not be loaded."}
+                  {loadError || currentLead.duplicate_reason || "Previous lead details could not be loaded."}
                 </p>
               )}
 
