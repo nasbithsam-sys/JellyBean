@@ -313,6 +313,7 @@ export async function handleNextdoorLeadsPost(request: Request) {
         duplicate_key: null as string | null,
         duplicate_of_raw_lead_id: null as string | null,
         duplicate_of_qualified_lead_id: null as string | null,
+        duplicate_snapshot: null as Record<string, unknown> | null,
       };
     });
 

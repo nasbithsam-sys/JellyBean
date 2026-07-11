@@ -399,6 +399,7 @@ export type Database = {
           duplicate_of_qualified_lead_id: string | null
           duplicate_of_raw_lead_id: string | null
           duplicate_reason: string | null
+          duplicate_snapshot: Json | null
           id: string
           lead: string | null
           lead_link: string | null
@@ -424,6 +425,7 @@ export type Database = {
           duplicate_of_qualified_lead_id?: string | null
           duplicate_of_raw_lead_id?: string | null
           duplicate_reason?: string | null
+          duplicate_snapshot?: Json | null
           id?: string
           lead?: string | null
           lead_link?: string | null
@@ -449,6 +451,7 @@ export type Database = {
           duplicate_of_qualified_lead_id?: string | null
           duplicate_of_raw_lead_id?: string | null
           duplicate_reason?: string | null
+          duplicate_snapshot?: Json | null
           id?: string
           lead?: string | null
           lead_link?: string | null
