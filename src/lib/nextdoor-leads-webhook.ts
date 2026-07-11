@@ -526,6 +526,26 @@ export async function handleNextdoorLeadsPost(request: Request) {
         return json({ ok: false, reason: error.message }, 500);
       }
 
+      // Same-batch dedup: resolve the first-occurrence row_keys to real ids
+      // and back-fill duplicate_of_raw_lead_id on the duplicate rows.
+      if (pendingBatchRefs.length > 0) {
+        const firstKeys = Array.from(new Set(pendingBatchRefs.map((p) => p.first_row_key)));
+        const { data: firstRows } = await supabaseAdmin
+          .from("raw_lead_cache")
+          .select("id, row_key")
+          .in("row_key", firstKeys);
+        const keyToId = new Map((firstRows ?? []).map((r) => [r.row_key, r.id as string]));
+        for (const ref of pendingBatchRefs) {
+          const firstId = keyToId.get(ref.first_row_key);
+          if (!firstId) continue;
+          await supabaseAdmin
+            .from("raw_lead_cache")
+            .update({ duplicate_of_raw_lead_id: firstId })
+            .eq("row_key", ref.row_key)
+            .is("duplicate_of_raw_lead_id", null);
+        }
+      }
+
       // Determine which keys were actually inserted by checking which already existed
       const { data: existing } = await supabaseAdmin
         .from("raw_lead_cache")
