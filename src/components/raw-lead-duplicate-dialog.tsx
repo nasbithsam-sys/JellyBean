@@ -261,10 +261,16 @@ export function RawLeadDuplicateDialog({
                   <span className="text-[11px] rounded-full bg-primary/15 text-primary px-2 py-0.5 font-medium">
                     Forwarded to CS
                     {matchData.data.cs_status ? ` · ${matchData.data.cs_status}` : ""}
+                    {matchData.fallback ? " · replacement" : ""}
                   </span>
                 ) : matchData?.type === "raw" ? (
                   <span className="text-[11px] rounded-full bg-muted text-foreground/80 px-2 py-0.5 font-medium">
                     {matchData.location}
+                    {matchData.fallback ? " · replacement" : ""}
+                  </span>
+                ) : matchData?.type === "snapshot" || matchData?.type === "missing" ? (
+                  <span className="text-[11px] rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 px-2 py-0.5 font-medium">
+                    Original no longer available
                   </span>
                 ) : null}
               </div>
@@ -333,7 +339,49 @@ export function RawLeadDuplicateDialog({
                   </div>
                 </>
               )}
+
+              {matchData?.type === "snapshot" && (
+                <>
+                  <p className="text-[12px] text-amber-700 dark:text-amber-400 mb-3">
+                    Original lead is no longer available. Showing details captured when the duplicate was detected.
+                  </p>
+                  <DetailGrid
+                    items={[
+                      { label: "Account Name", value: matchData.data.account_name || "—" },
+                      { label: "Sub Area / Neighborhood", value: matchData.data.sub_area || "—" },
+                      { label: "Posted Date & Time", value: matchData.data.posted_date_time || "—" },
+                      { label: "Original Location", value: matchData.data.original_location || "—" },
+                      { label: "Match Type", value: labelForMatchType(matchData.match_type) },
+                      { label: "Matched Key", value: matchData.duplicate_key || "—" },
+                    ]}
+                  />
+                  {matchData.data.post_text ? (
+                    <div className="mt-3">
+                      <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Post Text</span>
+                      <p className="text-[12px] whitespace-pre-wrap text-foreground/90">
+                        {matchData.data.post_text}
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              )}
+
+              {matchData?.type === "missing" && (
+                <>
+                  <p className="text-[12px] text-amber-700 dark:text-amber-400 mb-3">
+                    Previous lead is no longer available.
+                  </p>
+                  <DetailGrid
+                    items={[
+                      { label: "Match Type", value: labelForMatchType(matchData.match_type) },
+                      { label: "Matched Key", value: matchData.duplicate_key || "—" },
+                      { label: "Reason", value: matchData.reason || "—" },
+                    ]}
+                  />
+                </>
+              )}
             </section>
+
 
             {currentLead.duplicate_reason && (
               <p className="text-[11.5px] text-muted-foreground">
