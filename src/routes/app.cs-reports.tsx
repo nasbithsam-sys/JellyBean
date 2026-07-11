@@ -403,7 +403,7 @@ function Inner() {
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
                     {totals.total > 0
-                      ? `${(((totals.total - totals.need_contact) / totals.total) * 100).toFixed(1)}%`
+                      ? `${totals.total - totals.need_contact}`
                       : "—"}
                   </td>
                 </tr>
