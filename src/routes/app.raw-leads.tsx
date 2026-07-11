@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteSkeleton } from "@/components/route-skeleton";
 import { useServerFn } from "@tanstack/react-start";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -90,7 +91,7 @@ const DraftsDialog = lazy(() =>
 
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
 
-export const Route = createFileRoute("/app/raw-leads")({ component: Page });
+export const Route = createFileRoute("/app/raw-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 const TABLE = "raw_lead_cache";
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 500] as const;

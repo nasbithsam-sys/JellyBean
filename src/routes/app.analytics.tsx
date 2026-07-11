@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteSkeleton } from "@/components/route-skeleton";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { addDays, differenceInCalendarDays, format, subDays, startOfDay } from "date-fns";
@@ -28,7 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/app/analytics")({ component: Page });
+export const Route = createFileRoute("/app/analytics")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 type CsStatus = Database["public"]["Enums"]["cs_status"];
 

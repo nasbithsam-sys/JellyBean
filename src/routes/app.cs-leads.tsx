@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteSkeleton } from "@/components/route-skeleton";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -102,7 +103,7 @@ Forbidden Phrases (do not use in any field):
 - "our schedule"
 - "arrange a visit"`;
 
-export const Route = createFileRoute("/app/cs-leads")({ component: Page });
+export const Route = createFileRoute("/app/cs-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 const UNASSIGNED_VALUE = "__unassigned__";
 

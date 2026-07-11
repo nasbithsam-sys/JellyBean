@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteSkeleton } from "@/components/route-skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
@@ -64,7 +65,7 @@ function computeRange(preset: DatePreset, from: string, to: string) {
   }
 }
 
-export const Route = createFileRoute("/app/cs-reports")({ component: Page });
+export const Route = createFileRoute("/app/cs-reports")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 // "New" = not yet contacted at all
 const NEEDS_CONTACT_STATUS = "new";
