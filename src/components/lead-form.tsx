@@ -119,6 +119,7 @@ export function LeadForm({
   onDirtyChange,
   onCancel,
   onSubmit,
+  onSaveDraft,
   disableDuplicateCheck = false,
 }: {
   title?: string;
@@ -132,8 +133,10 @@ export function LeadForm({
   onDirtyChange?: (isDirty: boolean) => void;
   onCancel: () => void;
   onSubmit: (values: LeadFormValues) => Promise<void>;
+  onSaveDraft?: (values: LeadFormValues) => Promise<void>;
   disableDuplicateCheck?: boolean;
 }) {
+
   const fileRef = useRef<HTMLInputElement | null>(null);
   const videoFileRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -166,6 +169,8 @@ export function LeadForm({
   const [dupConfirmMatches, setDupConfirmMatches] = useState<DuplicateMatchPreview[]>([]);
   // Holds the resolved form values waiting for user to confirm or cancel
   const pendingSubmitValuesRef = useRef<LeadFormValues | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+
 
   useEffect(() => {
     return () => {
@@ -478,6 +483,33 @@ export function LeadForm({
     if (!payload) return;
     await onSubmit(payload);
   }
+
+  // Save Draft: capture current values WITHOUT running required-field
+  // validation or duplicate checks. onSaveDraft owns persistence.
+  async function handleSaveDraft() {
+    if (!onSaveDraft) return;
+    const payload: LeadFormValues = {
+      customerName: customerName.trim(),
+      customerNumber: customerNumber.trim(),
+      area: area.trim(),
+      service: service.trim(),
+      context: context.trim(),
+      exactCustomerText: exactCustomerText.trim(),
+      reference: reference.trim(),
+      isImportant: importantValue === "yes",
+      files,
+      existingImages,
+      extraNumbers: (extraNumbers ?? []).filter((n) => n.trim() !== ""),
+      originalLeadLink,
+    };
+    setSavingDraft(true);
+    try {
+      await onSaveDraft(payload);
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
 
   return (
     <form onSubmit={handleSubmit} onPaste={handlePaste} className="space-y-5">
@@ -803,13 +835,30 @@ export function LeadForm({
             setCompressionProgress(0);
             onCancel();
           }}
-          disabled={submitting}
+          disabled={submitting || savingDraft}
         >
           Cancel
         </Button>
+        {onSaveDraft ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleSaveDraft()}
+            disabled={submitting || savingDraft || isCompressing}
+          >
+            {savingDraft ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Saving draft...
+              </>
+            ) : (
+              "Draft"
+            )}
+          </Button>
+        ) : null}
         <Button
           type="submit"
-          disabled={submitting || isCompressing || isDuplicateCheckPending}
+          disabled={submitting || savingDraft || isCompressing || isDuplicateCheckPending}
         >
           {submitting ? (
             <>
@@ -829,6 +878,7 @@ export function LeadForm({
           )}
         </Button>
       </div>
+
 
       <DuplicateLeadDialog
         open={showDupConfirm}

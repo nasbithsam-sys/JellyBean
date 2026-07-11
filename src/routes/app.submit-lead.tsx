@@ -19,6 +19,7 @@ import {
   TrendingUp,
   CalendarDays,
   Send,
+  FolderOpen,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
@@ -43,6 +44,10 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { DateRange } from "react-day-picker";
 import { formatPhone } from "@/lib/crm-lite";
+import { DraftsDialog } from "@/components/drafts-dialog";
+import { saveDraft, deleteDraft, type LeadDraft } from "@/lib/lead-drafts";
+import { friendlyError } from "@/lib/error-messages";
+
 
 export const Route = createFileRoute("/app/submit-lead")({ component: Page });
 
@@ -75,10 +80,13 @@ function Dashboard() {
   const role = auth.primaryRole ?? "submitter";
   const [open, setOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [activeDraft, setActiveDraft] = useState<LeadDraft | null>(null);
   const [range, setRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 29),
     to: new Date(),
   });
+
 
   const all = useQuery({
     queryKey: ["my-submitted-leads", auth.user?.id],
@@ -156,25 +164,41 @@ function Dashboard() {
         title="Submissions dashboard"
         description={`Track the leads you sent to CS${role === "facebook" || role === "seo" ? ` as ${role.toUpperCase()}` : ""}.`}
         actions={
-          <Dialog open={open} onOpenChange={(newOpen) => {
-            if (!newOpen && isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-            setOpen(newOpen);
-          }}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 mr-1.5" />
-                New lead
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
-              <DialogHeader>
-                <DialogTitle>Send a new lead to CS</DialogTitle>
-              </DialogHeader>
-              <SubmitForm role={role} onDone={() => { setOpen(false); setIsDirty(false); }} onDirtyChange={setIsDirty} />
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setDraftsOpen(true)}>
+              <FolderOpen className="h-4 w-4 mr-1.5" />
+              Drafts
+            </Button>
+            <Dialog open={open} onOpenChange={(newOpen) => {
+              if (!newOpen && isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
+              setOpen(newOpen);
+              if (!newOpen) setActiveDraft(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  New lead
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
+                <DialogHeader>
+                  <DialogTitle>
+                    {activeDraft ? "Send lead to CS (Draft)" : "Send a new lead to CS"}
+                  </DialogTitle>
+                </DialogHeader>
+                <SubmitForm
+                  key={activeDraft?.id ?? "new"}
+                  role={role}
+                  initialDraft={activeDraft}
+                  onDone={() => { setOpen(false); setIsDirty(false); setActiveDraft(null); }}
+                  onDirtyChange={setIsDirty}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
         }
       />
+
       <PageBody className="space-y-6">
         <div className="crm-section-panel">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -334,6 +358,15 @@ function Dashboard() {
           )}
         </div>
       </PageBody>
+      <DraftsDialog
+        open={draftsOpen}
+        onOpenChange={setDraftsOpen}
+        filterSource="manual_lead"
+        onOpenDraft={(d) => {
+          setActiveDraft(d);
+          setOpen(true);
+        }}
+      />
     </div>
   );
 }
@@ -358,14 +391,69 @@ function QuickRange({ label, onClick }: { label: string; onClick: () => void }) 
   );
 }
 
-function SubmitForm({ role, onDone, onDirtyChange }: { role: string; onDone: () => void; onDirtyChange?: (isDirty: boolean) => void }) {
+function SubmitForm({
+  role,
+  onDone,
+  onDirtyChange,
+  initialDraft,
+}: {
+  role: string;
+  onDone: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
+  initialDraft?: LeadDraft | null;
+}) {
   const auth = useAuth();
   const qc = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
   const referenceMode: LeadReferenceMode =
     role === "facebook" ? "auto-fb" : role === "seo" ? "manual-text" : "manual-dropdown";
   const forwardedBy =
     auth.profile?.full_name ?? auth.profile?.username ?? auth.profile?.email ?? "Current user";
+
+  const draftFd = initialDraft?.form_data ?? {};
+  const initialValues = initialDraft
+    ? {
+        customerName: (draftFd.customerName as string) ?? "",
+        customerNumber: (draftFd.customerNumber as string) ?? "",
+        extraNumbers: (draftFd.extraNumbers as string[]) ?? [],
+        area: (draftFd.area as string) ?? "",
+        service: (draftFd.service as string) ?? "",
+        context: (draftFd.context as string) ?? "",
+        exactCustomerText: (draftFd.exactCustomerText as string) ?? "",
+        reference: (draftFd.reference as string) ?? "",
+        isImportant: (draftFd.isImportant as boolean) ?? false,
+        originalLeadLink: (draftFd.originalLeadLink as string | null) ?? null,
+      }
+    : undefined;
+
+  async function handleSaveDraft(values: LeadFormValues) {
+    if (!auth.user?.id) return;
+    try {
+      const saved = await saveDraft({
+        id: draftId,
+        source_type: "manual_lead",
+        source_lead_id: null,
+        created_by: auth.user.id,
+        form_data: {
+          customerName: values.customerName,
+          customerNumber: values.customerNumber,
+          extraNumbers: values.extraNumbers,
+          area: values.area,
+          service: values.service,
+          context: values.context,
+          exactCustomerText: values.exactCustomerText,
+          reference: values.reference,
+          isImportant: values.isImportant,
+          role,
+        },
+      });
+      setDraftId(saved.id);
+      toast.success("Draft saved");
+    } catch (err) {
+      toast.error(friendlyError(err));
+    }
+  }
 
   async function submit(values: LeadFormValues) {
     if (!auth.user?.id) return;
@@ -416,6 +504,13 @@ function SubmitForm({ role, onDone, onDirtyChange }: { role: string; onDone: () 
           submitted_by_role: role,
         },
       });
+      if (draftId) {
+        try {
+          await deleteDraft(draftId);
+        } catch {
+          // best-effort
+        }
+      }
       toast.success("Lead sent to CS");
       qc.invalidateQueries({ queryKey: ["my-submitted-leads"] });
       onDone();
@@ -438,6 +533,9 @@ function SubmitForm({ role, onDone, onDirtyChange }: { role: string; onDone: () 
       onDirtyChange={onDirtyChange}
       onCancel={onDone}
       onSubmit={submit}
+      onSaveDraft={handleSaveDraft}
+      initialValues={initialValues}
     />
   );
 }
+

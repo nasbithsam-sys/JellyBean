@@ -72,6 +72,10 @@ import {
 
 import { RawLeadDuplicateDialog } from "@/components/raw-lead-duplicate-dialog";
 import { confirmDialog, confirmDiscardUnsaved } from "@/components/confirm-dialog";
+import { DraftsDialog } from "@/components/drafts-dialog";
+import { saveDraft, deleteDraftForSource, type LeadDraft } from "@/lib/lead-drafts";
+import { FolderOpen } from "lucide-react";
+
 
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
 
@@ -394,6 +398,9 @@ function Inner() {
   const [duplicateDetailsFor, setDuplicateDetailsFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
   const [qualifySecondPhone, setQualifySecondPhone] = useState("");
+  const [qualifyDraft, setQualifyDraft] = useState<LeadDraft | null>(null);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+
   const [aiPrompt, setAiPrompt] = useState(FROZEN_LEAD_PROMPT);
   const [promptDirty, setPromptDirty] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
@@ -1051,6 +1058,17 @@ function Inner() {
             )}
             Refresh
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={() => setDraftsOpen(true)}
+            title="View saved drafts"
+          >
+            <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
+            Drafts
+          </Button>
+
           {auth.primaryRole === "admin" && (
             <Button size="sm" variant="outline" className="h-9" onClick={exportRows}>
               <Download className="h-3.5 w-3.5 mr-1.5" />
@@ -1614,18 +1632,46 @@ function Inner() {
           }
           actorRole={auth.primaryRole}
           initialSecondPhone={qualifySecondPhone}
+          draft={qualifyDraft}
           onClose={() => {
             setQualifyFor(null);
             setQualifySecondPhone("");
+            setQualifyDraft(null);
           }}
           onSent={async () => {
+            // Clean up the related draft only AFTER the forward succeeds.
+            if (auth.user?.id) {
+              await deleteDraftForSource({
+                userId: auth.user.id,
+                draftId: qualifyDraft?.id ?? null,
+                source_type: "raw_lead",
+                source_lead_id: qualifyFor.id ?? null,
+              });
+            }
             await updateAction(qualifyFor.row_key, { category: "forwarded" });
             setQualifyFor(null);
             setQualifySecondPhone("");
+            setQualifyDraft(null);
             toast.success("Forwarded to CS");
           }}
         />
       )}
+
+      <DraftsDialog
+        open={draftsOpen}
+        onOpenChange={setDraftsOpen}
+        filterSource="raw_lead"
+        onOpenDraft={(draft) => {
+          const snapshot = draft.form_data?.entrySnapshot as CacheEntry | undefined;
+          if (!snapshot) {
+            toast.error("This draft is missing its raw lead reference.");
+            return;
+          }
+          setQualifyDraft(draft);
+          setQualifySecondPhone("");
+          setQualifyFor(snapshot);
+        }}
+      />
 
       <RawLeadDuplicateDialog
         open={!!duplicateDetailsFor}
@@ -1640,6 +1686,7 @@ function Inner() {
           setDuplicateDetailsFor(null);
         }}
       />
+
     </div>
   );
 }
@@ -1992,6 +2039,7 @@ function QualifyDialog({
   actorName,
   actorRole,
   initialSecondPhone,
+  draft,
   onClose,
   onSent,
 }: {
@@ -2000,6 +2048,7 @@ function QualifyDialog({
   actorName: string | null;
   actorRole: string | null;
   initialSecondPhone: string;
+  draft: LeadDraft | null;
   onClose: () => void;
   onSent: () => void;
 }) {
@@ -2060,6 +2109,40 @@ function QualifyDialog({
     }
   }
 
+  async function handleSaveDraft(values: LeadFormValues) {
+    if (!actorId) {
+      toast.error("You must be signed in to save a draft.");
+      return;
+    }
+    try {
+      await saveDraft({
+        id: draft?.id ?? null,
+        source_type: "raw_lead",
+        source_lead_id: entry.id ?? null,
+        created_by: actorId,
+        form_data: {
+          customerName: values.customerName,
+          customerNumber: values.customerNumber,
+          extraNumbers: values.extraNumbers ?? [],
+          area: values.area,
+          service: values.service,
+          context: values.context,
+          exactCustomerText: values.exactCustomerText,
+          reference: values.reference,
+          isImportant: values.isImportant,
+          originalLeadLink: values.originalLeadLink ?? null,
+          entrySnapshot: entry,
+        },
+      });
+      toast.success("Draft saved successfully.");
+      setIsDirty(false);
+    } catch (e) {
+      toast.error(friendlyError(e));
+    }
+  }
+
+  const draftData = draft?.form_data ?? null;
+
   return (
     <Dialog open onOpenChange={(o) => {
       if (!o) {
@@ -2068,7 +2151,7 @@ function QualifyDialog({
     }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>Forward to CS</DialogTitle>
+          <DialogTitle>{draft ? "Forward to CS (Draft)" : "Forward to CS"}</DialogTitle>
         </DialogHeader>
         <LeadForm
           title="Raw lead to CS"
@@ -2080,18 +2163,29 @@ function QualifyDialog({
           submitting={busy}
           onDirtyChange={setIsDirty}
           initialValues={{
-            customerName: row["Account Name"] ?? "",
-            customerNumber: formatPhoneInput(entry.phone ?? ""),
-            extraNumbers: initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : [],
-            area: row["Account Area"] ?? row["Sub Area / Neighborhood"] ?? "",
-            service: "",
-            context: "",
-            exactCustomerText: row["Post Text"] ?? "",
-            isImportant: false,
+            customerName: (draftData?.customerName as string | undefined) ?? row["Account Name"] ?? "",
+            customerNumber:
+              (draftData?.customerNumber as string | undefined) ?? formatPhoneInput(entry.phone ?? ""),
+            extraNumbers:
+              (draftData?.extraNumbers as string[] | undefined) ??
+              (initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : []),
+            area:
+              (draftData?.area as string | undefined) ??
+              row["Account Area"] ??
+              row["Sub Area / Neighborhood"] ??
+              "",
+            service: (draftData?.service as string | undefined) ?? "",
+            context: (draftData?.context as string | undefined) ?? "",
+            exactCustomerText:
+              (draftData?.exactCustomerText as string | undefined) ?? row["Post Text"] ?? "",
+            reference: (draftData?.reference as string | undefined),
+            isImportant: (draftData?.isImportant as boolean | undefined) ?? false,
           }}
           onCancel={onClose}
           onSubmit={send}
+          onSaveDraft={handleSaveDraft}
         />
+
       </DialogContent>
     </Dialog>
   );
