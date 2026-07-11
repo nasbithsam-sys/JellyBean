@@ -1743,35 +1743,43 @@ function Inner() {
         />
       )}
 
-      <DraftsDialog
-        open={draftsOpen}
-        onOpenChange={setDraftsOpen}
-        filterSource="raw_lead"
-        onOpenDraft={(draft) => {
-          const snapshot = draft.form_data?.entrySnapshot as CacheEntry | undefined;
-          if (!snapshot) {
-            toast.error("This draft is missing its raw lead reference.");
-            return;
-          }
-          setQualifyDraft(draft);
-          setQualifySecondPhone("");
-          setQualifyFor(snapshot);
-        }}
-      />
+      {draftsOpen && (
+        <Suspense fallback={null}>
+          <DraftsDialog
+            open={draftsOpen}
+            onOpenChange={setDraftsOpen}
+            filterSource="raw_lead"
+            onOpenDraft={(draft) => {
+              const snapshot = draft.form_data?.entrySnapshot as CacheEntry | undefined;
+              if (!snapshot) {
+                toast.error("This draft is missing its raw lead reference.");
+                return;
+              }
+              setQualifyDraft(draft);
+              setQualifySecondPhone("");
+              setQualifyFor(snapshot);
+            }}
+          />
+        </Suspense>
+      )}
 
-      <RawLeadDuplicateDialog
-        open={!!duplicateDetailsFor}
-        onOpenChange={(open) => {
-          if (!open) setDuplicateDetailsFor(null);
-        }}
-        currentLead={duplicateDetailsFor}
-        onSendToDuplicateFilter={async () => {
-          if (!duplicateDetailsFor) return;
-          await updateAction(duplicateDetailsFor.row_key, { category: "duplicate" });
-          toast.success("Moved to Duplicate");
-          setDuplicateDetailsFor(null);
-        }}
-      />
+      {duplicateDetailsFor && (
+        <Suspense fallback={null}>
+          <RawLeadDuplicateDialog
+            open={!!duplicateDetailsFor}
+            onOpenChange={(open) => {
+              if (!open) setDuplicateDetailsFor(null);
+            }}
+            currentLead={duplicateDetailsFor}
+            onSendToDuplicateFilter={async () => {
+              if (!duplicateDetailsFor) return;
+              await updateAction(duplicateDetailsFor.row_key, { category: "duplicate" });
+              toast.success("Moved to Duplicate");
+              setDuplicateDetailsFor(null);
+            }}
+          />
+        </Suspense>
+      )}
 
     </div>
   );
