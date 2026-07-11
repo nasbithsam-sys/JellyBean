@@ -103,10 +103,11 @@ export function RawLeadDuplicateDialog({
     }
 
     const hasRef = !!(currentLead.duplicate_of_qualified_lead_id || currentLead.duplicate_of_raw_lead_id);
-    if (!hasRef) {
+    if (!hasRef || !currentLead.id) {
       setMatchData(null);
       return;
     }
+    const currentId = currentLead.id;
 
     async function fetchMatch() {
       setIsLoadingMatch(true);
