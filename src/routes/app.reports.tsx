@@ -54,7 +54,7 @@ function computeRange(preset: DatePreset, from: string, to: string) {
   }
 }
 
-export const Route = createFileRoute("/app/reports")({ component: Page });
+export const Route = createFileRoute("/app/reports")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 const RAW_STATUSES = ["new", "forwarded", "not_found", "wrong", "duplicate"] as const;
 const CS_STATUSES = [

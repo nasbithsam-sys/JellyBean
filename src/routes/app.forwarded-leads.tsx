@@ -32,7 +32,7 @@ import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import { cn } from "@/lib/utils";
 import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
 
-export const Route = createFileRoute("/app/forwarded-leads")({ component: Page });
+export const Route = createFileRoute("/app/forwarded-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 type Row = {
   id: string;

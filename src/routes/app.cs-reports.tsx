@@ -65,7 +65,7 @@ function computeRange(preset: DatePreset, from: string, to: string) {
   }
 }
 
-export const Route = createFileRoute("/app/cs-reports")({ component: Page });
+export const Route = createFileRoute("/app/cs-reports")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 // "New" = not yet contacted at all
 const NEEDS_CONTACT_STATUS = "new";

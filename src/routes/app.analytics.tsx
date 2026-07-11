@@ -29,7 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/app/analytics")({ component: Page });
+export const Route = createFileRoute("/app/analytics")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 type CsStatus = Database["public"]["Enums"]["cs_status"];
 

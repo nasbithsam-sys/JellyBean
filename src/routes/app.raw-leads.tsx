@@ -91,7 +91,7 @@ const DraftsDialog = lazy(() =>
 
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
 
-export const Route = createFileRoute("/app/raw-leads")({ component: Page });
+export const Route = createFileRoute("/app/raw-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 const TABLE = "raw_lead_cache";
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 500] as const;
