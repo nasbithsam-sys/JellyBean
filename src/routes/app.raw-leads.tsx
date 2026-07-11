@@ -211,6 +211,50 @@ function parseDateTime(value?: string | null, time?: string | null): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+// Detects whether a "Posted Date & Time" string represents a moment more than
+// 24 hours in the past. Supports relative formats ("5 hours ago", "2 days ago",
+// "1 week ago", "yesterday", "a month ago", etc.) as well as parseable
+// absolute timestamps. Returns false when the value is empty/unrecognized so
+// that unknown formats don't get an incorrect badge.
+function isPostOlderThan24h(value?: string | null): boolean {
+  if (!value) return false;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return false;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  // "just now", "moments ago", "a few seconds ago"
+  if (/(just now|moments? ago|few seconds ago)/.test(raw)) return false;
+  if (raw === "yesterday") return true;
+
+  // "a minute ago" / "an hour ago" / "a day ago" / "a week ago" / etc.
+  const wordNum: Record<string, number> = { a: 1, an: 1 };
+  const relMatch = raw.match(
+    /^(?:about\s+|around\s+|over\s+|almost\s+)?(\d+|a|an)\s*(second|minute|hour|day|week|month|year)s?\s*ago\b/,
+  );
+  if (relMatch) {
+    const n = wordNum[relMatch[1]] ?? Number(relMatch[1]);
+    const unit = relMatch[2];
+    if (!Number.isFinite(n)) return false;
+    const unitMs: Record<string, number> = {
+      second: 1000,
+      minute: 60 * 1000,
+      hour: 60 * 60 * 1000,
+      day: DAY_MS,
+      week: 7 * DAY_MS,
+      month: 30 * DAY_MS,
+      year: 365 * DAY_MS,
+    };
+    return n * unitMs[unit] > DAY_MS;
+  }
+
+  // Fallback: try parsing as an absolute timestamp.
+  const parsed = Date.parse(value);
+  if (!Number.isNaN(parsed)) {
+    return Date.now() - parsed > DAY_MS;
+  }
+  return false;
+}
+
 function compareText(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
