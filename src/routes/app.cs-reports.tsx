@@ -272,7 +272,7 @@ function Inner() {
         />
         <SummaryCard
           icon={<PhoneOff className="h-4 w-4" />}
-          label="Still New"
+          label="New To Contact"
           value={totals.still_new}
           color="text-amber-500"
           tooltip="Leads still at 'New' status — CS has never contacted these customers yet."
