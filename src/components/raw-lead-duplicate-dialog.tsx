@@ -49,9 +49,25 @@ type QualifiedMatch = {
     created_at: string | null;
   };
   assignee: { name: string | null; email: string | null } | null;
+  fallback?: boolean;
 };
 
-type MatchState = RawMatch | QualifiedMatch;
+type SnapshotMatch = {
+  type: "snapshot";
+  data: Record<string, string | null>;
+  match_type: string | null;
+  duplicate_key: string | null;
+  reason: string | null;
+};
+
+type MissingMatch = {
+  type: "missing";
+  match_type: string | null;
+  duplicate_key: string | null;
+  reason: string | null;
+};
+
+type MatchState = (RawMatch & { fallback?: boolean }) | QualifiedMatch | SnapshotMatch | MissingMatch;
 
 function rawCategoryLocation(row: RawMatch["data"]): string {
   const c = (row.category || "").toLowerCase();
@@ -71,6 +87,13 @@ function currentLeadLocation(row: CacheEntry): string {
   if (c === "duplicate") return "Duplicate";
   if (!c) return row.assigned_myself_at ? "Assigned Myself" : "New";
   return c;
+}
+
+function labelForMatchType(match: string | null | undefined): string {
+  if (match === "post_id") return "Post ID";
+  if (match === "canonical_link") return "Canonical Link";
+  if (match === "details_all_four") return "Account + Area + Time + Text";
+  return match || "—";
 }
 
 function formatDateTime(value: string | null | undefined): string {
@@ -102,8 +125,7 @@ export function RawLeadDuplicateDialog({
       return;
     }
 
-    const hasRef = !!(currentLead.duplicate_of_qualified_lead_id || currentLead.duplicate_of_raw_lead_id);
-    if (!hasRef || !currentLead.id) {
+    if (!currentLead.id) {
       setMatchData(null);
       return;
     }
@@ -118,20 +140,46 @@ export function RawLeadDuplicateDialog({
           { _current_raw_lead_id: currentId } as never,
         );
         if (error) throw error;
-        const payload = data as { type: string | null; data?: unknown; assignee?: unknown } | null;
-        if (!payload || !payload.type || !payload.data) {
+        const payload = data as {
+          type: string | null;
+          data?: unknown;
+          assignee?: unknown;
+          fallback?: boolean;
+          match_type?: string | null;
+          duplicate_key?: string | null;
+          reason?: string | null;
+        } | null;
+        if (!payload || !payload.type) {
           setMatchData(null);
           return;
         }
-        if (payload.type === "qualified") {
+        if (payload.type === "qualified" && payload.data) {
           setMatchData({
             type: "qualified",
             data: payload.data as QualifiedMatch["data"],
             assignee: (payload.assignee as QualifiedMatch["assignee"]) ?? null,
+            fallback: !!payload.fallback,
           });
-        } else if (payload.type === "raw") {
+        } else if (payload.type === "raw" && payload.data) {
           const raw = payload.data as RawMatch["data"];
-          setMatchData({ type: "raw", data: raw, location: rawCategoryLocation(raw) });
+          setMatchData({ type: "raw", data: raw, location: rawCategoryLocation(raw), fallback: !!payload.fallback });
+        } else if (payload.type === "snapshot" && payload.data) {
+          setMatchData({
+            type: "snapshot",
+            data: payload.data as Record<string, string | null>,
+            match_type: payload.match_type ?? null,
+            duplicate_key: payload.duplicate_key ?? null,
+            reason: payload.reason ?? null,
+          });
+        } else if (payload.type === "missing") {
+          setMatchData({
+            type: "missing",
+            match_type: payload.match_type ?? null,
+            duplicate_key: payload.duplicate_key ?? null,
+            reason: payload.reason ?? "Previous matched lead is no longer available",
+          });
+        } else {
+          setMatchData(null);
         }
       } catch (err) {
         if (import.meta.env.DEV) {
@@ -220,10 +268,16 @@ export function RawLeadDuplicateDialog({
                   <span className="text-[11px] rounded-full bg-primary/15 text-primary px-2 py-0.5 font-medium">
                     Forwarded to CS
                     {matchData.data.cs_status ? ` · ${matchData.data.cs_status}` : ""}
+                    {matchData.fallback ? " · replacement" : ""}
                   </span>
                 ) : matchData?.type === "raw" ? (
                   <span className="text-[11px] rounded-full bg-muted text-foreground/80 px-2 py-0.5 font-medium">
                     {matchData.location}
+                    {matchData.fallback ? " · replacement" : ""}
+                  </span>
+                ) : matchData?.type === "snapshot" || matchData?.type === "missing" ? (
+                  <span className="text-[11px] rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 px-2 py-0.5 font-medium">
+                    Original no longer available
                   </span>
                 ) : null}
               </div>
@@ -292,7 +346,49 @@ export function RawLeadDuplicateDialog({
                   </div>
                 </>
               )}
+
+              {matchData?.type === "snapshot" && (
+                <>
+                  <p className="text-[12px] text-amber-700 dark:text-amber-400 mb-3">
+                    Original lead is no longer available. Showing details captured when the duplicate was detected.
+                  </p>
+                  <DetailGrid
+                    items={[
+                      { label: "Account Name", value: matchData.data.account_name || "—" },
+                      { label: "Sub Area / Neighborhood", value: matchData.data.sub_area || "—" },
+                      { label: "Posted Date & Time", value: matchData.data.posted_date_time || "—" },
+                      { label: "Original Location", value: matchData.data.original_location || "—" },
+                      { label: "Match Type", value: labelForMatchType(matchData.match_type) },
+                      { label: "Matched Key", value: matchData.duplicate_key || "—" },
+                    ]}
+                  />
+                  {matchData.data.post_text ? (
+                    <div className="mt-3">
+                      <span className="text-muted-foreground block mb-0.5 text-[10px] uppercase">Post Text</span>
+                      <p className="text-[12px] whitespace-pre-wrap text-foreground/90">
+                        {matchData.data.post_text}
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              )}
+
+              {matchData?.type === "missing" && (
+                <>
+                  <p className="text-[12px] text-amber-700 dark:text-amber-400 mb-3">
+                    Previous lead is no longer available.
+                  </p>
+                  <DetailGrid
+                    items={[
+                      { label: "Match Type", value: labelForMatchType(matchData.match_type) },
+                      { label: "Matched Key", value: matchData.duplicate_key || "—" },
+                      { label: "Reason", value: matchData.reason || "—" },
+                    ]}
+                  />
+                </>
+              )}
             </section>
+
 
             {currentLead.duplicate_reason && (
               <p className="text-[11.5px] text-muted-foreground">
