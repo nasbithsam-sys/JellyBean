@@ -88,6 +88,31 @@ function uniqueRows(rows: ExtRow[]) {
   return { unique, duplicateKeys };
 }
 
+function normalizeIdentifier(value: string | null | undefined): string {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizePostText(value: string | null | undefined): string {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u201C\u201D]/g, "'")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizePostedTime(value: string | null | undefined): string {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  const parsed = Date.parse(raw);
+  if (!Number.isNaN(parsed)) return String(parsed);
+  return raw.toLowerCase().replace(/\s+/g, " ");
+}
+
 async function loadSupabaseAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
