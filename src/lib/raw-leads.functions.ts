@@ -14,6 +14,7 @@ const ALLOWED_RAW_LEAD_ROLES = [
 type RawLeadRole = (typeof ALLOWED_RAW_LEAD_ROLES)[number];
 
 export type RawLeadCacheRow = {
+  id?: string;
   row_key: string;
   data: Record<string, string>;
   lead: "yes" | "no" | "review" | null;
