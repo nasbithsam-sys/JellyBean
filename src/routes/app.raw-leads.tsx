@@ -1914,8 +1914,19 @@ function LeadDetailDialog({
               <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
                 Posted
               </Label>
-              <div className="text-foreground truncate" title={r["Posted Date & Time"]}>
-                {r["Posted Date & Time"] || <span className="text-muted-foreground">—</span>}
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="text-foreground truncate" title={r["Posted Date & Time"]}>
+                  {r["Posted Date & Time"] || <span className="text-muted-foreground">—</span>}
+                </div>
+                {isPostOlderThan24h(r["Posted Date & Time"]) && (
+                  <span
+                    aria-label="Old Post"
+                    title="Posted more than 24 hours ago"
+                    className="shrink-0 select-none pointer-events-none inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                  >
+                    Old Post
+                  </span>
+                )}
               </div>
             </div>
             <div className="min-w-0">
