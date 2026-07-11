@@ -178,7 +178,7 @@ function Inner() {
   function exportCsv() {
     downloadCsv(
       "cs-reports.csv",
-      ["CS Agent", "Email", "Total Assigned", "Still New (never contacted)", "Need Follow-Up"],
+      ["CS Agent", "Email", "Total Assigned", "New To Contact (never contacted)", "Need Follow-Up"],
       stats.map((s) => [s.name, s.email, s.total, s.still_new, s.need_contact]),
     );
   }
