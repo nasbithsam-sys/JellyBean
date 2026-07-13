@@ -37,6 +37,8 @@ import {
   Users as UsersIcon,
   Trash2,
   CheckCircle2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
