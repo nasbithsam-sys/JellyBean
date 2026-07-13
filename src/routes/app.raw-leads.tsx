@@ -409,7 +409,6 @@ function rawLeadSortValue(
       const lead = effectiveLead(r, actions[entry.row_key]);
       if (lead === "yes") return 0;
       if (lead === "no") return 1;
-      if (lead === "review") return 2;
       return SORT_EMPTY;
     }
     case "lead_link":
