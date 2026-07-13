@@ -79,7 +79,7 @@ import {
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
+import { listCsTeam, bulkAssignImportantLeads, type CsTeamMember } from "@/lib/cs-team.functions";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 import type { CsStatus, LeadNote } from "@/lib/crm-types";
 import { NumberNameSelect } from "@/components/number-name-select";
