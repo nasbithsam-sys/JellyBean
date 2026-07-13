@@ -2645,7 +2645,7 @@ function LeadDrawer({
         .update({
           cs_status: status,
           cs_notes: newNotes as Json,
-          followup_at: followup ? new Date(followup).toISOString() : null,
+          followup_at: csPipelineInputValueToUtcIso(followup),
           assigned_to: assignedTo,
           assigned_by: assignedTo ? (lead.assigned_to === assignedTo ? lead.assigned_by : (auth.user?.id || null)) : null,
           number_name: numberName.trim() || null,
