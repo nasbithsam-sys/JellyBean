@@ -1146,12 +1146,19 @@ function Inner() {
           <Button
             size="sm"
             variant="outline"
-            className="h-9"
+            className="relative h-9"
             onClick={() => setDraftsOpen(true)}
-            title="View saved drafts"
+            title={hasDraftLeads ? "Draft contains leads" : "View saved drafts"}
           >
             <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
             Drafts
+            {hasDraftLeads && (
+              <span
+                className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background"
+                aria-label="Draft contains leads"
+                title="Draft contains leads"
+              />
+            )}
           </Button>
 
           {auth.primaryRole === "admin" && (
