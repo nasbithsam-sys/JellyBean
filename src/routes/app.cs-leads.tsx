@@ -928,7 +928,7 @@ function Inner() {
         "Assigned To",
         "Area",
         "Sub Area",
-        "Created",
+        "Created (ET)",
       ],
       visibleLeads.map((lead) => [
         lead.customer_name,
