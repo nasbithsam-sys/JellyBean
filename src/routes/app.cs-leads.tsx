@@ -2742,7 +2742,7 @@ function LeadDrawer({
                 </a>
               </div>
             )}
-            {isAdmin && Array.isArray(lead.images) && lead.images.length > 0 && (
+            {canViewAttachments && Array.isArray(lead.images) && lead.images.length > 0 && (
               <LeadAttachmentsGrid refs={lead.images as string[]} />
             )}
           </div>
