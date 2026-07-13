@@ -1213,6 +1213,43 @@ function Inner() {
         </div>
       </div>
 
+      <AlertDialog
+        open={importantConfirmOpen}
+        onOpenChange={(o) => {
+          if (importantBusy) return;
+          setImportantConfirmOpen(o);
+          if (!o) setImportantAssignee("");
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Assign all important leads?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const m = teamById.get(importantAssignee);
+                const name = m?.full_name || m?.email || "the selected CS user";
+                const n = importantCount.data ?? 0;
+                if (n === 0) return `No important leads are currently available to assign.`;
+                return `${n} important lead${n === 1 ? "" : "s"} will be reassigned to ${name}. Non-important leads are unchanged.`;
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={importantBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={importantBusy || !importantAssignee || (importantCount.data ?? 0) === 0}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmBulkAssignImportant();
+              }}
+            >
+              {importantBusy ? "Assigning..." : "Assign Important Leads"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+
       {canManagePrompt && (
         <div className="crm-section-panel">
           <div className="glass-card p-5 space-y-4">
