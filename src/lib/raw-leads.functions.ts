@@ -355,12 +355,30 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
       .select("row_key", { count: "exact", head: true })
       .is("category", null)
       .is("assigned_myself_at", null);
-    const assignedMyselfQuery = context.supabase
+    // Draft raw leads (parked by the current user) are hidden from the
+    // Assigned Myself tab, so the badge must exclude them too.
+    const { data: draftRowsForCounts } = await context.supabase
+      .from("lead_drafts" as never)
+      .select("source_lead_id")
+      .eq("created_by" as never, context.userId as never)
+      .eq("source_type" as never, "raw_lead" as never)
+      .not("source_lead_id" as never, "is" as never, null as never);
+    const draftedIdsForCounts = ((draftRowsForCounts ?? []) as Array<{ source_lead_id: string | null }>)
+      .map((r) => r.source_lead_id)
+      .filter((v): v is string => !!v);
+    let assignedMyselfQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
       .eq("assigned_to", context.userId)
       .not("assigned_myself_at", "is", null)
       .is("category", null);
+    if (draftedIdsForCounts.length) {
+      assignedMyselfQuery = assignedMyselfQuery.not(
+        "id" as never,
+        "in" as never,
+        `(${draftedIdsForCounts.join(",")})` as never,
+      ) as typeof assignedMyselfQuery;
+    }
     void isAdmin;
 
     const [
