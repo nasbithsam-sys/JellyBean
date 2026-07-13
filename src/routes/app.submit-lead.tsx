@@ -537,6 +537,7 @@ function SubmitForm({
       }
       toast.success("Lead sent to CS");
       qc.invalidateQueries({ queryKey: ["my-submitted-leads"] });
+      qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
       onDone();
     } catch (err) {
       toast.error((err as Error).message);
