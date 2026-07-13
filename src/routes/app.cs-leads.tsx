@@ -1075,40 +1075,7 @@ function Inner() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <div className="flex items-center gap-1.5 p-2 border-b border-border">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-[11px]"
-                  onClick={() => {
-                    const t = csPipelineEtCalendarToday();
-                    setDateRange({ from: t, to: t });
-                  }}
-                >
-                  Today
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-[11px]"
-                  onClick={() => {
-                    const t = csPipelineEtCalendarToday();
-                    setDateRange({ from: subDays(t, 6), to: t });
-                  }}
-                >
-                  7d
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-[11px]"
-                  onClick={() => {
-                    const t = csPipelineEtCalendarToday();
-                    setDateRange({ from: subDays(t, 29), to: t });
-                  }}
-                >
-                  30d
-                </Button>
+              <div className="flex items-center justify-end p-2 border-b border-border">
                 <Button
                   size="sm"
                   variant="ghost"
@@ -1128,6 +1095,42 @@ function Inner() {
             </PopoverContent>
           </Popover>
         )}
+        {(isAdmin || isCs) && (() => {
+          const t = csPipelineEtCalendarToday();
+          const isSameDay = (a: Date | undefined, b: Date) =>
+            !!a && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+          const activeToday = isSameDay(dateRange?.from, t) && isSameDay(dateRange?.to, t);
+          const active7d = isSameDay(dateRange?.from, subDays(t, 6)) && isSameDay(dateRange?.to, t);
+          const active30d = isSameDay(dateRange?.from, subDays(t, 29)) && isSameDay(dateRange?.to, t);
+          return (
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant={activeToday ? "default" : "outline"}
+                className="h-9 text-[12px] px-2.5"
+                onClick={() => setDateRange({ from: t, to: t })}
+              >
+                Today
+              </Button>
+              <Button
+                size="sm"
+                variant={active7d ? "default" : "outline"}
+                className="h-9 text-[12px] px-2.5"
+                onClick={() => setDateRange({ from: subDays(t, 6), to: t })}
+              >
+                7d
+              </Button>
+              <Button
+                size="sm"
+                variant={active30d ? "default" : "outline"}
+                className="h-9 text-[12px] px-2.5"
+                onClick={() => setDateRange({ from: subDays(t, 29), to: t })}
+              >
+                30d
+              </Button>
+            </div>
+          );
+        })()}
         <div className="ml-auto flex items-center gap-2">
           <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px] shadow-sm">
             <span className="text-muted-foreground">Sent today</span>
