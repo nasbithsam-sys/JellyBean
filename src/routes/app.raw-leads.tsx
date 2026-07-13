@@ -216,11 +216,92 @@ function formatPhoneInput(value: string): string {
 
 // ── Row helpers ───────────────────────────────────────────────────────────────
 
+// Parses relative expressions ("5 minutes ago", "2h", "yesterday", "just now")
+// as well as absolute timestamps. Returns NaN when the value can't be
+// interpreted so callers can push it to the end of the sort.
+function parseRelativeOrAbsolute(value?: string | null): number {
+  if (!value) return Number.NaN;
+  const raw = String(value).trim();
+  if (!raw) return Number.NaN;
+  const lower = raw.toLowerCase();
+  const now = Date.now();
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  if (/^(just\s*now|moments?\s+ago|few\s+seconds?\s+ago|a\s+moment\s+ago)$/.test(lower))
+    return now;
+  if (lower === "yesterday") return now - DAY_MS;
+  if (/\bday\s+before\s+yesterday\b/.test(lower)) return now - 2 * DAY_MS;
+
+  const unitMs: Record<string, number> = {
+    second: 1000,
+    minute: 60 * 1000,
+    hour: 60 * 60 * 1000,
+    day: DAY_MS,
+    week: 7 * DAY_MS,
+    month: 30 * DAY_MS,
+    year: 365 * DAY_MS,
+  };
+  const unitAlias: Record<string, keyof typeof unitMs> = {
+    s: "second", sec: "second", secs: "second", second: "second", seconds: "second",
+    m: "minute", min: "minute", mins: "minute", minute: "minute", minutes: "minute",
+    h: "hour", hr: "hour", hrs: "hour", hour: "hour", hours: "hour",
+    d: "day", day: "day", days: "day",
+    w: "week", wk: "week", wks: "week", week: "week", weeks: "week",
+    mo: "month", mos: "month", month: "month", months: "month",
+    y: "year", yr: "year", yrs: "year", year: "year", years: "year",
+  };
+  const wordNum: Record<string, number> = { a: 1, an: 1 };
+
+  const rel = lower.match(
+    /^(?:about\s+|around\s+|over\s+|almost\s+)?(\d+|a|an)\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|wks?|w|months?|mos?|mo|years?|yrs?|y)\s*ago\b/,
+  );
+  if (rel) {
+    const n = wordNum[rel[1]] ?? Number(rel[1]);
+    const unit = unitAlias[rel[2]];
+    if (Number.isFinite(n) && unit) return now - n * unitMs[unit];
+  }
+
+  const short = lower.match(
+    /^(\d+)\s*(s|sec|secs|m|min|mins|h|hr|hrs|d|day|days|w|wk|wks|mo|mos|month|months|y|yr|yrs)$/,
+  );
+  if (short) {
+    const n = Number(short[1]);
+    const unit = unitAlias[short[2]];
+    if (Number.isFinite(n) && unit) return now - n * unitMs[unit];
+  }
+
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? Number.NaN : parsed;
+}
+
 function parseDateTime(value?: string | null, time?: string | null): number {
-  const joined = [value, time].filter(Boolean).join(" ");
-  if (!joined.trim()) return 0;
+  const joined = [value, time].filter(Boolean).join(" ").trim();
+  if (!joined) return Number.NaN;
   const parsed = Date.parse(joined);
-  return Number.isNaN(parsed) ? 0 : parsed;
+  if (!Number.isNaN(parsed)) return parsed;
+  return parseRelativeOrAbsolute(joined);
+}
+
+// Converts a clock-time string ("9:15 AM", "09:15", "21:15", "9:15") into
+// minutes since midnight. Returns NaN if unparseable.
+function parseTimeOfDay(value?: string | null): number {
+  if (!value) return Number.NaN;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return Number.NaN;
+  const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/);
+  if (!m) return Number.NaN;
+  let hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  const seconds = m[3] ? Number(m[3]) : 0;
+  const meridiem = m[4];
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return Number.NaN;
+  if (minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59) return Number.NaN;
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return Number.NaN;
+    if (meridiem === "am") hours = hours === 12 ? 0 : hours;
+    else hours = hours === 12 ? 12 : hours + 12;
+  } else if (hours < 0 || hours > 23) return Number.NaN;
+  return hours * 60 + minutes + seconds / 60;
 }
 
 // Detects whether a "Posted Date & Time" string represents a moment more than
@@ -291,40 +372,68 @@ function compareText(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
+// Sentinel returned by rawLeadSortValue when the underlying cell is empty
+// or otherwise unrankable. The comparator always pushes these to the end,
+// regardless of asc/desc direction.
+const SORT_EMPTY = Symbol("sort-empty");
+type SortValue = number | string | typeof SORT_EMPTY;
+
+function textOrEmpty(value: string | null | undefined): SortValue {
+  const trimmed = (value ?? "").trim();
+  return trimmed ? trimmed : SORT_EMPTY;
+}
+
+function numberOrEmpty(value: number): SortValue {
+  return Number.isFinite(value) ? value : SORT_EMPTY;
+}
+
 function rawLeadSortValue(
   entry: CacheEntry,
   key: RawLeadSortKey,
   actions: Record<string, Action>,
   currentUserId: string | null,
-) {
+): SortValue {
   const r = entry.data;
   switch (key) {
     case "row":
-      return entry.sheet_row ?? 0;
+      return typeof entry.sheet_row === "number" ? entry.sheet_row : SORT_EMPTY;
     case "account_name":
-      return r["Account Name"] ?? "";
+      return textOrEmpty(r["Account Name"]);
     case "sub_area":
-      return r["Sub Area / Neighborhood"] ?? "";
+      return textOrEmpty(r["Sub Area / Neighborhood"]);
     case "posted_at":
-      return parseDateTime(r["Posted Date & Time"]);
+      return numberOrEmpty(parseRelativeOrAbsolute(r["Posted Date & Time"]));
     case "post_text":
-      return r["Post Text"] ?? "";
-    case "lead":
-      return effectiveLead(r, actions[entry.row_key]) || "";
+      return textOrEmpty(r["Post Text"]);
+    case "lead": {
+      const lead = effectiveLead(r, actions[entry.row_key]);
+      if (lead === "yes") return 0;
+      if (lead === "no") return 1;
+      return SORT_EMPTY;
+    }
     case "lead_link":
-      return r["Lead Link"] ?? "";
+      return textOrEmpty(r["Lead Link"]);
     case "captured_date":
-      return parseDateTime(r["Captured Date (UTC)"], r["Captured Time (UTC)"]);
+      return numberOrEmpty(parseDateTime(r["Captured Date (UTC)"], r["Captured Time (UTC)"]));
     case "captured_time":
-      return r["Captured Time (UTC)"] ?? "";
+      return numberOrEmpty(parseTimeOfDay(r["Captured Time (UTC)"]));
     case "account_area":
-      return r["Account Area"] ?? "";
+      return textOrEmpty(r["Account Area"]);
     case "incog_account":
-      return r["Incog Account"] ?? "";
-    case "assignment":
-      if (!entry.assigned_to) return "unassigned";
-      return entry.assigned_to === currentUserId ? "assigned to you" : "claimed";
+      return textOrEmpty(r["Incog Account"]);
+    case "assignment": {
+      // Logical rank: assigned-to-you < claimed < unassigned. Unassigned is
+      // meaningful (not empty) — keep it ranked so it trails in asc and
+      // leads in desc, per spec.
+      if (!entry.assigned_to) return 2;
+      return entry.assigned_to === currentUserId ? 0 : 1;
+    }
   }
+}
+
+function compareSortValues(av: SortValue, bv: SortValue): number {
+  if (typeof av === "number" && typeof bv === "number") return av - bv;
+  return compareText(String(av), String(bv));
 }
 
 function compareRawLeadEntries(
@@ -333,14 +442,19 @@ function compareRawLeadEntries(
   sort: RawLeadSort,
   actions: Record<string, Action>,
   currentUserId: string | null,
+  indexA: number,
+  indexB: number,
 ) {
   const av = rawLeadSortValue(a, sort.key, actions, currentUserId);
   const bv = rawLeadSortValue(b, sort.key, actions, currentUserId);
-  const result =
-    typeof av === "number" && typeof bv === "number"
-      ? av - bv
-      : compareText(String(av), String(bv));
-  return sort.direction === "asc" ? result : -result;
+  const aEmpty = av === SORT_EMPTY;
+  const bEmpty = bv === SORT_EMPTY;
+  if (aEmpty && !bEmpty) return 1;
+  if (!aEmpty && bEmpty) return -1;
+  if (aEmpty && bEmpty) return indexA - indexB;
+  const raw = compareSortValues(av, bv);
+  const directional = sort.direction === "asc" ? raw : -raw;
+  return directional !== 0 ? directional : indexA - indexB;
 }
 
 function SortHeader({
@@ -740,10 +854,11 @@ function Inner() {
 
   // Entries are filtered server-side for category, search, lead state, and area.
   const visible = useMemo(() => {
-    let list = entries;
-    return [...list].sort((a, b) =>
-      compareRawLeadEntries(a, b, rawLeadSort, actions, currentUserId),
+    const indexed = entries.map((entry, index) => ({ entry, index }));
+    indexed.sort((a, b) =>
+      compareRawLeadEntries(a.entry, b.entry, rawLeadSort, actions, currentUserId, a.index, b.index),
     );
+    return indexed.map((item) => item.entry);
   }, [actions, currentUserId, entries, rawLeadSort]);
 
   const shownRows = visible;
