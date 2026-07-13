@@ -372,40 +372,69 @@ function compareText(a: string, b: string) {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
+// Sentinel returned by rawLeadSortValue when the underlying cell is empty
+// or otherwise unrankable. The comparator always pushes these to the end,
+// regardless of asc/desc direction.
+const SORT_EMPTY = Symbol("sort-empty");
+type SortValue = number | string | typeof SORT_EMPTY;
+
+function textOrEmpty(value: string | null | undefined): SortValue {
+  const trimmed = (value ?? "").trim();
+  return trimmed ? trimmed : SORT_EMPTY;
+}
+
+function numberOrEmpty(value: number): SortValue {
+  return Number.isFinite(value) ? value : SORT_EMPTY;
+}
+
 function rawLeadSortValue(
   entry: CacheEntry,
   key: RawLeadSortKey,
   actions: Record<string, Action>,
   currentUserId: string | null,
-) {
+): SortValue {
   const r = entry.data;
   switch (key) {
     case "row":
-      return entry.sheet_row ?? 0;
+      return typeof entry.sheet_row === "number" ? entry.sheet_row : SORT_EMPTY;
     case "account_name":
-      return r["Account Name"] ?? "";
+      return textOrEmpty(r["Account Name"]);
     case "sub_area":
-      return r["Sub Area / Neighborhood"] ?? "";
+      return textOrEmpty(r["Sub Area / Neighborhood"]);
     case "posted_at":
-      return parseDateTime(r["Posted Date & Time"]);
+      return numberOrEmpty(parseRelativeOrAbsolute(r["Posted Date & Time"]));
     case "post_text":
-      return r["Post Text"] ?? "";
-    case "lead":
-      return effectiveLead(r, actions[entry.row_key]) || "";
+      return textOrEmpty(r["Post Text"]);
+    case "lead": {
+      const lead = effectiveLead(r, actions[entry.row_key]);
+      if (lead === "yes") return 0;
+      if (lead === "no") return 1;
+      if (lead === "review") return 2;
+      return SORT_EMPTY;
+    }
     case "lead_link":
-      return r["Lead Link"] ?? "";
+      return textOrEmpty(r["Lead Link"]);
     case "captured_date":
-      return parseDateTime(r["Captured Date (UTC)"], r["Captured Time (UTC)"]);
+      return numberOrEmpty(parseDateTime(r["Captured Date (UTC)"], r["Captured Time (UTC)"]));
     case "captured_time":
-      return r["Captured Time (UTC)"] ?? "";
+      return numberOrEmpty(parseTimeOfDay(r["Captured Time (UTC)"]));
     case "account_area":
-      return r["Account Area"] ?? "";
+      return textOrEmpty(r["Account Area"]);
     case "incog_account":
-      return r["Incog Account"] ?? "";
-    case "assignment":
-      if (!entry.assigned_to) return "unassigned";
-      return entry.assigned_to === currentUserId ? "assigned to you" : "claimed";
+      return textOrEmpty(r["Incog Account"]);
+    case "assignment": {
+      // Logical rank: assigned-to-you < claimed < unassigned. Unassigned is
+      // meaningful (not empty) — keep it ranked so it trails in asc and
+      // leads in desc, per spec.
+      if (!entry.assigned_to) return 2;
+      return entry.assigned_to === currentUserId ? 0 : 1;
+    }
   }
+}
+
+function compareSortValues(av: SortValue, bv: SortValue): number {
+  if (typeof av === "number" && typeof bv === "number") return av - bv;
+  return compareText(String(av), String(bv));
 }
 
 function compareRawLeadEntries(
@@ -414,14 +443,19 @@ function compareRawLeadEntries(
   sort: RawLeadSort,
   actions: Record<string, Action>,
   currentUserId: string | null,
+  indexA: number,
+  indexB: number,
 ) {
   const av = rawLeadSortValue(a, sort.key, actions, currentUserId);
   const bv = rawLeadSortValue(b, sort.key, actions, currentUserId);
-  const result =
-    typeof av === "number" && typeof bv === "number"
-      ? av - bv
-      : compareText(String(av), String(bv));
-  return sort.direction === "asc" ? result : -result;
+  const aEmpty = av === SORT_EMPTY;
+  const bEmpty = bv === SORT_EMPTY;
+  if (aEmpty && !bEmpty) return 1;
+  if (!aEmpty && bEmpty) return -1;
+  if (aEmpty && bEmpty) return indexA - indexB;
+  const raw = compareSortValues(av, bv);
+  const directional = sort.direction === "asc" ? raw : -raw;
+  return directional !== 0 ? directional : indexA - indexB;
 }
 
 function SortHeader({
