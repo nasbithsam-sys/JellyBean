@@ -84,6 +84,16 @@ export function csPipelineTodayStartUtcIso(input: DateInput = new Date()): strin
 }
 
 /**
+ * A local `Date` whose y/m/d match the current Eastern-Time calendar day.
+ * Useful for seeding the ET-aware `<Calendar />` presets so that a user
+ * in a different browser timezone still gets ET "today".
+ */
+export function csPipelineEtCalendarToday(): Date {
+  const p = etParts(new Date());
+  return new Date(p.year, p.month - 1, p.day);
+}
+
+/**
  * Build UTC ISO boundaries for an ET date range picked from a calendar
  * (the JS Date values only carry y/m/d in the local browser tz; we
  * reinterpret them as ET calendar dates).
