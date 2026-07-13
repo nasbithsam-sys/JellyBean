@@ -1731,6 +1731,10 @@ function LeadCard({
   const initials = "";
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const isCs = auth.primaryRole === "cs";
+  // Role visibility for source/forwarder metadata (admin only) and
+  // conversation attachments (admin + cs_admin).
+  const canViewForwardMeta = auth.primaryRole === "admin";
+  const canViewAttachments = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
   const creator = lead.created_by ? profilesById?.get(lead.created_by) : null;
