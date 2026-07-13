@@ -1018,8 +1018,8 @@ function Inner() {
                 <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
                 {dateRange?.from
                   ? dateRange.to
-                    ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d")}`
-                    : format(dateRange.from, "MMM d, yyyy")
+                    ? `${formatCsPipelineShortDate(dateRange.from)} – ${formatCsPipelineShortDate(dateRange.to)}`
+                    : formatCsPipelineDateWithYear(dateRange.from)
                   : "Date range"}
                 {dateRange?.from && (
                   <span
