@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { listMyDrafts, deleteDraft, type LeadDraft, type DraftSourceType } from "@/lib/lead-drafts";
 import {
