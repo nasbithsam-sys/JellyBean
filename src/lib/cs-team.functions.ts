@@ -49,3 +49,57 @@ export const listCsTeam = createServerFn({ method: "GET" })
       email: p.email,
     })) as CsTeamMember[];
   });
+
+// Bulk-assigns every currently important qualified lead to a chosen CS user.
+// Only Admin or CS Admin can call it. Only users with the "cs" role can
+// receive the assignment. Uses a single UPDATE keyed by is_important = true
+// so this stays O(1) round-trips regardless of lead volume.
+export const bulkAssignImportantLeads = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { assigneeId: string }) => {
+    if (!data || typeof data.assigneeId !== "string" || data.assigneeId.length < 10) {
+      throw new Error("Invalid assignee");
+    }
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    // 1. Caller must be admin or cs_admin.
+    const allowed = await callerHasAnyRole(context.userId, ["admin", "cs_admin"]);
+    if (!allowed) throw new Error("Forbidden: admin or CS admin only");
+
+    // 2. Assignee must currently hold the cs role.
+    const assigneeIsCs = await callerHasAnyRole(data.assigneeId, ["cs"]);
+    if (!assigneeIsCs) throw new Error("Selected user is not a CS user");
+
+    // 3. Assignee profile must be active.
+    const { data: prof, error: pErr } = await supabaseAdmin
+      .from("profiles")
+      .select("user_id, full_name, email, is_active")
+      .eq("user_id", data.assigneeId)
+      .maybeSingle();
+    if (pErr) throw new Error(pErr.message);
+    if (!prof || !prof.is_active) throw new Error("Selected user is not active");
+
+    // 4. Single bulk UPDATE — reuses is_important flag (same field the
+    //    "Important" / "Pinned Important" badge is driven from).
+    const nowIso = new Date().toISOString();
+    const { data: updated, error: uErr } = await supabaseAdmin
+      .from("qualified_leads")
+      .update({
+        assigned_to: data.assigneeId,
+        assigned_by: context.userId,
+        assigned_at: nowIso,
+      } as never)
+      .eq("is_important", true)
+      .select("id");
+    if (uErr) throw new Error(uErr.message);
+
+    return {
+      count: updated?.length ?? 0,
+      assignee: {
+        user_id: prof.user_id,
+        full_name: prof.full_name,
+        email: prof.email,
+      },
+    };
+  });
