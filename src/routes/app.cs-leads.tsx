@@ -1167,6 +1167,42 @@ function Inner() {
             )}
             Refresh
           </Button>
+          {isAdmin && (
+            <div className="inline-flex items-center gap-1.5 h-9 pl-2 pr-1 rounded-md bg-surface border border-border shadow-sm">
+              <Sparkles className="h-3.5 w-3.5 text-warning" />
+              <Select
+                value={importantAssignee}
+                onValueChange={(v) => {
+                  setImportantAssignee(v);
+                  setImportantConfirmOpen(true);
+                }}
+              >
+                <SelectTrigger className="h-7 border-0 bg-transparent px-1.5 text-[12px] focus:ring-0 focus:ring-offset-0 shadow-none min-w-[190px]">
+                  <SelectValue placeholder="Assign Important Leads" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(team.data ?? []).length === 0 ? (
+                    <div className="px-3 py-2 text-[12px] text-muted-foreground">
+                      No active CS users
+                    </div>
+                  ) : (
+                    (team.data ?? []).map((m) => (
+                      <SelectItem key={m.user_id} value={m.user_id}>
+                        <div className="flex flex-col">
+                          <span className="text-[12px] font-medium">
+                            {m.full_name || m.email}
+                          </span>
+                          {m.full_name && (
+                            <span className="text-[10px] text-muted-foreground">{m.email}</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {auth.primaryRole === "admin" && (
             <Button variant="outline" size="sm" className="h-9" onClick={exportLeads}>
               <Download className="h-3.5 w-3.5 mr-1.5" />
