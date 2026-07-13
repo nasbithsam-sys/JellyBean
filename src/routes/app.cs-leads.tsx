@@ -2010,32 +2010,31 @@ function LeadCard({
       </div>
 
       {lead.sub_area && (
-        <div className="mt-3.5 flex items-center gap-1.5 crm-lead-meta">
-          <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-          <div className="min-w-0 flex items-center gap-1.5">
-            <span className="crm-muted-text">Area:</span>
-            <span className="font-semibold text-foreground">{lead.sub_area}</span>
-            <button
-              type="button"
-              title="Copy area"
-              onClick={(e) => { e.stopPropagation(); copyToClipboard(lead.sub_area!, "Area copied"); }}
-              className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100"
-            >
-              <Copy className="h-3 w-3" />
-            </button>
-          </div>
+        <div className="mt-3.5 flex items-center gap-2 crm-lead-meta">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[12.5px] font-semibold text-foreground ring-1 ring-primary/20">
+            <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="truncate max-w-[220px]">{lead.sub_area}</span>
+          </span>
+          <button
+            type="button"
+            title="Copy area"
+            onClick={(e) => { e.stopPropagation(); copyToClipboard(lead.sub_area!, "Area copied"); }}
+            className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <Copy className="h-3 w-3" />
+          </button>
         </div>
       )}
 
       {lead.service && (
-        <div className="mt-2.5 flex items-start gap-1.5 crm-lead-meta">
-          <ArrowRightCircle className="h-3 w-3 mt-0.5 text-primary shrink-0" />
-          <div className="min-w-0">
-            <span className="crm-muted-text">Service:</span>{" "}
-            <span className="font-semibold text-foreground">{lead.service}</span>
-          </div>
+        <div className="mt-2.5 flex items-center gap-2 crm-lead-meta">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-accent/60 px-2.5 py-1 text-[13px] font-semibold text-foreground ring-1 ring-border/70">
+            <ArrowRightCircle className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="truncate max-w-[240px]">{lead.service}</span>
+          </span>
         </div>
       )}
+
 
       <div className="mt-2.5 flex items-start gap-1.5 crm-lead-meta">
         <div className="min-w-0">
