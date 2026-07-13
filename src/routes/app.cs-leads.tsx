@@ -65,7 +65,17 @@ import {
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { subDays } from "date-fns";
+import {
+  csPipelineDateRangeToUtcIso,
+  csPipelineEtCalendarToday,
+  csPipelineInputValueToUtcIso,
+  csPipelineTodayStartUtcIso,
+  formatCsPipelineDateTime,
+  formatCsPipelineDateWithYear,
+  formatCsPipelineShortDate,
+  utcIsoToCsPipelineInputValue,
+} from "@/lib/cs-pipeline-time";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
@@ -550,17 +560,8 @@ function Inner() {
   // assigned_at is indexed (idx_qualified_leads_assigned_at DESC) so these
   // range filters are efficient. We compute the ISO strings in a memo so
   // they're stable across renders and don't cause spurious query key changes.
-  const dbDateFrom = useMemo(
-    () => (dateRange?.from ? startOfDay(dateRange.from).toISOString() : null),
-    [dateRange?.from],
-  );
-  const dbDateTo = useMemo(
-    () =>
-      dateRange?.to
-        ? endOfDay(dateRange.to).toISOString()
-        : dateRange?.from
-          ? endOfDay(dateRange.from).toISOString()
-          : null,
+  const { fromIso: dbDateFrom, toIso: dbDateTo } = useMemo(
+    () => csPipelineDateRangeToUtcIso(dateRange?.from ?? null, dateRange?.to ?? null),
     [dateRange?.from, dateRange?.to],
   );
 
@@ -703,11 +704,7 @@ function Inner() {
 
   const totalPages = Math.max(1, Math.ceil((totalCount.data ?? 0) / PAGE_SIZE));
 
-  const todayStart = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString();
-  }, []);
+  const todayStart = useMemo(() => csPipelineTodayStartUtcIso(), []);
   const sentToday = useQuery({
     queryKey: ["cs_sent_today", auth.user?.id, todayStart],
     enabled: !!auth.user?.id,
@@ -931,7 +928,7 @@ function Inner() {
         "Assigned To",
         "Area",
         "Sub Area",
-        "Created",
+        "Created (ET)",
       ],
       visibleLeads.map((lead) => [
         lead.customer_name,
@@ -948,7 +945,7 @@ function Inner() {
           : "Unassigned",
         lead.main_area ?? "",
         lead.sub_area ?? "",
-        lead.assigned_at,
+        formatCsPipelineDateTime(lead.assigned_at),
       ]),
     );
     toast.success(`Exported ${visibleLeads.length} CS lead${visibleLeads.length === 1 ? "" : "s"}`);
@@ -1018,8 +1015,8 @@ function Inner() {
                 <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
                 {dateRange?.from
                   ? dateRange.to
-                    ? `${format(dateRange.from, "MMM d")} – ${format(dateRange.to, "MMM d")}`
-                    : format(dateRange.from, "MMM d, yyyy")
+                    ? `${formatCsPipelineShortDate(dateRange.from)} – ${formatCsPipelineShortDate(dateRange.to)}`
+                    : formatCsPipelineDateWithYear(dateRange.from)
                   : "Date range"}
                 {dateRange?.from && (
                   <span
@@ -1041,7 +1038,10 @@ function Inner() {
                   size="sm"
                   variant="ghost"
                   className="h-7 text-[11px]"
-                  onClick={() => setDateRange({ from: new Date(), to: new Date() })}
+                  onClick={() => {
+                    const t = csPipelineEtCalendarToday();
+                    setDateRange({ from: t, to: t });
+                  }}
                 >
                   Today
                 </Button>
@@ -1049,7 +1049,10 @@ function Inner() {
                   size="sm"
                   variant="ghost"
                   className="h-7 text-[11px]"
-                  onClick={() => setDateRange({ from: subDays(new Date(), 6), to: new Date() })}
+                  onClick={() => {
+                    const t = csPipelineEtCalendarToday();
+                    setDateRange({ from: subDays(t, 6), to: t });
+                  }}
                 >
                   7d
                 </Button>
@@ -1057,7 +1060,10 @@ function Inner() {
                   size="sm"
                   variant="ghost"
                   className="h-7 text-[11px]"
-                  onClick={() => setDateRange({ from: subDays(new Date(), 29), to: new Date() })}
+                  onClick={() => {
+                    const t = csPipelineEtCalendarToday();
+                    setDateRange({ from: subDays(t, 29), to: t });
+                  }}
                 >
                   30d
                 </Button>
@@ -2540,7 +2546,8 @@ function LeadDrawer({
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
   const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
   const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
-  const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
+  const initialFollowup = useMemo(() => utcIsoToCsPipelineInputValue(lead.followup_at), [lead.followup_at]);
+  const [followup, setFollowup] = useState(initialFollowup);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
@@ -2558,7 +2565,7 @@ function LeadDrawer({
     note !== "" ||
     requirement1 !== (lead.requirement_1 ?? "") ||
     requirement2 !== (lead.requirement_2 ?? "") ||
-    followup !== (lead.followup_at ? lead.followup_at.slice(0, 16) : "") ||
+    followup !== initialFollowup ||
     isImportant !== lead.is_important;
   const isDirtyRef = useRef(isDirty);
   useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
@@ -2638,7 +2645,7 @@ function LeadDrawer({
         .update({
           cs_status: status,
           cs_notes: newNotes as Json,
-          followup_at: followup ? new Date(followup).toISOString() : null,
+          followup_at: csPipelineInputValueToUtcIso(followup),
           assigned_to: assignedTo,
           assigned_by: assignedTo ? (lead.assigned_to === assignedTo ? lead.assigned_by : (auth.user?.id || null)) : null,
           number_name: numberName.trim() || null,
@@ -2952,7 +2959,7 @@ function LeadDrawer({
                   {[...notes].reverse().map((n, i) => (
                     <div key={i} className="bg-surface/60 border border-border rounded-md p-3">
                       <div className="text-[11px] text-muted-foreground tabular-nums">
-                        {n.by} · {new Date(n.at).toLocaleString()}
+                        {n.by} · {formatCsPipelineDateTime(n.at)}
                       </div>
                       <div className="text-[13px] mt-1 whitespace-pre-wrap leading-relaxed">
                         {n.text}
