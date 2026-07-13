@@ -47,7 +47,7 @@ import { formatPhone } from "@/lib/crm-lite";
 const DraftsDialog = lazy(() =>
   import("@/components/drafts-dialog").then((m) => ({ default: m.DraftsDialog })),
 );
-import { saveDraft, deleteDraft, type LeadDraft } from "@/lib/lead-drafts";
+import { saveDraft, deleteDraft, countMyDrafts, type LeadDraft } from "@/lib/lead-drafts";
 import { friendlyError } from "@/lib/error-messages";
 
 
