@@ -2959,7 +2959,7 @@ function LeadDrawer({
                   {[...notes].reverse().map((n, i) => (
                     <div key={i} className="bg-surface/60 border border-border rounded-md p-3">
                       <div className="text-[11px] text-muted-foreground tabular-nums">
-                        {n.by} · {new Date(n.at).toLocaleString()}
+                        {n.by} · {formatCsPipelineDateTime(n.at)}
                       </div>
                       <div className="text-[13px] mt-1 whitespace-pre-wrap leading-relaxed">
                         {n.text}
