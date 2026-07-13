@@ -2301,6 +2301,7 @@ function QualifyDialog({
       // Refresh cache/counts so the lead now appears under "Assigned Myself".
       qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
       qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
+      qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
     } catch (e) {
       toast.error(friendlyError(e));
     }
