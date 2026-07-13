@@ -704,11 +704,7 @@ function Inner() {
 
   const totalPages = Math.max(1, Math.ceil((totalCount.data ?? 0) / PAGE_SIZE));
 
-  const todayStart = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString();
-  }, []);
+  const todayStart = useMemo(() => csPipelineTodayStartUtcIso(), []);
   const sentToday = useQuery({
     queryKey: ["cs_sent_today", auth.user?.id, todayStart],
     enabled: !!auth.user?.id,
