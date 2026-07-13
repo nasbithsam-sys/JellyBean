@@ -2165,6 +2165,8 @@ function QualifyDialog({
   const row = entry.data;
   const [busy, setBusy] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const qc = useQueryClient();
+
 
   async function send(values: LeadFormValues) {
     setBusy(true);
