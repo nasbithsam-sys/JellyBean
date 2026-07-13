@@ -2546,7 +2546,8 @@ function LeadDrawer({
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
   const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
   const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
-  const [followup, setFollowup] = useState(lead.followup_at ? lead.followup_at.slice(0, 16) : "");
+  const initialFollowup = useMemo(() => utcIsoToCsPipelineInputValue(lead.followup_at), [lead.followup_at]);
+  const [followup, setFollowup] = useState(initialFollowup);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
