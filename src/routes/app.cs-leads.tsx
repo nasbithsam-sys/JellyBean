@@ -2565,7 +2565,7 @@ function LeadDrawer({
     note !== "" ||
     requirement1 !== (lead.requirement_1 ?? "") ||
     requirement2 !== (lead.requirement_2 ?? "") ||
-    followup !== (lead.followup_at ? lead.followup_at.slice(0, 16) : "") ||
+    followup !== initialFollowup ||
     isImportant !== lead.is_important;
   const isDirtyRef = useRef(isDirty);
   useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
