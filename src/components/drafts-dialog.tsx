@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { listMyDrafts, deleteDraft, type LeadDraft, type DraftSourceType } from "@/lib/lead-drafts";
 import {
@@ -34,6 +35,7 @@ interface DraftsDialogProps {
 
 export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenDraft }: DraftsDialogProps) {
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [drafts, setDrafts] = useState<LeadDraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -70,6 +72,7 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
     try {
       await deleteDraft(id);
       setDrafts((prev) => prev.filter((d) => d.id !== id));
+      qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
       toast.success("Draft deleted");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete draft");

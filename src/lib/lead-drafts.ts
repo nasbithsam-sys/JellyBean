@@ -94,6 +94,35 @@ export async function listMyDrafts(userId: string): Promise<LeadDraft[]> {
   return data ?? [];
 }
 
+// Lightweight HEAD count of the current user's drafts. Optionally filtered by
+// source_type so a page can show a red-dot indicator without loading rows.
+export async function countMyDrafts(
+  userId: string,
+  sourceType?: DraftSourceType,
+): Promise<number> {
+  const anyClient = supabase as unknown as {
+    from: (t: string) => {
+      select: (
+        cols: string,
+        opts: { count: "exact" | "planned"; head: boolean },
+      ) => {
+        eq: (c: string, v: string) => {
+          eq: (c: string, v: string) => Promise<{ count: number | null; error: { message: string } | null }>;
+        } & Promise<{ count: number | null; error: { message: string } | null }>;
+      };
+    };
+  };
+  const base = anyClient
+    .from("lead_drafts")
+    .select("id", { count: "exact", head: true })
+    .eq("created_by", userId);
+  const { count, error } = sourceType
+    ? await base.eq("source_type", sourceType)
+    : await base;
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function saveDraft(input: {
   id?: string | null;
   source_type: DraftSourceType;

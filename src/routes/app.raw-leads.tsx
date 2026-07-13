@@ -71,7 +71,7 @@ import {
 } from "@/lib/raw-leads.functions";
 
 import { confirmDialog, confirmDiscardUnsaved } from "@/components/confirm-dialog";
-import { saveDraft, deleteDraftForSource, type LeadDraft } from "@/lib/lead-drafts";
+import { saveDraft, deleteDraftForSource, countMyDrafts, type LeadDraft } from "@/lib/lead-drafts";
 import { FolderOpen } from "lucide-react";
 
 // Lazy-loaded heavy dialogs — deferred until user opens them
@@ -606,6 +606,15 @@ function Inner() {
     placeholderData: keepPreviousData,
   });
 
+  const draftCountQuery = useQuery({
+    queryKey: ["lead-drafts-count", auth.user?.id, "raw_lead"],
+    queryFn: () => countMyDrafts(auth.user!.id, "raw_lead"),
+    enabled: !!auth.user?.id,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const hasDraftLeads = (draftCountQuery.data ?? 0) > 0;
+
   const updateCachedEntries = useCallback(
     (updater: (entry: CacheEntry) => CacheEntry) => {
       qc.setQueryData<RawLeadPage>(cacheKey as unknown as readonly unknown[], (prev) => {
@@ -1137,12 +1146,19 @@ function Inner() {
           <Button
             size="sm"
             variant="outline"
-            className="h-9"
+            className="relative h-9"
             onClick={() => setDraftsOpen(true)}
-            title="View saved drafts"
+            title={hasDraftLeads ? "Draft contains leads" : "View saved drafts"}
           >
             <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
             Drafts
+            {hasDraftLeads && (
+              <span
+                className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background"
+                aria-label="Draft contains leads"
+                title="Draft contains leads"
+              />
+            )}
           </Button>
 
           {auth.primaryRole === "admin" && (
@@ -1735,6 +1751,7 @@ function Inner() {
                 source_lead_id: qualifyFor.id ?? null,
               });
             }
+            qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
             await updateAction(qualifyFor.row_key, { category: "forwarded" });
             setQualifyFor(null);
             setQualifySecondPhone("");
@@ -2285,6 +2302,7 @@ function QualifyDialog({
       // Refresh cache/counts so the lead now appears under "Assigned Myself".
       qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
       qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
+      qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
     } catch (e) {
       toast.error(friendlyError(e));
     }
