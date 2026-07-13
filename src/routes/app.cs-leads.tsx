@@ -733,6 +733,45 @@ function Inner() {
     refetchOnWindowFocus: false,
   });
 
+  // Count of currently important leads (used to preview the bulk action).
+  const importantCount = useQuery({
+    queryKey: ["cs_leads_important_count"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("qualified_leads")
+        .select("id", { count: "planned", head: true })
+        .eq("is_important", true);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const runBulkAssignImportant = useServerFn(bulkAssignImportantLeads);
+  async function confirmBulkAssignImportant() {
+    if (!importantAssignee) return;
+    setImportantBusy(true);
+    try {
+      const res = await runBulkAssignImportant({ data: { assigneeId: importantAssignee } });
+      const name = res.assignee.full_name || res.assignee.email || "CS user";
+      if (res.count === 0) {
+        toast.info("No important leads available to assign.");
+      } else {
+        toast.success(`${res.count} important lead${res.count === 1 ? "" : "s"} assigned to ${name}.`);
+      }
+      setImportantConfirmOpen(false);
+      setImportantAssignee("");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+      qc.invalidateQueries({ queryKey: ["cs_leads_important_count"] });
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setImportantBusy(false);
+    }
+  }
+
   const teamById = useMemo(() => {
     const map = new Map<string, CsTeamMember>();
     for (const m of team.data ?? []) map.set(m.user_id, m);
