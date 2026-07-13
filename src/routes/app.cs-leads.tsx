@@ -2696,7 +2696,7 @@ function LeadDrawer({
                 <PhoneCopyLink phone={lead.customer_number_2} />
               )}
             </div>
-            {isAdmin && forwardedByText && (
+            {canViewForwardMeta && forwardedByText && (
               <div className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1.5">
                 <span>Forwarded by:</span>
                 <span className="font-medium text-foreground">{forwardedByText}</span>
