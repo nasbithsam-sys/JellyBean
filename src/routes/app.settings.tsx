@@ -547,6 +547,7 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
 function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const createUser = useServerFn(adminCreateUser);
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
