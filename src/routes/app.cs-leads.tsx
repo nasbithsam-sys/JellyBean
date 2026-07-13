@@ -2412,8 +2412,10 @@ function LeadCard({
       </div>
 
       <div className="mt-4 pt-3.5 border-t border-border/60 flex items-center justify-between text-[11.5px] crm-muted-text">
-        <span className="tabular-nums">
-          {formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}
+        <span className="tabular-nums flex items-center gap-1.5" title={`Forwarded ${formatCsPipelineDateTime(lead.assigned_at)} ET`}>
+          <span>{formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}</span>
+          <span className="opacity-60">·</span>
+          <span className="tabular-nums">{formatCsPipelineDateTime(lead.assigned_at)} ET</span>
         </span>
         {lead.followup_at && (
           <span className="inline-flex items-center gap-1 text-warning">
