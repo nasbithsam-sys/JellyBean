@@ -1042,7 +1042,10 @@ function Inner() {
                   size="sm"
                   variant="ghost"
                   className="h-7 text-[11px]"
-                  onClick={() => setDateRange({ from: new Date(), to: new Date() })}
+                  onClick={() => {
+                    const t = csPipelineEtCalendarToday();
+                    setDateRange({ from: t, to: t });
+                  }}
                 >
                   Today
                 </Button>
@@ -1050,7 +1053,10 @@ function Inner() {
                   size="sm"
                   variant="ghost"
                   className="h-7 text-[11px]"
-                  onClick={() => setDateRange({ from: subDays(new Date(), 6), to: new Date() })}
+                  onClick={() => {
+                    const t = csPipelineEtCalendarToday();
+                    setDateRange({ from: subDays(t, 6), to: t });
+                  }}
                 >
                   7d
                 </Button>
@@ -1058,7 +1064,10 @@ function Inner() {
                   size="sm"
                   variant="ghost"
                   className="h-7 text-[11px]"
-                  onClick={() => setDateRange({ from: subDays(new Date(), 29), to: new Date() })}
+                  onClick={() => {
+                    const t = csPipelineEtCalendarToday();
+                    setDateRange({ from: subDays(t, 29), to: t });
+                  }}
                 >
                   30d
                 </Button>
