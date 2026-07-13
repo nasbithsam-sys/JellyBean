@@ -71,7 +71,7 @@ import {
 } from "@/lib/raw-leads.functions";
 
 import { confirmDialog, confirmDiscardUnsaved } from "@/components/confirm-dialog";
-import { saveDraft, deleteDraftForSource, type LeadDraft } from "@/lib/lead-drafts";
+import { saveDraft, deleteDraftForSource, countMyDrafts, type LeadDraft } from "@/lib/lead-drafts";
 import { FolderOpen } from "lucide-react";
 
 // Lazy-loaded heavy dialogs — deferred until user opens them
