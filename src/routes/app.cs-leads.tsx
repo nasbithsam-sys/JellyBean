@@ -79,7 +79,7 @@ import {
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { listCsTeam, type CsTeamMember } from "@/lib/cs-team.functions";
+import { listCsTeam, bulkAssignImportantLeads, type CsTeamMember } from "@/lib/cs-team.functions";
 import { downloadCsv, formatPhone } from "@/lib/crm-lite";
 import type { CsStatus, LeadNote } from "@/lib/crm-types";
 import { NumberNameSelect } from "@/components/number-name-select";
@@ -372,6 +372,9 @@ function Inner() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
+  const [importantAssignee, setImportantAssignee] = useState<string>("");
+  const [importantConfirmOpen, setImportantConfirmOpen] = useState(false);
+  const [importantBusy, setImportantBusy] = useState(false);
   const isCs = auth.primaryRole === "cs";
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
@@ -729,6 +732,45 @@ function Inner() {
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
+
+  // Count of currently important leads (used to preview the bulk action).
+  const importantCount = useQuery({
+    queryKey: ["cs_leads_important_count"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("qualified_leads")
+        .select("id", { count: "planned", head: true })
+        .eq("is_important", true);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const runBulkAssignImportant = useServerFn(bulkAssignImportantLeads);
+  async function confirmBulkAssignImportant() {
+    if (!importantAssignee) return;
+    setImportantBusy(true);
+    try {
+      const res = await runBulkAssignImportant({ data: { assigneeId: importantAssignee } });
+      const name = res.assignee.full_name || res.assignee.email || "CS user";
+      if (res.count === 0) {
+        toast.info("No important leads available to assign.");
+      } else {
+        toast.success(`${res.count} important lead${res.count === 1 ? "" : "s"} assigned to ${name}.`);
+      }
+      setImportantConfirmOpen(false);
+      setImportantAssignee("");
+      qc.invalidateQueries({ queryKey: ["cs_leads"] });
+      qc.invalidateQueries({ queryKey: ["cs_leads_important_count"] });
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setImportantBusy(false);
+    }
+  }
 
   const teamById = useMemo(() => {
     const map = new Map<string, CsTeamMember>();
@@ -1125,6 +1167,42 @@ function Inner() {
             )}
             Refresh
           </Button>
+          {isAdmin && (
+            <div className="inline-flex items-center gap-1.5 h-9 pl-2 pr-1 rounded-md bg-surface border border-border shadow-sm">
+              <Sparkles className="h-3.5 w-3.5 text-warning" />
+              <Select
+                value={importantAssignee}
+                onValueChange={(v) => {
+                  setImportantAssignee(v);
+                  setImportantConfirmOpen(true);
+                }}
+              >
+                <SelectTrigger className="h-7 border-0 bg-transparent px-1.5 text-[12px] focus:ring-0 focus:ring-offset-0 shadow-none min-w-[190px]">
+                  <SelectValue placeholder="Assign Important Leads" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(team.data ?? []).length === 0 ? (
+                    <div className="px-3 py-2 text-[12px] text-muted-foreground">
+                      No active CS users
+                    </div>
+                  ) : (
+                    (team.data ?? []).map((m) => (
+                      <SelectItem key={m.user_id} value={m.user_id}>
+                        <div className="flex flex-col">
+                          <span className="text-[12px] font-medium">
+                            {m.full_name || m.email}
+                          </span>
+                          {m.full_name && (
+                            <span className="text-[10px] text-muted-foreground">{m.email}</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {auth.primaryRole === "admin" && (
             <Button variant="outline" size="sm" className="h-9" onClick={exportLeads}>
               <Download className="h-3.5 w-3.5 mr-1.5" />
@@ -1134,6 +1212,43 @@ function Inner() {
         </div>
         </div>
       </div>
+
+      <AlertDialog
+        open={importantConfirmOpen}
+        onOpenChange={(o) => {
+          if (importantBusy) return;
+          setImportantConfirmOpen(o);
+          if (!o) setImportantAssignee("");
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Assign all important leads?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const m = teamById.get(importantAssignee);
+                const name = m?.full_name || m?.email || "the selected CS user";
+                const n = importantCount.data ?? 0;
+                if (n === 0) return `No important leads are currently available to assign.`;
+                return `${n} important lead${n === 1 ? "" : "s"} will be reassigned to ${name}. Non-important leads are unchanged.`;
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={importantBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={importantBusy || !importantAssignee || (importantCount.data ?? 0) === 0}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmBulkAssignImportant();
+              }}
+            >
+              {importantBusy ? "Assigning..." : "Assign Important Leads"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       {canManagePrompt && (
         <div className="crm-section-panel">
