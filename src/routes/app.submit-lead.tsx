@@ -89,6 +89,16 @@ function Dashboard() {
     to: new Date(),
   });
 
+  const draftCountQuery = useQuery({
+    queryKey: ["lead-drafts-count", auth.user?.id, "manual_lead"],
+    queryFn: () => countMyDrafts(auth.user!.id, "manual_lead"),
+    enabled: !!auth.user?.id,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const hasDraftLeads = (draftCountQuery.data ?? 0) > 0;
+
+
 
   const all = useQuery({
     queryKey: ["my-submitted-leads", auth.user?.id],
