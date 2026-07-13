@@ -372,6 +372,9 @@ function Inner() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkAssignee, setBulkAssignee] = useState<string>("");
+  const [importantAssignee, setImportantAssignee] = useState<string>("");
+  const [importantConfirmOpen, setImportantConfirmOpen] = useState(false);
+  const [importantBusy, setImportantBusy] = useState(false);
   const isCs = auth.primaryRole === "cs";
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const composeTemplatesList = useCsComposeTemplatesList(auth.user?.id);
