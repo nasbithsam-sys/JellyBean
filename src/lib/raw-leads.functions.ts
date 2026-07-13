@@ -255,6 +255,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       totalCountQuery = applyCategory(totalCountQuery as never, data.category) as typeof totalCountQuery;
       totalCountQuery = applyAssignment(totalCountQuery as never, data.category) as typeof totalCountQuery;
     }
+    totalCountQuery = excludeDrafts(totalCountQuery as never) as typeof totalCountQuery;
     totalCountQuery = applySearchAndFilters(totalCountQuery as never, {
       query: data.query,
       leadFilter: data.leadFilter,
