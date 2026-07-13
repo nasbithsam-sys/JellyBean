@@ -1751,6 +1751,7 @@ function Inner() {
                 source_lead_id: qualifyFor.id ?? null,
               });
             }
+            qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
             await updateAction(qualifyFor.row_key, { category: "forwarded" });
             setQualifyFor(null);
             setQualifySecondPhone("");
