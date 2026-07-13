@@ -4,6 +4,16 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export type CsTeamMember = { user_id: string; full_name: string; email: string };
 
+async function callerHasAnyRole(userId: string, roles: string[]): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", roles as never);
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}
+
 // Returns the list of active CS (and admin) users so the CS pipeline can show
 // who a lead is assigned to and let admins reassign. Any authenticated CRM
 // user can call this — it only exposes name + email of teammates.
