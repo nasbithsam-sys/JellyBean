@@ -177,9 +177,16 @@ function Dashboard() {
         description={`Track the leads you sent to CS${role === "facebook" || role === "seo" ? ` as ${role.toUpperCase()}` : ""}.`}
         actions={
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setDraftsOpen(true)}>
+            <Button size="sm" variant="outline" className="relative" onClick={() => setDraftsOpen(true)}>
               <FolderOpen className="h-4 w-4 mr-1.5" />
               Drafts
+              {hasDraftLeads && (
+                <span
+                  className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background"
+                  aria-label="Draft contains leads"
+                  title="Draft contains leads"
+                />
+              )}
             </Button>
             <Dialog open={open} onOpenChange={(newOpen) => {
               if (!newOpen && isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
