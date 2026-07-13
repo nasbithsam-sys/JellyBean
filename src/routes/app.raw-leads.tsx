@@ -855,10 +855,11 @@ function Inner() {
 
   // Entries are filtered server-side for category, search, lead state, and area.
   const visible = useMemo(() => {
-    let list = entries;
-    return [...list].sort((a, b) =>
-      compareRawLeadEntries(a, b, rawLeadSort, actions, currentUserId),
+    const indexed = entries.map((entry, index) => ({ entry, index }));
+    indexed.sort((a, b) =>
+      compareRawLeadEntries(a.entry, b.entry, rawLeadSort, actions, currentUserId, a.index, b.index),
     );
+    return indexed.map((item) => item.entry);
   }, [actions, currentUserId, entries, rawLeadSort]);
 
   const shownRows = visible;
