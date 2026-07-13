@@ -2719,7 +2719,7 @@ function LeadDrawer({
             </div>
             {lead.service && <Info label="Service" value={lead.service} />}
             <Info label="Reference" value={lead.reference || "-"} />
-            {lead.submitted_by_role && (
+            {canViewForwardMeta && lead.submitted_by_role && (
               <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
             )}
             {lead.post_text && (
