@@ -2165,6 +2165,8 @@ function QualifyDialog({
   const row = entry.data;
   const [busy, setBusy] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const qc = useQueryClient();
+
 
   async function send(values: LeadFormValues) {
     setBusy(true);
@@ -2225,6 +2227,40 @@ function QualifyDialog({
       return;
     }
     try {
+      // Auto-claim the raw lead for the current user if it is still
+      // unassigned. Never overwrite another user's existing assignment.
+      let claimedAt: string | null = entry.assigned_myself_at;
+      let claimedBy: string | null = entry.assigned_to;
+      if (!entry.assigned_to) {
+        const now = new Date().toISOString();
+        const { data: claimed, error: claimErr } = await supabase
+          .from(TABLE)
+          .update({
+            assigned_to: actorId,
+            assigned_myself_at: now,
+          } as RawLeadCacheUpdate)
+          .eq("row_key", entry.row_key)
+          .is("assigned_to", null)
+          .select("assigned_to, assigned_myself_at")
+          .maybeSingle();
+        if (claimErr) throw claimErr;
+        if (!claimed) {
+          toast.error("This lead was just claimed by another user. Please refresh.");
+          return;
+        }
+        claimedBy = actorId;
+        claimedAt = now;
+      } else if (entry.assigned_to !== actorId) {
+        // Assigned to someone else — do not overwrite, but still save the draft
+        // under the current user's account (drafts are per-user).
+      }
+
+      const snapshotEntry: CacheEntry = {
+        ...entry,
+        assigned_to: claimedBy,
+        assigned_myself_at: claimedAt,
+      };
+
       await saveDraft({
         id: draft?.id ?? null,
         source_type: "raw_lead",
@@ -2241,15 +2277,19 @@ function QualifyDialog({
           reference: values.reference,
           isImportant: values.isImportant,
           originalLeadLink: values.originalLeadLink ?? null,
-          entrySnapshot: entry,
+          entrySnapshot: snapshotEntry,
         },
       });
       toast.success("Draft saved successfully.");
       setIsDirty(false);
+      // Refresh cache/counts so the lead now appears under "Assigned Myself".
+      qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+      qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
     } catch (e) {
       toast.error(friendlyError(e));
     }
   }
+
 
   const draftData = draft?.form_data ?? null;
 
