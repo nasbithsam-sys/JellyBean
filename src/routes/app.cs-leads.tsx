@@ -2069,14 +2069,14 @@ function LeadCard({
         </div>
       )}
 
-      {(lead.submitted_by_role || attachmentText) && (
+      {((canViewForwardMeta && lead.submitted_by_role) || (canViewAttachments && attachmentText)) && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {lead.submitted_by_role && (
+          {canViewForwardMeta && lead.submitted_by_role && (
             <span className="px-2.5 py-1 rounded-full bg-accent/45 text-accent-foreground border border-border crm-pill-text uppercase tracking-[0.08em]">
               via {lead.submitted_by_role}
             </span>
           )}
-          {attachmentText && (
+          {canViewAttachments && attachmentText && (
             <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 crm-pill-text uppercase tracking-[0.08em]">
               {attachmentText}
             </span>
@@ -2084,7 +2084,7 @@ function LeadCard({
         </div>
       )}
 
-      {isAdmin && forwardedByText && (
+      {canViewForwardMeta && forwardedByText && (
         <div className="mt-3.5 flex items-center gap-1.5 text-[11.5px] crm-muted-text">
           <span className="crm-lead-label !text-[10px] !tracking-[0.08em] !font-bold !text-muted-foreground">Forwarded by</span>
           <span className="font-semibold text-foreground">{forwardedByText}</span>
