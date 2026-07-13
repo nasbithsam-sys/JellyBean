@@ -114,6 +114,7 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
                     <TableHead>Area</TableHead>
                     <TableHead>Service</TableHead>
                     <TableHead>Source</TableHead>
+                    <TableHead>Post Link</TableHead>
                     <TableHead>Last Updated</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -122,6 +123,15 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
                   {visible.map((d) => {
                     const f = d.form_data ?? {};
                     const num = (f.customerNumber as string) || "";
+                    const snapshot = (f.entrySnapshot ?? {}) as {
+                      lead_link?: string | null;
+                      canonical_lead_link?: string | null;
+                    };
+                    const postLink =
+                      (f.originalLeadLink as string | null | undefined) ||
+                      snapshot.lead_link ||
+                      snapshot.canonical_lead_link ||
+                      "";
                     return (
                       <TableRow key={d.id}>
                         <TableCell className="font-medium">
@@ -134,6 +144,20 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
                           <Badge variant={d.source_type === "raw_lead" ? "secondary" : "outline"}>
                             {d.source_type === "raw_lead" ? "Raw Lead" : "Manual Lead"}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {postLink ? (
+                            <a
+                              href={postLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline text-xs"
+                            >
+                              View Post
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {new Date(d.updated_at).toLocaleString()}

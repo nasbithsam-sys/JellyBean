@@ -201,6 +201,24 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       .select(columns)
       .order("captured_at", { ascending: false, nullsFirst: false })
       .range(data.offset, data.offset + data.limit - 1);
+    // Raw leads that the current user has parked as Drafts must be hidden
+    // from the live Raw Leads views (New, Assigned Myself, etc.) — they live
+    // only inside the Drafts dialog until sent or discarded.
+    const { data: draftRows, error: draftError } = await context.supabase
+      .from("lead_drafts" as never)
+      .select("source_lead_id")
+      .eq("created_by" as never, context.userId as never)
+      .eq("source_type" as never, "raw_lead" as never)
+      .not("source_lead_id" as never, "is" as never, null as never);
+    if (draftError) throw new Error(draftError.message);
+    const draftedIds = ((draftRows ?? []) as Array<{ source_lead_id: string | null }>)
+      .map((r) => r.source_lead_id)
+      .filter((v): v is string => !!v);
+    const excludeDrafts = <T extends { not: (...a: never[]) => T }>(q: T): T =>
+      draftedIds.length
+        ? (q.not("id" as never, "in" as never, `(${draftedIds.join(",")})` as never) as T)
+        : q;
+
     // For assigned_myself tab: show leads self-assigned by the user that are
     // still active (category IS NULL = not yet forwarded/wrong/etc.).
     if (data.category === "assigned_myself") {
@@ -212,6 +230,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       dataQuery = applyCategory(dataQuery as never, data.category) as typeof dataQuery;
       dataQuery = applyAssignment(dataQuery as never, data.category) as typeof dataQuery;
     }
+    dataQuery = excludeDrafts(dataQuery as never) as typeof dataQuery;
     dataQuery = applySearchAndFilters(dataQuery as never, {
       query: data.query,
       leadFilter: data.leadFilter,
@@ -236,6 +255,7 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       totalCountQuery = applyCategory(totalCountQuery as never, data.category) as typeof totalCountQuery;
       totalCountQuery = applyAssignment(totalCountQuery as never, data.category) as typeof totalCountQuery;
     }
+    totalCountQuery = excludeDrafts(totalCountQuery as never) as typeof totalCountQuery;
     totalCountQuery = applySearchAndFilters(totalCountQuery as never, {
       query: data.query,
       leadFilter: data.leadFilter,
@@ -335,12 +355,30 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
       .select("row_key", { count: "exact", head: true })
       .is("category", null)
       .is("assigned_myself_at", null);
-    const assignedMyselfQuery = context.supabase
+    // Draft raw leads (parked by the current user) are hidden from the
+    // Assigned Myself tab, so the badge must exclude them too.
+    const { data: draftRowsForCounts } = await context.supabase
+      .from("lead_drafts" as never)
+      .select("source_lead_id")
+      .eq("created_by" as never, context.userId as never)
+      .eq("source_type" as never, "raw_lead" as never)
+      .not("source_lead_id" as never, "is" as never, null as never);
+    const draftedIdsForCounts = ((draftRowsForCounts ?? []) as Array<{ source_lead_id: string | null }>)
+      .map((r) => r.source_lead_id)
+      .filter((v): v is string => !!v);
+    let assignedMyselfQuery = context.supabase
       .from("raw_lead_cache")
       .select("row_key", { count: "exact", head: true })
       .eq("assigned_to", context.userId)
       .not("assigned_myself_at", "is", null)
       .is("category", null);
+    if (draftedIdsForCounts.length) {
+      assignedMyselfQuery = assignedMyselfQuery.not(
+        "id" as never,
+        "in" as never,
+        `(${draftedIdsForCounts.join(",")})` as never,
+      ) as typeof assignedMyselfQuery;
+    }
     void isAdmin;
 
     const [
