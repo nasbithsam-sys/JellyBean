@@ -1731,6 +1731,10 @@ function LeadCard({
   const initials = "";
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const isCs = auth.primaryRole === "cs";
+  // Role visibility for source/forwarder metadata (admin only) and
+  // conversation attachments (admin + cs_admin).
+  const canViewForwardMeta = auth.primaryRole === "admin";
+  const canViewAttachments = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
   const creator = lead.created_by ? profilesById?.get(lead.created_by) : null;
@@ -1951,7 +1955,7 @@ function LeadCard({
       )}
       onClick={onOpen}
     >
-      {(important || (Array.isArray(lead.images) && lead.images.length > 0)) && (
+      {(important || (canViewAttachments && Array.isArray(lead.images) && lead.images.length > 0)) && (
         <div className="flex flex-wrap gap-2 mb-3.5">
           {important && (
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning/10 text-warning border border-warning/40 crm-pill-text shadow-sm">
@@ -1963,7 +1967,7 @@ function LeadCard({
               {lead.pinned_important && lead.cs_status === "new" ? "Pinned Important" : "Important job"}
             </div>
           )}
-          {Array.isArray(lead.images) && lead.images.length > 0 && (
+          {canViewAttachments && Array.isArray(lead.images) && lead.images.length > 0 && (
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/30 crm-pill-text shadow-sm">
               <Paperclip className="h-3 w-3 shrink-0" />
               <span>Pictures Attached</span>
@@ -2065,14 +2069,14 @@ function LeadCard({
         </div>
       )}
 
-      {(lead.submitted_by_role || attachmentText) && (
+      {((canViewForwardMeta && lead.submitted_by_role) || (canViewAttachments && attachmentText)) && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {lead.submitted_by_role && (
+          {canViewForwardMeta && lead.submitted_by_role && (
             <span className="px-2.5 py-1 rounded-full bg-accent/45 text-accent-foreground border border-border crm-pill-text uppercase tracking-[0.08em]">
               via {lead.submitted_by_role}
             </span>
           )}
-          {attachmentText && (
+          {canViewAttachments && attachmentText && (
             <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 crm-pill-text uppercase tracking-[0.08em]">
               {attachmentText}
             </span>
@@ -2080,7 +2084,7 @@ function LeadCard({
         </div>
       )}
 
-      {isAdmin && forwardedByText && (
+      {canViewForwardMeta && forwardedByText && (
         <div className="mt-3.5 flex items-center gap-1.5 text-[11.5px] crm-muted-text">
           <span className="crm-lead-label !text-[10px] !tracking-[0.08em] !font-bold !text-muted-foreground">Forwarded by</span>
           <span className="font-semibold text-foreground">{forwardedByText}</span>
@@ -2542,6 +2546,8 @@ function LeadDrawer({
   const notes = useMemo(() => (Array.isArray(lead.cs_notes) ? lead.cs_notes : []), [lead.cs_notes]);
   const isAdmin = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   const isCs = auth.primaryRole === "cs";
+  const canViewForwardMeta = auth.primaryRole === "admin";
+  const canViewAttachments = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
   
   const [isImportant, setIsImportant] = useState(lead.is_important);
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
@@ -2690,7 +2696,7 @@ function LeadDrawer({
                 <PhoneCopyLink phone={lead.customer_number_2} />
               )}
             </div>
-            {isAdmin && forwardedByText && (
+            {canViewForwardMeta && forwardedByText && (
               <div className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1.5">
                 <span>Forwarded by:</span>
                 <span className="font-medium text-foreground">{forwardedByText}</span>
@@ -2713,7 +2719,7 @@ function LeadDrawer({
             </div>
             {lead.service && <Info label="Service" value={lead.service} />}
             <Info label="Reference" value={lead.reference || "-"} />
-            {lead.submitted_by_role && (
+            {canViewForwardMeta && lead.submitted_by_role && (
               <Info label="Submitted by" value={lead.submitted_by_role.toUpperCase()} />
             )}
             {lead.post_text && (
@@ -2736,7 +2742,7 @@ function LeadDrawer({
                 </a>
               </div>
             )}
-            {isAdmin && Array.isArray(lead.images) && lead.images.length > 0 && (
+            {canViewAttachments && Array.isArray(lead.images) && lead.images.length > 0 && (
               <LeadAttachmentsGrid refs={lead.images as string[]} />
             )}
           </div>
