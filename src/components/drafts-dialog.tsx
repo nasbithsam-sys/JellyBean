@@ -145,6 +145,20 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
                             {d.source_type === "raw_lead" ? "Raw Lead" : "Manual Lead"}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          {postLink ? (
+                            <a
+                              href={postLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline text-xs"
+                            >
+                              View Post
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {new Date(d.updated_at).toLocaleString()}
                         </TableCell>
