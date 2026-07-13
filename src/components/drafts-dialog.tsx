@@ -35,6 +35,7 @@ interface DraftsDialogProps {
 
 export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenDraft }: DraftsDialogProps) {
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [drafts, setDrafts] = useState<LeadDraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
