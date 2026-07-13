@@ -559,17 +559,8 @@ function Inner() {
   // assigned_at is indexed (idx_qualified_leads_assigned_at DESC) so these
   // range filters are efficient. We compute the ISO strings in a memo so
   // they're stable across renders and don't cause spurious query key changes.
-  const dbDateFrom = useMemo(
-    () => (dateRange?.from ? startOfDay(dateRange.from).toISOString() : null),
-    [dateRange?.from],
-  );
-  const dbDateTo = useMemo(
-    () =>
-      dateRange?.to
-        ? endOfDay(dateRange.to).toISOString()
-        : dateRange?.from
-          ? endOfDay(dateRange.from).toISOString()
-          : null,
+  const { fromIso: dbDateFrom, toIso: dbDateTo } = useMemo(
+    () => csPipelineDateRangeToUtcIso(dateRange?.from ?? null, dateRange?.to ?? null),
     [dateRange?.from, dateRange?.to],
   );
 
