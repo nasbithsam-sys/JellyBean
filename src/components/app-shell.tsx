@@ -126,7 +126,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         <div className="px-3 lg:px-5 pt-5 pb-4">
           <div className="flex items-center justify-center lg:justify-start gap-3">
             <div className="grid h-11 w-11 place-items-center rounded-2xl bg-sidebar-primary text-white ring-1 ring-white/30 shadow-[0_14px_30px_-16px_color-mix(in_srgb,var(--sidebar-primary)_80%,transparent)]">
-              <span className="text-[12px] font-bold tracking-[0.02em]">LG</span>
+              <span className="text-[12px] font-bold tracking-[0.02em] text-white">LG</span>
             </div>
             <div className="hidden lg:block leading-tight">
               <div className="text-[14px] font-bold tracking-[-0.015em] text-white">
