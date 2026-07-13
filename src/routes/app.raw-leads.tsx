@@ -606,6 +606,15 @@ function Inner() {
     placeholderData: keepPreviousData,
   });
 
+  const draftCountQuery = useQuery({
+    queryKey: ["lead-drafts-count", auth.user?.id, "raw_lead"],
+    queryFn: () => countMyDrafts(auth.user!.id, "raw_lead"),
+    enabled: !!auth.user?.id,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const hasDraftLeads = (draftCountQuery.data ?? 0) > 0;
+
   const updateCachedEntries = useCallback(
     (updater: (entry: CacheEntry) => CacheEntry) => {
       qc.setQueryData<RawLeadPage>(cacheKey as unknown as readonly unknown[], (prev) => {
