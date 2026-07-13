@@ -72,6 +72,7 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
     try {
       await deleteDraft(id);
       setDrafts((prev) => prev.filter((d) => d.id !== id));
+      qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
       toast.success("Draft deleted");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete draft");
