@@ -472,6 +472,7 @@ function SubmitForm({
         },
       });
       setDraftId(saved.id);
+      qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
       toast.success("Draft saved");
     } catch (err) {
       toast.error(friendlyError(err));
