@@ -945,7 +945,7 @@ function Inner() {
           : "Unassigned",
         lead.main_area ?? "",
         lead.sub_area ?? "",
-        lead.assigned_at,
+        formatCsPipelineDateTime(lead.assigned_at),
       ]),
     );
     toast.success(`Exported ${visibleLeads.length} CS lead${visibleLeads.length === 1 ? "" : "s"}`);
