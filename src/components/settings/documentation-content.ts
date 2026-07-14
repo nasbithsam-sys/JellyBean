@@ -649,4 +649,24 @@ export const DOC_SECTIONS: DocSection[] = [
       },
     ],
   },
+  {
+    id: "inconsistencies",
+    number: 32,
+    title: "Known Implementation Inconsistencies",
+    blocks: [
+      {
+        kind: "p",
+        text: "The following mismatches exist between different parts of the codebase at the time this documentation was generated. They do not block usage but are worth cleaning up.",
+      },
+      {
+        kind: "ul",
+        items: [
+          "The app_role Postgres enum still contains 'scraping' and some sidebar / RoleGate arrays reference it, but the Create User form (adminCreateUser roleSchema) no longer offers 'scraping' — new users are provisioned as 'maturing' instead.",
+          "The lead-attachments storage bucket has bucket.public = true at the storage level (migration 20260707130000), yet the client code only ever generates signed URLs and never exposes public URLs. Behavior is effectively private, but the bucket flag should be flipped back to private for defense-in-depth.",
+          "Some legacy migrations reference a 'processor' role that no longer exists in the current AppRole union; these have no runtime effect because role checks match by string but the migrations remain in history.",
+        ],
+      },
+    ],
+  },
 ];
+
