@@ -199,14 +199,27 @@ export function LeadForm({
     const t = setTimeout(() => setDebouncedPhoneDigits(phoneDigits), 400);
     return () => clearTimeout(t);
   }, [phoneDigits]);
+  const serviceKey = service.trim();
   const duplicateQuery = useQuery({
-    queryKey: ["lead-form-duplicate-phone", debouncedPhoneDigits.join(",")],
+    queryKey: [
+      "lead-form-duplicate-phone",
+      debouncedPhoneDigits.join(","),
+      serviceKey.toLowerCase(),
+    ],
     enabled: !disableDuplicateCheck && debouncedPhoneDigits.length > 0,
     queryFn: async () => {
       const results = await Promise.all(
-        debouncedPhoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } })),
+        debouncedPhoneDigits.map((digits) =>
+          checkDuplicate({ data: { phone: digits, service: serviceKey } }),
+        ),
       );
-      return results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
+      return {
+        // Any result with duplicate=true (same phone AND same service) is a
+        // hard duplicate. Otherwise matches are informational only.
+        blocking: results.some((r) => r.duplicate),
+        matches: results.flatMap((r) => (r.matches ?? []) as DupMatch[]),
+        informational: results.some((r) => r.informational),
+      };
     },
     staleTime: 60_000,
   });
@@ -216,12 +229,19 @@ export function LeadForm({
   }
   const uniqueDuplicates = disableDuplicateCheck
     ? []
-    : (duplicateQuery.data ?? []).filter((m) => {
+    : (duplicateQuery.data?.matches ?? []).filter((m) => {
         if (seenDup.has(m.id)) return false;
         seenDup.add(m.id);
         return true;
       });
-  const hasDuplicate = uniqueDuplicates.length > 0;
+  // hasDuplicate is TRUE only when phone + service both match.
+  const hasDuplicate =
+    !disableDuplicateCheck && (duplicateQuery.data?.blocking ?? false);
+  const hasInformationalMatch =
+    !disableDuplicateCheck &&
+    !hasDuplicate &&
+    uniqueDuplicates.length > 0;
+
 
   // True while the background query is still loading OR we are doing the
   // final gate-check inside handleSubmit. The submit button must be disabled
@@ -419,36 +439,38 @@ export function LeadForm({
 
     if (!disableDuplicateCheck && phoneDigits.length > 0) {
       // --- RACE-CONDITION FIX ---
-      // Always run a fresh check with the *current* phone digits so we are
-      // never relying on stale React Query cache that may not have resolved yet.
+      // Always run a fresh check with the *current* phone digits + service.
+      // Only same-phone AND same-service matches are blocking duplicates.
       setIsCheckingBeforeSubmit(true);
       let freshMatches: DupMatch[] = [];
       try {
         const results = await Promise.all(
-          phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } }))
+          phoneDigits.map((digits) =>
+            checkDuplicate({ data: { phone: digits, service: service.trim() } })
+          )
         );
-        const allMatches = results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
-        // Exclude the lead being edited (if any) so it doesn't flag itself
-        const excludeId = initialValues?.id;
-        const seen = new Set<string>(excludeId ? [excludeId] : []);
-        freshMatches = allMatches.filter((m) => {
-          if (seen.has(m.id)) return false;
-          seen.add(m.id);
-          return true;
-        });
+        const blocking = results.some((r) => r.duplicate);
+        if (!blocking) {
+          freshMatches = [];
+        } else {
+          const allMatches = results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
+          const excludeId = initialValues?.id;
+          const seen = new Set<string>(excludeId ? [excludeId] : []);
+          freshMatches = allMatches.filter((m) => {
+            if (seen.has(m.id)) return false;
+            seen.add(m.id);
+            return true;
+          });
+        }
       } catch {
-        // If the duplicate check itself fails (network error, etc.) we still
-        // allow submission rather than silently blocking the user.
         freshMatches = [];
       } finally {
         setIsCheckingBeforeSubmit(false);
       }
 
       if (freshMatches.length > 0) {
-        // Map matches to the preview format required by DuplicateLeadDialog
-        // Map matches to the preview format required by DuplicateLeadDialog
         const secondTargetNumbers = extraNumbers.map((n) => normalizePhone(n)).filter((n) => n.length >= 7);
-        
+
         const previewMatches: DuplicateMatchPreview[] = freshMatches.map((match) => {
           let sourceLabel = "Primary number";
           if (
@@ -464,13 +486,13 @@ export function LeadForm({
           };
         });
 
-        // Show confirmation dialog – user can Cancel or Continue Anyway
         pendingSubmitValuesRef.current = payload;
         setDupConfirmMatches(previewMatches);
         setShowDupConfirm(true);
-        return; // Stop here; submission continues only if user confirms
+        return;
       }
     }
+
 
     await onSubmit(payload);
   }
@@ -810,18 +832,35 @@ export function LeadForm({
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-[12.5px]">
           <div className="flex items-center gap-2 font-semibold text-destructive">
             <AlertTriangle className="h-4 w-4" />
-            Duplicate phone number detected (last 48 hours)
+            Duplicate detected — same phone AND same service (last 72 hours)
           </div>
           <ul className="mt-2 space-y-1 text-foreground/80">
             {uniqueDuplicates.slice(0, 5).map((m) => (
               <li key={m.id}>
                 {m.customer_name} — {formatPhone(m.customer_number)}
                 {m.customer_number_2 ? ` / ${formatPhone(m.customer_number_2)}` : ""}
+                {m.service ? ` · ${m.service}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : hasInformationalMatch ? (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-[12.5px]">
+          <div className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-4 w-4" />
+            Same phone found for a different service (informational — not a duplicate)
+          </div>
+          <ul className="mt-2 space-y-1 text-foreground/80">
+            {uniqueDuplicates.slice(0, 5).map((m) => (
+              <li key={m.id}>
+                {m.customer_name} — {formatPhone(m.customer_number)}
+                {m.service ? ` · ${m.service}` : ""}
               </li>
             ))}
           </ul>
         </div>
       ) : null}
+
 
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
         <Button
