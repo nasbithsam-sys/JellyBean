@@ -562,6 +562,68 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog
+          open={showResetPw}
+          onOpenChange={(o) => {
+            setShowResetPw(o);
+            if (!o) {
+              setNewPw("");
+              setShowResetPwValue(false);
+            }
+          }}
+        >
+          <DialogContent className="max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Reset password</DialogTitle>
+              <DialogDescription>
+                Set a new password for {user.full_name || user.email}.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                reset();
+              }}
+              className="space-y-3"
+            >
+              <Field label="New password">
+                <div className="relative">
+                  <Input
+                    type={showResetPwValue ? "text" : "password"}
+                    value={newPw}
+                    onChange={(e) => setNewPw(e.target.value)}
+                    required
+                    minLength={8}
+                    autoFocus
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPwValue((v) => !v)}
+                    aria-label={showResetPwValue ? "Hide password" : "Show password"}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {showResetPwValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </Field>
+              <DialogFooter className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowResetPw(false)}
+                  disabled={busy}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={busy || newPw.length < 8}>
+                  {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Update password
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </td>
     </tr>
   );
