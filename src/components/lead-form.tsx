@@ -832,18 +832,35 @@ export function LeadForm({
         <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-[12.5px]">
           <div className="flex items-center gap-2 font-semibold text-destructive">
             <AlertTriangle className="h-4 w-4" />
-            Duplicate phone number detected (last 48 hours)
+            Duplicate detected — same phone AND same service (last 72 hours)
           </div>
           <ul className="mt-2 space-y-1 text-foreground/80">
             {uniqueDuplicates.slice(0, 5).map((m) => (
               <li key={m.id}>
                 {m.customer_name} — {formatPhone(m.customer_number)}
                 {m.customer_number_2 ? ` / ${formatPhone(m.customer_number_2)}` : ""}
+                {m.service ? ` · ${m.service}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : hasInformationalMatch ? (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-[12.5px]">
+          <div className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-4 w-4" />
+            Same phone found for a different service (informational — not a duplicate)
+          </div>
+          <ul className="mt-2 space-y-1 text-foreground/80">
+            {uniqueDuplicates.slice(0, 5).map((m) => (
+              <li key={m.id}>
+                {m.customer_name} — {formatPhone(m.customer_number)}
+                {m.service ? ` · ${m.service}` : ""}
               </li>
             ))}
           </ul>
         </div>
       ) : null}
+
 
       <div className="flex justify-end gap-2 pt-2 border-t border-border">
         <Button
