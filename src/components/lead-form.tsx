@@ -199,14 +199,27 @@ export function LeadForm({
     const t = setTimeout(() => setDebouncedPhoneDigits(phoneDigits), 400);
     return () => clearTimeout(t);
   }, [phoneDigits]);
+  const serviceKey = service.trim();
   const duplicateQuery = useQuery({
-    queryKey: ["lead-form-duplicate-phone", debouncedPhoneDigits.join(",")],
+    queryKey: [
+      "lead-form-duplicate-phone",
+      debouncedPhoneDigits.join(","),
+      serviceKey.toLowerCase(),
+    ],
     enabled: !disableDuplicateCheck && debouncedPhoneDigits.length > 0,
     queryFn: async () => {
       const results = await Promise.all(
-        debouncedPhoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } })),
+        debouncedPhoneDigits.map((digits) =>
+          checkDuplicate({ data: { phone: digits, service: serviceKey } }),
+        ),
       );
-      return results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
+      return {
+        // Any result with duplicate=true (same phone AND same service) is a
+        // hard duplicate. Otherwise matches are informational only.
+        blocking: results.some((r) => r.duplicate),
+        matches: results.flatMap((r) => (r.matches ?? []) as DupMatch[]),
+        informational: results.some((r) => r.informational),
+      };
     },
     staleTime: 60_000,
   });
@@ -216,12 +229,19 @@ export function LeadForm({
   }
   const uniqueDuplicates = disableDuplicateCheck
     ? []
-    : (duplicateQuery.data ?? []).filter((m) => {
+    : (duplicateQuery.data?.matches ?? []).filter((m) => {
         if (seenDup.has(m.id)) return false;
         seenDup.add(m.id);
         return true;
       });
-  const hasDuplicate = uniqueDuplicates.length > 0;
+  // hasDuplicate is TRUE only when phone + service both match.
+  const hasDuplicate =
+    !disableDuplicateCheck && (duplicateQuery.data?.blocking ?? false);
+  const hasInformationalMatch =
+    !disableDuplicateCheck &&
+    !hasDuplicate &&
+    uniqueDuplicates.length > 0;
+
 
   // True while the background query is still loading OR we are doing the
   // final gate-check inside handleSubmit. The submit button must be disabled
