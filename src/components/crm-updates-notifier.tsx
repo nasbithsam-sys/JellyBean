@@ -25,7 +25,7 @@ type Notification = {
 };
 
 export function CrmUpdatesNotifier() {
-  const { user } = useAuth();
+  const { user, primaryRole } = useAuth();
   const [queue, setQueue] = useState<Notification[]>([]);
   const seenRef = useRef<Set<string>>(new Set());
 
@@ -36,8 +36,8 @@ export function CrmUpdatesNotifier() {
   }, []);
 
   const loadPending = useCallback(async () => {
-    if (!user?.id) return;
-    // Active notifications (RLS filters to those targeting user's role)
+    if (!user?.id || !primaryRole) return;
+    const role = String(primaryRole).toLowerCase();
     const { data: notifs } = await supabase
       .from("crm_update_notifications")
       .select("id, title, description, affected_section, target_roles, priority, is_active, published_at")
@@ -45,17 +45,26 @@ export function CrmUpdatesNotifier() {
       .order("published_at", { ascending: true });
     if (!notifs || notifs.length === 0) return;
 
-    const ids = notifs.map((n) => n.id);
+    // Client-side role filter: Admin can read all rows (for history),
+    // but popups must only fire when the user's role is in target_roles.
+    const targeted = notifs.filter((n) =>
+      Array.isArray(n.target_roles) &&
+      n.target_roles.map((r: string) => String(r).toLowerCase()).includes(role),
+    );
+    if (targeted.length === 0) return;
+
+    const ids = targeted.map((n) => n.id);
     const { data: receipts } = await supabase
       .from("crm_update_notification_receipts")
       .select("notification_id")
       .eq("user_id", user.id)
       .in("notification_id", ids);
     const ack = new Set((receipts ?? []).map((r) => r.notification_id));
-    for (const n of notifs) {
+    for (const n of targeted) {
       if (!ack.has(n.id)) enqueue(n as Notification);
     }
-  }, [user?.id, enqueue]);
+  }, [user?.id, primaryRole, enqueue]);
+
 
   useEffect(() => {
     if (!user?.id) return;
