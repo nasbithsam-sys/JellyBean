@@ -564,9 +564,9 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         kind: "ul",
         items: [
-          "Bucket 'lead-attachments' — private bucket holding conversation screenshots and other lead files",
-          "Reads use time-limited signed URLs (1 hour) generated on demand; direct public access is not allowed",
-          "Uploads and reads are gated by storage policies mirroring RLS on the parent lead",
+          "Bucket 'lead-attachments' holds conversation screenshots and other lead files; the client always reads files via time-limited signed URLs (1 hour TTL) generated on demand rather than sharing raw object paths",
+          "Bucket 'crm-downloads' is a private bucket used to distribute the browser extension / bridge zips to authorized operators via signed URLs",
+          "Uploads and reads are gated by storage RLS policies mirroring RLS on the parent lead (owner or admin/sub_admin)",
         ],
       },
     ],
