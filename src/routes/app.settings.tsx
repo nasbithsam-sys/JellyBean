@@ -597,12 +597,12 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div
-        className="bg-card w-full max-w-md rounded-lg border p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold mb-4">Create user</h2>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Create user</DialogTitle>
+          <DialogDescription className="sr-only">Add a new user to the CRM.</DialogDescription>
+        </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           <Field label="Name">
             <Input
@@ -651,7 +651,6 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="sub_admin">Sub-admin</SelectItem>
-                
                 <SelectItem value="maturing">Maturing</SelectItem>
                 <SelectItem value="cs">CS</SelectItem>
                 <SelectItem value="cs_admin">CS Admin</SelectItem>
@@ -661,17 +660,17 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               </SelectContent>
             </Select>
           </Field>
-          <div className="flex justify-end gap-2 pt-2">
+          <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Create
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
