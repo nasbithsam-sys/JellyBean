@@ -525,7 +525,7 @@ export const DOC_SECTIONS: DocSection[] = [
           "RLS is enabled on every user-facing table; policies use has_role for role gating",
           "Service role keys are used only in server-only modules (client.server.ts) and never shipped to the browser",
           "The frontend uses the publishable Supabase key which is safe to expose",
-          "Protected routes live under src/routes/_authenticated/ with a managed session gate",
+          "Protected routes live under the /app layout (src/routes/app.tsx), which redirects unauthenticated users to /login and blocks inactive profiles",
         ],
       },
     ],
