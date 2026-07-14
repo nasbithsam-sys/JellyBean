@@ -21,8 +21,8 @@ export type DocSection = {
   blocks: DocBlock[];
 };
 
-export const DOC_VERSION = "1.0";
-export const DOC_DATE = "July 2026";
+export const DOC_VERSION = "1.1";
+export const DOC_DATE = "July 14, 2026";
 export const DOC_TITLE = "Lead Flow CRM — Complete System Documentation";
 export const DOC_SUBTITLE = `Version ${DOC_VERSION} · ${DOC_DATE} · Full reference for roles, leads, workflows, permissions, notifications, integrations, and technical architecture.`;
 
