@@ -457,6 +457,9 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
   const deleteUser = useServerFn(adminDeleteUser);
   const [busy, setBusy] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showResetPw, setShowResetPw] = useState(false);
+  const [showResetPwValue, setShowResetPwValue] = useState(false);
+  const [newPw, setNewPw] = useState("");
 
   async function toggleActive() {
     setBusy(true);
