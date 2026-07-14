@@ -439,36 +439,38 @@ export function LeadForm({
 
     if (!disableDuplicateCheck && phoneDigits.length > 0) {
       // --- RACE-CONDITION FIX ---
-      // Always run a fresh check with the *current* phone digits so we are
-      // never relying on stale React Query cache that may not have resolved yet.
+      // Always run a fresh check with the *current* phone digits + service.
+      // Only same-phone AND same-service matches are blocking duplicates.
       setIsCheckingBeforeSubmit(true);
       let freshMatches: DupMatch[] = [];
       try {
         const results = await Promise.all(
-          phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } }))
+          phoneDigits.map((digits) =>
+            checkDuplicate({ data: { phone: digits, service: service.trim() } })
+          )
         );
-        const allMatches = results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
-        // Exclude the lead being edited (if any) so it doesn't flag itself
-        const excludeId = initialValues?.id;
-        const seen = new Set<string>(excludeId ? [excludeId] : []);
-        freshMatches = allMatches.filter((m) => {
-          if (seen.has(m.id)) return false;
-          seen.add(m.id);
-          return true;
-        });
+        const blocking = results.some((r) => r.duplicate);
+        if (!blocking) {
+          freshMatches = [];
+        } else {
+          const allMatches = results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
+          const excludeId = initialValues?.id;
+          const seen = new Set<string>(excludeId ? [excludeId] : []);
+          freshMatches = allMatches.filter((m) => {
+            if (seen.has(m.id)) return false;
+            seen.add(m.id);
+            return true;
+          });
+        }
       } catch {
-        // If the duplicate check itself fails (network error, etc.) we still
-        // allow submission rather than silently blocking the user.
         freshMatches = [];
       } finally {
         setIsCheckingBeforeSubmit(false);
       }
 
       if (freshMatches.length > 0) {
-        // Map matches to the preview format required by DuplicateLeadDialog
-        // Map matches to the preview format required by DuplicateLeadDialog
         const secondTargetNumbers = extraNumbers.map((n) => normalizePhone(n)).filter((n) => n.length >= 7);
-        
+
         const previewMatches: DuplicateMatchPreview[] = freshMatches.map((match) => {
           let sourceLabel = "Primary number";
           if (
@@ -484,13 +486,13 @@ export function LeadForm({
           };
         });
 
-        // Show confirmation dialog – user can Cancel or Continue Anyway
         pendingSubmitValuesRef.current = payload;
         setDupConfirmMatches(previewMatches);
         setShowDupConfirm(true);
-        return; // Stop here; submission continues only if user confirms
+        return;
       }
     }
+
 
     await onSubmit(payload);
   }
