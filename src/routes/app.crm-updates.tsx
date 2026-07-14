@@ -132,8 +132,8 @@ function CrmUpdatesPage() {
     const ok = await confirmDialog({
       title: "Delete this update?",
       description: `"${n.title}" and all acknowledgements will be permanently deleted.`,
-      confirmLabel: "Delete",
-      destructive: true,
+      confirmText: "Delete",
+      tone: "destructive",
     });
     if (!ok) return;
     const { error } = await supabase.from("crm_update_notifications").delete().eq("id", n.id);
