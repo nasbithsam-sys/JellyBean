@@ -35,6 +35,24 @@ const ALL_ROLES: { value: AppRole; label: string }[] = [
   { value: "seo", label: "SEO" },
 ];
 
+const AFFECTED_SECTIONS: string[] = [
+  "Dashboard",
+  "Raw Leads",
+  "CS Pipeline",
+  "Forwarded Leads",
+  "Manual Lead",
+  "Browser Profiles",
+  "Map",
+  "Analytics",
+  "Reports",
+  "CS Reports",
+  "Activity",
+  "Health",
+  "CRM Updates",
+  "Settings",
+  "General / Entire CRM",
+];
+
 type Notification = {
   id: string;
   title: string;
@@ -90,13 +108,14 @@ function CrmUpdatesPage() {
   async function publish() {
     if (!title.trim()) return toast.error("Title is required");
     if (!description.trim()) return toast.error("Description is required");
+    if (!affectedSection) return toast.error("Please select an affected section.");
     if (selectedRoles.size === 0) return toast.error("Select at least one target role");
     setPublishing(true);
     try {
       const { error } = await supabase.from("crm_update_notifications").insert({
         title: title.trim(),
         description: description.trim(),
-        affected_section: affectedSection.trim() || null,
+        affected_section: affectedSection,
         target_roles: Array.from(selectedRoles),
         priority,
         is_active: true,
@@ -190,13 +209,16 @@ function CrmUpdatesPage() {
           </div>
           <div>
             <Label htmlFor="section" className="text-[13px] font-medium">Affected Section</Label>
-            <Input
-              id="section"
-              value={affectedSection}
-              onChange={(e) => setAffectedSection(e.target.value)}
-              placeholder="e.g. CS Pipeline"
-              className="mt-1.5"
-            />
+            <Select value={affectedSection} onValueChange={setAffectedSection}>
+              <SelectTrigger id="section" className="mt-1.5">
+                <SelectValue placeholder="Select affected section" />
+              </SelectTrigger>
+              <SelectContent>
+                {AFFECTED_SECTIONS.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label className="text-[13px] font-medium">Priority</Label>
