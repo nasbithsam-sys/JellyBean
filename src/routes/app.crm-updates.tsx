@@ -115,7 +115,7 @@ function CrmUpdatesPage() {
       const { error } = await supabase.from("crm_update_notifications").insert({
         title: title.trim(),
         description: description.trim(),
-        affected_section: affectedSection.trim() || null,
+        affected_section: affectedSection,
         target_roles: Array.from(selectedRoles),
         priority,
         is_active: true,
