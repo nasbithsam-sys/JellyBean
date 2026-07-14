@@ -266,6 +266,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         onOpenChange={setPasswordDialogOpen}
         userEmail={auth.user?.email ?? auth.profile?.email ?? null}
       />
+      <CrmUpdatesNotifier />
     </div>
   );
 }
