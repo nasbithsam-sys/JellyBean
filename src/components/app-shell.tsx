@@ -15,7 +15,10 @@ import {
   PieChart,
   MoreHorizontal,
   KeyRound,
+  Megaphone,
 } from "lucide-react";
+
+import { CrmUpdatesNotifier } from "@/components/crm-updates-notifier";
 
 import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
@@ -49,6 +52,7 @@ const ADMIN: Item[] = [
   { to: "/app/cs-reports", label: "CS Reports", icon: PieChart },
   { to: "/app/logs", label: "Activity", icon: ScrollText, shortcut: "G" },
   { to: "/app/health", label: "Health", icon: ShieldCheck, shortcut: "H" },
+  { to: "/app/crm-updates", label: "CRM Updates", icon: Megaphone },
   { to: "/app/settings", label: "Settings", icon: Settings, shortcut: "S" },
 ];
 
@@ -85,7 +89,11 @@ const ADMIN_FULL: Item[] = [
 ];
 
 const SUB_ADMIN: Item[] = ADMIN_FULL.filter(
-  (item) => item.to !== "/app/cs-leads" && item.to !== "/app/logs" && item.to !== "/app/settings",
+  (item) =>
+    item.to !== "/app/cs-leads" &&
+    item.to !== "/app/logs" &&
+    item.to !== "/app/settings" &&
+    item.to !== "/app/crm-updates",
 );
 
 function itemsForRole(role: AppRole | null): Item[] {
@@ -258,6 +266,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         onOpenChange={setPasswordDialogOpen}
         userEmail={auth.user?.email ?? auth.profile?.email ?? null}
       />
+      <CrmUpdatesNotifier />
     </div>
   );
 }

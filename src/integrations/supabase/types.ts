@@ -119,6 +119,74 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_update_notification_receipts: {
+        Row: {
+          acknowledged_at: string
+          id: string
+          notification_id: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged_at?: string
+          id?: string
+          notification_id: string
+          user_id: string
+        }
+        Update: {
+          acknowledged_at?: string
+          id?: string
+          notification_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_update_notification_receipts_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "crm_update_notifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_update_notifications: {
+        Row: {
+          affected_section: string | null
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          is_active: boolean
+          priority: string
+          published_at: string
+          target_roles: string[]
+          title: string
+        }
+        Insert: {
+          affected_section?: string | null
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          is_active?: boolean
+          priority?: string
+          published_at?: string
+          target_roles?: string[]
+          title: string
+        }
+        Update: {
+          affected_section?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          is_active?: boolean
+          priority?: string
+          published_at?: string
+          target_roles?: string[]
+          title?: string
+        }
+        Relationships: []
+      }
       incogniton_profiles: {
         Row: {
           account_area: string | null
