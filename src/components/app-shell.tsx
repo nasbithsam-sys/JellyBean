@@ -89,7 +89,11 @@ const ADMIN_FULL: Item[] = [
 ];
 
 const SUB_ADMIN: Item[] = ADMIN_FULL.filter(
-  (item) => item.to !== "/app/cs-leads" && item.to !== "/app/logs" && item.to !== "/app/settings",
+  (item) =>
+    item.to !== "/app/cs-leads" &&
+    item.to !== "/app/logs" &&
+    item.to !== "/app/settings" &&
+    item.to !== "/app/crm-updates",
 );
 
 function itemsForRole(role: AppRole | null): Item[] {
