@@ -29,6 +29,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Loader2,
   Plus,
   KeyRound,
@@ -449,6 +457,9 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
   const deleteUser = useServerFn(adminDeleteUser);
   const [busy, setBusy] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showResetPw, setShowResetPw] = useState(false);
+  const [showResetPwValue, setShowResetPwValue] = useState(false);
+  const [newPw, setNewPw] = useState("");
 
   async function toggleActive() {
     setBusy(true);
@@ -464,15 +475,17 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
   }
 
   async function reset() {
-    const pw = window.prompt(`New password for ${user.full_name}`);
-    if (!pw || pw.length < 8) {
-      if (pw) toast.error("Password must be 8+ chars");
+    if (newPw.length < 8) {
+      toast.error("Password must be 8+ chars");
       return;
     }
     setBusy(true);
     try {
-      await resetPw({ data: { userId: user.user_id, newPassword: pw } });
+      await resetPw({ data: { userId: user.user_id, newPassword: newPw } });
       toast.success("Password updated");
+      setShowResetPw(false);
+      setNewPw("");
+      setShowResetPwValue(false);
     } catch (e) {
       toast.error(friendlyError(e));
     } finally {
@@ -505,7 +518,7 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
         </span>
       </td>
       <td className="text-right space-x-2 whitespace-nowrap">
-        <Button size="sm" variant="outline" onClick={reset} disabled={busy}>
+        <Button size="sm" variant="outline" onClick={() => setShowResetPw(true)} disabled={busy}>
           <KeyRound className="h-3.5 w-3.5 mr-1" /> Reset PW
         </Button>
         <Button
@@ -549,6 +562,68 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog
+          open={showResetPw}
+          onOpenChange={(o) => {
+            setShowResetPw(o);
+            if (!o) {
+              setNewPw("");
+              setShowResetPwValue(false);
+            }
+          }}
+        >
+          <DialogContent className="max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Reset password</DialogTitle>
+              <DialogDescription>
+                Set a new password for {user.full_name || user.email}.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                reset();
+              }}
+              className="space-y-3"
+            >
+              <Field label="New password">
+                <div className="relative">
+                  <Input
+                    type={showResetPwValue ? "text" : "password"}
+                    value={newPw}
+                    onChange={(e) => setNewPw(e.target.value)}
+                    required
+                    minLength={8}
+                    autoFocus
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPwValue((v) => !v)}
+                    aria-label={showResetPwValue ? "Hide password" : "Show password"}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {showResetPwValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </Field>
+              <DialogFooter className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowResetPw(false)}
+                  disabled={busy}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={busy || newPw.length < 8}>
+                  {busy && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Update password
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </td>
     </tr>
   );
@@ -589,12 +664,12 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" onClick={onClose}>
-      <div
-        className="bg-card w-full max-w-md rounded-lg border p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold mb-4">Create user</h2>
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Create user</DialogTitle>
+          <DialogDescription className="sr-only">Add a new user to the CRM.</DialogDescription>
+        </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           <Field label="Name">
             <Input
@@ -643,7 +718,6 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               <SelectContent>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="sub_admin">Sub-admin</SelectItem>
-                
                 <SelectItem value="maturing">Maturing</SelectItem>
                 <SelectItem value="cs">CS</SelectItem>
                 <SelectItem value="cs_admin">CS Admin</SelectItem>
@@ -653,17 +727,17 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
               </SelectContent>
             </Select>
           </Field>
-          <div className="flex justify-end gap-2 pt-2">
+          <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
               Cancel
             </Button>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Create
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
