@@ -25,6 +25,7 @@ import { Route as AppHealthRouteImport } from './routes/app.health'
 import { Route as AppForwardedLeadsRouteImport } from './routes/app.forwarded-leads'
 import { Route as AppCsReportsRouteImport } from './routes/app.cs-reports'
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
+import { Route as AppCrmUpdatesRouteImport } from './routes/app.crm-updates'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
 import { Route as ApiPublicNextdoorLeadsRouteImport } from './routes/api.public.nextdoor-leads'
@@ -109,6 +110,11 @@ const AppCsLeadsRoute = AppCsLeadsRouteImport.update({
   path: '/cs-leads',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCrmUpdatesRoute = AppCrmUpdatesRouteImport.update({
+  id: '/crm-updates',
+  path: '/crm-updates',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBrowserProfilesRoute = AppBrowserProfilesRouteImport.update({
   id: '/browser-profiles',
   path: '/browser-profiles',
@@ -133,6 +139,7 @@ export interface FileRoutesByFullPath {
   '/trust': typeof TrustRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
+  '/app/crm-updates': typeof AppCrmUpdatesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/cs-reports': typeof AppCsReportsRoute
   '/app/forwarded-leads': typeof AppForwardedLeadsRoute
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/trust': typeof TrustRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
+  '/app/crm-updates': typeof AppCrmUpdatesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/cs-reports': typeof AppCsReportsRoute
   '/app/forwarded-leads': typeof AppForwardedLeadsRoute
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   '/trust': typeof TrustRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
+  '/app/crm-updates': typeof AppCrmUpdatesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/cs-reports': typeof AppCsReportsRoute
   '/app/forwarded-leads': typeof AppForwardedLeadsRoute
@@ -198,6 +207,7 @@ export interface FileRouteTypes {
     | '/trust'
     | '/app/analytics'
     | '/app/browser-profiles'
+    | '/app/crm-updates'
     | '/app/cs-leads'
     | '/app/cs-reports'
     | '/app/forwarded-leads'
@@ -218,6 +228,7 @@ export interface FileRouteTypes {
     | '/trust'
     | '/app/analytics'
     | '/app/browser-profiles'
+    | '/app/crm-updates'
     | '/app/cs-leads'
     | '/app/cs-reports'
     | '/app/forwarded-leads'
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | '/trust'
     | '/app/analytics'
     | '/app/browser-profiles'
+    | '/app/crm-updates'
     | '/app/cs-leads'
     | '/app/cs-reports'
     | '/app/forwarded-leads'
@@ -376,6 +388,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCsLeadsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/crm-updates': {
+      id: '/app/crm-updates'
+      path: '/crm-updates'
+      fullPath: '/app/crm-updates'
+      preLoaderRoute: typeof AppCrmUpdatesRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/browser-profiles': {
       id: '/app/browser-profiles'
       path: '/browser-profiles'
@@ -403,6 +422,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppBrowserProfilesRoute: typeof AppBrowserProfilesRoute
+  AppCrmUpdatesRoute: typeof AppCrmUpdatesRoute
   AppCsLeadsRoute: typeof AppCsLeadsRoute
   AppCsReportsRoute: typeof AppCsReportsRoute
   AppForwardedLeadsRoute: typeof AppForwardedLeadsRoute
@@ -419,6 +439,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppBrowserProfilesRoute: AppBrowserProfilesRoute,
+  AppCrmUpdatesRoute: AppCrmUpdatesRoute,
   AppCsLeadsRoute: AppCsLeadsRoute,
   AppCsReportsRoute: AppCsReportsRoute,
   AppForwardedLeadsRoute: AppForwardedLeadsRoute,
