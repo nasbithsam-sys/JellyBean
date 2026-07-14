@@ -39,7 +39,9 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  BookOpen,
 } from "lucide-react";
+import { DocumentationTab } from "@/components/settings/documentation-tab";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { adminCreateUser, adminResetPassword, adminSetActive } from "@/lib/admin-users.functions";
