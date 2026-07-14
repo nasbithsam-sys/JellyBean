@@ -235,19 +235,41 @@ function CrmUpdatesPage() {
           <div className="sm:col-span-2">
             <Label className="text-[13px] font-medium">Target Roles</Label>
             <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {ALL_ROLES.map((r) => (
-                <label
-                  key={r.value}
-                  className="flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer hover:bg-muted/50 text-[13px]"
-                >
-                  <Checkbox
-                    checked={selectedRoles.has(r.value)}
-                    onCheckedChange={() => toggleRole(r.value)}
-                  />
-                  <span>{r.label}</span>
-                </label>
-              ))}
+              {ALL_ROLES.map((r) => {
+                const selected = selectedRoles.has(r.value);
+                return (
+                  <button
+                    key={r.value}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={selected}
+                    onClick={() => toggleRole(r.value)}
+                    className={
+                      "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-[13px] transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring/40 " +
+                      (selected
+                        ? "border-primary bg-primary/10 text-foreground shadow-sm"
+                        : "border-border hover:bg-muted/50 hover:border-border-strong")
+                    }
+                  >
+                    <span
+                      className={
+                        "grid h-4 w-4 shrink-0 place-content-center rounded-full border-2 transition-all " +
+                        (selected ? "border-primary" : "border-border-strong")
+                      }
+                    >
+                      <span
+                        className={
+                          "h-2 w-2 rounded-full transition-all " +
+                          (selected ? "bg-primary scale-100" : "bg-transparent scale-0")
+                        }
+                      />
+                    </span>
+                    <span className={selected ? "font-medium" : ""}>{r.label}</span>
+                  </button>
+                );
+              })}
             </div>
+
           </div>
         </div>
 
