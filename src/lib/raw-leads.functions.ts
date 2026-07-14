@@ -400,23 +400,28 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
     };
   });
 
+function normalizeServiceKey(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[\s\-_/\\.,]+/g, " ")
+    .trim();
+}
+
 export const checkDuplicatePhone = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
     z
       .object({
         phone: z.string().default(""),
+        service: z.string().optional().default(""),
       })
       .parse(input ?? {}),
   )
   .handler(async ({ data, context }) => {
     const target = normalizePhoneDigits(data.phone);
-    if (target.length < 7) return { duplicate: false, matches: [] };
+    if (target.length < 7)
+      return { duplicate: false, matches: [], informational: false };
 
-    // The RPC is SECURITY DEFINER and already enforces that the caller has a
-    // role row. Call it with the authenticated user's client so any signed-in
-    // user (submitter, facebook, seo, maturing, acc_handler, admin) can run
-    // the duplicate check from the lead form.
     void context.userId;
     const duplicateSince = new Date(
       Date.now() - DUPLICATE_LOOKBACK_HOURS * 60 * 60 * 1000,
@@ -427,7 +432,7 @@ export const checkDuplicatePhone = createServerFn({ method: "GET" })
     );
     if (error) throw new Error(error.message);
 
-    const matches = (
+    const phoneMatches = (
       (rows as unknown as Array<{
         id: string;
         customer_name: string;
@@ -436,7 +441,7 @@ export const checkDuplicatePhone = createServerFn({ method: "GET" })
         assigned_at: string;
       }> | null) ?? []
     )
-      .slice(0, 10)
+      .slice(0, 20)
       .map((row) => ({
         id: row.id,
         customer_name: row.customer_name,
@@ -445,7 +450,7 @@ export const checkDuplicatePhone = createServerFn({ method: "GET" })
         assigned_at: row.assigned_at,
       }));
 
-    const ids = matches.map((row) => row.id);
+    const ids = phoneMatches.map((row) => row.id);
     const { data: details, error: detailsError } =
       ids.length === 0
         ? { data: [], error: null }
@@ -467,18 +472,38 @@ export const checkDuplicatePhone = createServerFn({ method: "GET" })
       ).map((detail) => [detail.id, detail]),
     );
 
+    const enriched = phoneMatches.map((match) => {
+      const detail = detailsById.get(match.id);
+      return {
+        ...match,
+        service: detail?.service ?? null,
+        context: detail?.context ?? null,
+        main_area: detail?.main_area ?? null,
+        sub_area: detail?.sub_area ?? null,
+        original_lead_link: detail?.original_lead_link ?? null,
+      };
+    });
+
+    // Duplicate rule: phone + service must BOTH match.
+    // - When caller passes a service, filter to same-service matches only.
+    //   Those are the true "blocking" duplicates.
+    // - When no service is provided yet, return the phone-only matches as
+    //   informational — callers must not use them to block submission.
+    const serviceKey = normalizeServiceKey(data.service);
+    if (serviceKey) {
+      const sameService = enriched.filter(
+        (m) => normalizeServiceKey(m.service) === serviceKey,
+      );
+      return {
+        duplicate: sameService.length > 0,
+        matches: sameService,
+        informational: false,
+      };
+    }
     return {
-      duplicate: matches.length > 0,
-      matches: matches.map((match) => {
-        const detail = detailsById.get(match.id);
-        return {
-          ...match,
-          service: detail?.service ?? null,
-          context: detail?.context ?? null,
-          main_area: detail?.main_area ?? null,
-          sub_area: detail?.sub_area ?? null,
-          original_lead_link: detail?.original_lead_link ?? null,
-        };
-      }),
+      duplicate: false,
+      matches: enriched,
+      informational: enriched.length > 0,
     };
   });
+
