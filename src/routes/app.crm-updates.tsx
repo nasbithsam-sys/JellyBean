@@ -108,6 +108,7 @@ function CrmUpdatesPage() {
   async function publish() {
     if (!title.trim()) return toast.error("Title is required");
     if (!description.trim()) return toast.error("Description is required");
+    if (!affectedSection) return toast.error("Please select an affected section.");
     if (selectedRoles.size === 0) return toast.error("Select at least one target role");
     setPublishing(true);
     try {
