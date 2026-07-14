@@ -21,8 +21,8 @@ export type DocSection = {
   blocks: DocBlock[];
 };
 
-export const DOC_VERSION = "1.0";
-export const DOC_DATE = "July 2026";
+export const DOC_VERSION = "1.1";
+export const DOC_DATE = "July 14, 2026";
 export const DOC_TITLE = "Lead Flow CRM — Complete System Documentation";
 export const DOC_SUBTITLE = `Version ${DOC_VERSION} · ${DOC_DATE} · Full reference for roles, leads, workflows, permissions, notifications, integrations, and technical architecture.`;
 
@@ -525,7 +525,7 @@ export const DOC_SECTIONS: DocSection[] = [
           "RLS is enabled on every user-facing table; policies use has_role for role gating",
           "Service role keys are used only in server-only modules (client.server.ts) and never shipped to the browser",
           "The frontend uses the publishable Supabase key which is safe to expose",
-          "Protected routes live under src/routes/_authenticated/ with a managed session gate",
+          "Protected routes live under the /app layout (src/routes/app.tsx), which redirects unauthenticated users to /login and blocks inactive profiles",
         ],
       },
     ],
@@ -564,9 +564,9 @@ export const DOC_SECTIONS: DocSection[] = [
       {
         kind: "ul",
         items: [
-          "Bucket 'lead-attachments' — private bucket holding conversation screenshots and other lead files",
-          "Reads use time-limited signed URLs (1 hour) generated on demand; direct public access is not allowed",
-          "Uploads and reads are gated by storage policies mirroring RLS on the parent lead",
+          "Bucket 'lead-attachments' holds conversation screenshots and other lead files; the client always reads files via time-limited signed URLs (1 hour TTL) generated on demand rather than sharing raw object paths",
+          "Bucket 'crm-downloads' is a private bucket used to distribute the browser extension / bridge zips to authorized operators via signed URLs",
+          "Uploads and reads are gated by storage RLS policies mirroring RLS on the parent lead (owner or admin/sub_admin)",
         ],
       },
     ],
@@ -649,4 +649,24 @@ export const DOC_SECTIONS: DocSection[] = [
       },
     ],
   },
+  {
+    id: "inconsistencies",
+    number: 32,
+    title: "Known Implementation Inconsistencies",
+    blocks: [
+      {
+        kind: "p",
+        text: "The following mismatches exist between different parts of the codebase at the time this documentation was generated. They do not block usage but are worth cleaning up.",
+      },
+      {
+        kind: "ul",
+        items: [
+          "The app_role Postgres enum still contains 'scraping' and some sidebar / RoleGate arrays reference it, but the Create User form (adminCreateUser roleSchema) no longer offers 'scraping' — new users are provisioned as 'maturing' instead.",
+          "The lead-attachments storage bucket has bucket.public = true at the storage level (migration 20260707130000), yet the client code only ever generates signed URLs and never exposes public URLs. Behavior is effectively private, but the bucket flag should be flipped back to private for defense-in-depth.",
+          "Some legacy migrations reference a 'processor' role that no longer exists in the current AppRole union; these have no runtime effect because role checks match by string but the migrations remain in history.",
+        ],
+      },
+    ],
+  },
 ];
+
