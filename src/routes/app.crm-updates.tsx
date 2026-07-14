@@ -35,6 +35,24 @@ const ALL_ROLES: { value: AppRole; label: string }[] = [
   { value: "seo", label: "SEO" },
 ];
 
+const AFFECTED_SECTIONS: string[] = [
+  "Dashboard",
+  "Raw Leads",
+  "CS Pipeline",
+  "Forwarded Leads",
+  "Manual Lead",
+  "Browser Profiles",
+  "Map",
+  "Analytics",
+  "Reports",
+  "CS Reports",
+  "Activity",
+  "Health",
+  "CRM Updates",
+  "Settings",
+  "General / Entire CRM",
+];
+
 type Notification = {
   id: string;
   title: string;
