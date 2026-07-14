@@ -518,7 +518,7 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
         </span>
       </td>
       <td className="text-right space-x-2 whitespace-nowrap">
-        <Button size="sm" variant="outline" onClick={reset} disabled={busy}>
+        <Button size="sm" variant="outline" onClick={() => setShowResetPw(true)} disabled={busy}>
           <KeyRound className="h-3.5 w-3.5 mr-1" /> Reset PW
         </Button>
         <Button
