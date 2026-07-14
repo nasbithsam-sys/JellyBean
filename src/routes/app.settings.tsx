@@ -39,7 +39,9 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  BookOpen,
 } from "lucide-react";
+import { DocumentationTab } from "@/components/settings/documentation-tab";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { adminCreateUser, adminResetPassword, adminSetActive } from "@/lib/admin-users.functions";
@@ -77,14 +79,14 @@ function readAdminUpdateItems(value: Json | null | undefined): AdminUpdateItem[]
 
 function Page() {
   const auth = useAuth();
-  const [tab, setTab] = useState<"general" | "updates" | "users">("general");
+  const [tab, setTab] = useState<"general" | "updates" | "users" | "docs">("general");
   return (
     <div>
       <PageHeader title="Settings" description="System-wide preferences and team management." />
       <PageBody>
         <RoleGate allow={["admin"]} current={auth.primaryRole}>
           <div className="crm-toolbar-panel inline-flex mb-5">
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               <TabBtn
                 active={tab === "general"}
                 onClick={() => setTab("general")}
@@ -106,11 +108,19 @@ function Page() {
               >
                 Users
               </TabBtn>
+              <TabBtn
+                active={tab === "docs"}
+                onClick={() => setTab("docs")}
+                icon={<BookOpen className="h-3.5 w-3.5" />}
+              >
+                Documentation
+              </TabBtn>
             </div>
           </div>
           {tab === "general" && <GeneralTab />}
           {tab === "updates" && <UpdatesTab />}
           {tab === "users" && <UsersTab />}
+          {tab === "docs" && <DocumentationTab />}
         </RoleGate>
       </PageBody>
     </div>
