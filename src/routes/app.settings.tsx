@@ -475,15 +475,17 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
   }
 
   async function reset() {
-    const pw = window.prompt(`New password for ${user.full_name}`);
-    if (!pw || pw.length < 8) {
-      if (pw) toast.error("Password must be 8+ chars");
+    if (newPw.length < 8) {
+      toast.error("Password must be 8+ chars");
       return;
     }
     setBusy(true);
     try {
-      await resetPw({ data: { userId: user.user_id, newPassword: pw } });
+      await resetPw({ data: { userId: user.user_id, newPassword: newPw } });
       toast.success("Password updated");
+      setShowResetPw(false);
+      setNewPw("");
+      setShowResetPwValue(false);
     } catch (e) {
       toast.error(friendlyError(e));
     } finally {
