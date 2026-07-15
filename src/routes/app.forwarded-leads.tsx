@@ -738,6 +738,7 @@ function UnifiedForwardedLeadForm({
         exactCustomerText: lead.post_text || lead.context || "",
         reference: lead.reference || undefined,
         isImportant: lead.is_important,
+        isLandline: (lead as { is_landline?: boolean }).is_landline ?? false,
         images: Array.isArray(lead.images) ? (lead.images as string[]) : [],
         originalLeadLink: lead.original_lead_link,
       }}
