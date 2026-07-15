@@ -226,6 +226,7 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
                                   Send to CS
                                 </>
                               )}
+                            </Button>
                             <Button
                               size="sm"
                               variant="ghost"
