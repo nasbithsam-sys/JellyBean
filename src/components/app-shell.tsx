@@ -24,6 +24,7 @@ import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useClockSkew } from "@/hooks/use-clock-skew";
+import jellybeanLogo from "@/assets/jellybean-logo.png";
 import {
   DropdownMenu,
   DropdownMenuContent,
