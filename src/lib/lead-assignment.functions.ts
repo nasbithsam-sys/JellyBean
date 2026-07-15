@@ -32,12 +32,13 @@ export type CsUserTotalsRow = {
   by_status: Record<string, number>;
 };
 
-async function requireAdmin(supabase: NonNullable<Awaited<ReturnType<typeof requireSupabaseAuth.server>>>["context"]["supabase"], userId: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function requireAdmin(supabase: any, userId: string) {
   const { data, error } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .in("role", ["admin", "cs_admin"] as never);
+    .in("role", ["admin", "cs_admin"]);
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error("Forbidden");
 }
