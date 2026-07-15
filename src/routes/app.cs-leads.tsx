@@ -207,6 +207,7 @@ type Lead = {
   created_by: string | null;
   assigned_by: string | null;
   reference: string | null;
+  is_landline: boolean;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
