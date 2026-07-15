@@ -522,6 +522,11 @@ function Inner() {
           )}
         </DialogContent>
       </Dialog>
+
+      <LeadReminderDialog
+        lead={reminderLead}
+        onClose={() => setReminderLead(null)}
+      />
     </div>
   );
 }
