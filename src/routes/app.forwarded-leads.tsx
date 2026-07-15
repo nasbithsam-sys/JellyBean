@@ -189,6 +189,21 @@ function Inner() {
     return map;
   }, [allProfiles.data]);
 
+  const listTeamFn = useServerFn(listCsTeam);
+  const csTeam = useQuery({
+    queryKey: ["cs-team-forwarded"],
+    enabled: !!auth.user?.id,
+    queryFn: () => listTeamFn(),
+    staleTime: 5 * 60_000,
+  });
+  const csById = useMemo(() => {
+    const map = new Map<string, { full_name: string; email: string }>();
+    for (const m of csTeam.data ?? []) {
+      map.set(m.user_id, { full_name: m.full_name, email: m.email });
+    }
+    return map;
+  }, [csTeam.data]);
+
   const list = useQuery({
     queryKey: ["forwarded-leads", auth.user?.id, isAdmin, { page, dbDateFrom, dbDateTo, forwardedByFilter, outcomeFilter, dbSearch }],
     enabled: !!auth.user?.id,
