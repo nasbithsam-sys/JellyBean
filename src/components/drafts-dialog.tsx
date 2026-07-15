@@ -83,6 +83,41 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
     }
   }
 
+  async function handleSendToCS(draft: LeadDraft) {
+    if (!user?.id) return;
+    setSendingId(draft.id);
+    try {
+      await sendDraftToCS(draft, {
+        userId: user.id,
+        actorName: profile?.full_name ?? profile?.username ?? profile?.email ?? null,
+        actorRole: primaryRole ?? null,
+      });
+      // Remove draft only after successful submission.
+      try {
+        await deleteDraft(draft.id);
+      } catch {
+        // best-effort; the send already succeeded.
+      }
+      setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+      qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
+      qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+      qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
+      qc.invalidateQueries({ queryKey: ["my-submitted-leads"] });
+      toast.success("Lead sent to CS successfully.");
+    } catch (err) {
+      if (err instanceof DraftValidationError) {
+        toast.error(
+          "Required fields are missing. Open the draft and complete all required information before sending it to CS.",
+          { description: `Missing: ${err.missing.join(", ")}` },
+        );
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to send draft");
+      }
+    } finally {
+      setSendingId(null);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-0">
