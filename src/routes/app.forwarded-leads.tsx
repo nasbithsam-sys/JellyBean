@@ -31,6 +31,7 @@ import type { ForwardedStatus } from "@/lib/crm-types";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import { cn } from "@/lib/utils";
 import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
+import { LeadReminderDialog, type ReminderLeadInfo } from "@/components/lead-reminder-dialog";
 
 export const Route = createFileRoute("/app/forwarded-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
