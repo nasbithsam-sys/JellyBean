@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { listMyDrafts, deleteDraft, type LeadDraft, type DraftSourceType } from "@/lib/lead-drafts";
+import { sendDraftToCS, DraftValidationError } from "@/lib/send-draft-to-cs";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, Trash2, FolderOpen } from "lucide-react";
+import { Loader2, Trash2, FolderOpen, Send } from "lucide-react";
 import { toast } from "sonner";
 import { confirmDialog } from "@/components/confirm-dialog";
 import {
