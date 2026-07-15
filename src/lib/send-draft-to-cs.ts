@@ -113,6 +113,7 @@ export async function sendDraftToCS(
     created_by: ctx.userId,
     assigned_by: ctx.userId,
     cs_status: "new",
+    is_landline: Boolean(f.isLandline),
   };
 
   if (isRaw && rawLeadLink) {
