@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { CrmUpdatesNotifier } from "@/components/crm-updates-notifier";
+import { LeadReminderNotifier } from "@/components/lead-reminder-notifier";
 
 import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
