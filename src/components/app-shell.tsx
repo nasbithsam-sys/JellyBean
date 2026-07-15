@@ -107,7 +107,7 @@ function itemsForRole(role: AppRole | null): Item[] {
   if (role === "scraping") return SCRAPING;
   if (role === "maturing") return MATURING;
   if (role === "cs") return CS;
-  if (role === "cs_admin") return CS;
+  if (role === "cs_admin") return CS_ADMIN_ITEMS;
   if (role === "acc_handler") return ACC_HANDLER;
   if (role === "facebook" || role === "seo") return SUBMITTER;
   return [];
