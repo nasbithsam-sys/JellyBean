@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { RouteSkeleton } from "@/components/route-skeleton";
 import { useMemo, useState, useEffect } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink } from "lucide-react";
+import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Bell } from "lucide-react";
 import { formatDistanceToNow, startOfDay, endOfDay } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
