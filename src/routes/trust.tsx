@@ -3,11 +3,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 export const Route = createFileRoute("/trust")({
   head: () => ({
     meta: [
-      { title: "Trust & Security · Lead Flow CRM" },
+      { title: "Trust & Security · JellyBean" },
       {
         name: "description",
         content:
-          "How Lead Flow CRM handles access control, customer data, storage, and privacy.",
+          "How JellyBean handles access control, customer data, storage, and privacy.",
       },
       { name: "robots", content: "noindex, nofollow" },
     ],
@@ -21,7 +21,7 @@ function TrustPage() {
       <header className="mb-10">
         <h1 className="text-3xl font-semibold tracking-tight">Trust & Security</h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          This page is maintained by the Lead Flow CRM team to answer common
+          This page is maintained by the JellyBean team to answer common
           questions about how the app protects customer and lead data. It is
           app-owned editable content, not an independent certification or audit.
           Some controls are provided by the underlying Lovable platform — using

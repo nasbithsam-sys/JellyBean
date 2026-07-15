@@ -161,7 +161,7 @@ export function DocumentationTab() {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8.5);
         doc.setTextColor(...muted);
-        doc.text("Lead Flow CRM Documentation", margin, pageHeight - 24);
+        doc.text("JellyBean Documentation", margin, pageHeight - 24);
         doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - 24, {
           align: "right",
         });
