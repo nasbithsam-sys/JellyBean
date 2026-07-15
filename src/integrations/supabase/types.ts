@@ -285,6 +285,47 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_reminders: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          lead_id: string
+          message: string
+          read_at: string | null
+          recipient_user_id: string
+          sender_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          lead_id: string
+          message: string
+          read_at?: string | null
+          recipient_user_id: string
+          sender_user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          lead_id?: string
+          message?: string
+          read_at?: string | null
+          recipient_user_id?: string
+          sender_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_reminders_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "qualified_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       map_snapshots: {
         Row: {
           captured_at: string
@@ -819,6 +860,25 @@ export type Database = {
           user_id: string
           user_name: string
         }[]
+      }
+      send_lead_reminder: {
+        Args: { _lead_id: string; _message: string }
+        Returns: {
+          created_at: string
+          id: string
+          is_read: boolean
+          lead_id: string
+          message: string
+          read_at: string | null
+          recipient_user_id: string
+          sender_user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lead_reminders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       state_assignment_analytics: {
         Args: { _from?: string; _to?: string }
