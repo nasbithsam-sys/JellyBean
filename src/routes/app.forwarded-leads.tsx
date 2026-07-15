@@ -59,6 +59,7 @@ type Row = {
   pinned_important: boolean;
   submitted_by_role: string | null;
   is_landline: boolean;
+  assigned_to: string | null;
 };
 
 const OUTCOME_FILTERS = [
