@@ -43,6 +43,7 @@ export type LeadFormValues = {
   exactCustomerText: string;
   reference: string;
   isImportant: boolean;
+  isLandline: boolean;
   files: File[];
   existingImages?: string[];
   extraNumbers?: string[];
@@ -58,6 +59,7 @@ type LeadFormInitialValues = {
   exactCustomerText?: string;
   reference?: string;
   isImportant?: boolean;
+  isLandline?: boolean;
   extraNumbers?: string[];
   images?: string[];
   id?: string;
@@ -157,6 +159,7 @@ export function LeadForm({
   const [importantValue, setImportantValue] = useState(
     (initialValues?.isImportant ?? false) ? "yes" : "no",
   );
+  const [isLandline, setIsLandline] = useState<boolean>(initialValues?.isLandline ?? false);
   const [existingImages, setExistingImages] = useState<string[]>(initialValues?.images ?? []);
   const existingImageUrls = useSignedLeadUrls(existingImages);
   const [files, setFiles] = useState<File[]>([]);
@@ -243,6 +246,7 @@ export function LeadForm({
     exactCustomerText !== (initialValues?.exactCustomerText ?? "") ||
     reference !== resolveInitialReference(referenceMode, initialValues?.reference) ||
     importantValue !== ((initialValues?.isImportant ?? false) ? "yes" : "no") ||
+    isLandline !== (initialValues?.isLandline ?? false) ||
     files.length > 0 ||
     existingImages.length !== (initialValues?.images?.length ?? 0) ||
     JSON.stringify(extraNumbers) !== JSON.stringify(initialValues?.extraNumbers ?? []);
@@ -411,6 +415,7 @@ export function LeadForm({
       exactCustomerText: exactCustomerText.trim(),
       reference: reference.trim(),
       isImportant: importantValue === "yes",
+      isLandline,
       files,
       existingImages,
       extraNumbers: extraNumbers.filter((num) => num.trim() !== ""),
@@ -497,6 +502,7 @@ export function LeadForm({
       exactCustomerText: exactCustomerText.trim(),
       reference: reference.trim(),
       isImportant: importantValue === "yes",
+      isLandline,
       files,
       existingImages,
       extraNumbers: (extraNumbers ?? []).filter((n) => n.trim() !== ""),
@@ -665,6 +671,18 @@ export function LeadForm({
             <span className="text-sm">No</span>
           </label>
         </RadioGroup>
+      </Field>
+
+      <Field label="">
+        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-white/30 bg-transparent accent-primary"
+            checked={isLandline}
+            onChange={(e) => setIsLandline(e.target.checked)}
+          />
+          <span className="text-sm">Landline</span>
+        </label>
       </Field>
 
       {showAttachments ? (

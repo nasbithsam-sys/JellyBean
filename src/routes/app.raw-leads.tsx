@@ -2325,6 +2325,7 @@ function QualifyDialog({
         assigned_by: actorId,
         created_by: actorId,
         cs_status: "new",
+        is_landline: values.isLandline,
         is_important: values.isImportant,
         pinned_important: values.isImportant,
         submitted_by_role: actorRole,

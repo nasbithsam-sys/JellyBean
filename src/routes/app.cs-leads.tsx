@@ -207,6 +207,7 @@ type Lead = {
   created_by: string | null;
   assigned_by: string | null;
   reference: string | null;
+  is_landline: boolean;
 };
 
 // CS pipeline statuses surfaced in the UI (subset of the DB enum).
@@ -600,7 +601,7 @@ function Inner() {
       let q = supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, assigned_by, created_by, is_important, pinned_important, service, reference, images, submitted_by_role",
+          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, assigned_by, created_by, is_important, pinned_important, service, reference, images, submitted_by_role, is_landline",
         )
         .order("pinned_important", { ascending: false })
         .order("assigned_at", { ascending: false })
@@ -1784,6 +1785,11 @@ function CsLeadsTable({
                       )
                     )}
                     <span>{lead.customer_name}</span>
+                    {lead.is_landline && (
+                      <span className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-300">
+                        Landline
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">
@@ -2124,7 +2130,14 @@ function LeadCard({
                 <Copy className="h-3 w-3" />
               </button>
             </div>
-            <StatusBadge status={status} />
+            <div className="flex items-center gap-1.5 shrink-0">
+              {lead.is_landline && (
+                <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-300">
+                  Landline
+                </span>
+              )}
+              <StatusBadge status={status} />
+            </div>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <PhoneCopyLink phone={lead.customer_number} compact />
@@ -2816,7 +2829,14 @@ function LeadDrawer({
             <div className="text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground font-medium">
               Customer
             </div>
-            <h2 className="text-[22px] font-semibold tracking-tight mt-1">{lead.customer_name}</h2>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <h2 className="text-[22px] font-semibold tracking-tight">{lead.customer_name}</h2>
+              {lead.is_landline && (
+                <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-300">
+                  Landline
+                </span>
+              )}
+            </div>
             <div className="mt-2 flex flex-wrap gap-3">
               <PhoneCopyLink phone={lead.customer_number} />
               {lead.customer_number_2 && (

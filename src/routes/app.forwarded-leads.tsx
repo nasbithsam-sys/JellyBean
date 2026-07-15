@@ -57,6 +57,7 @@ type Row = {
   is_important: boolean;
   pinned_important: boolean;
   submitted_by_role: string | null;
+  is_landline: boolean;
 };
 
 const OUTCOME_FILTERS = [
@@ -193,7 +194,7 @@ function Inner() {
       let q = supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, post_text, pass_it_to, main_area, sub_area, original_lead_link, reference, is_important, pinned_important, images, submitted_by_role, cs_status, assigned_at, assigned_by, updated_at, created_by",
+          "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, post_text, pass_it_to, main_area, sub_area, original_lead_link, reference, is_important, pinned_important, is_landline, images, submitted_by_role, cs_status, assigned_at, assigned_by, updated_at, created_by",
         )
         .order("updated_at", { ascending: false })
         .range(from, to);
@@ -548,7 +549,16 @@ function ForwardedTable({
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="crm-data-row border-t border-border">
-              <td className="px-3 py-2 font-semibold text-foreground">{r.customer_name}</td>
+              <td className="px-3 py-2 font-semibold text-foreground">
+                <span className="inline-flex items-center gap-1.5 flex-wrap">
+                  <span>{r.customer_name}</span>
+                  {r.is_landline && (
+                    <span className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-300">
+                      Landline
+                    </span>
+                  )}
+                </span>
+              </td>
               <td className="px-3 py-2">
                 <a
                   href={`tel:${r.customer_number}`}
@@ -704,6 +714,7 @@ function UnifiedForwardedLeadForm({
           post_text: values.exactCustomerText,
           reference: values.reference,
           is_important: lead.pinned_important ? true : values.isImportant,
+          is_landline: values.isLandline,
           images: [...(values.existingImages ?? []), ...uploadedImages],
           original_lead_link: values.originalLeadLink !== undefined ? values.originalLeadLink : lead.original_lead_link,
         } as never)
@@ -737,6 +748,7 @@ function UnifiedForwardedLeadForm({
         exactCustomerText: lead.post_text || lead.context || "",
         reference: lead.reference || undefined,
         isImportant: lead.is_important,
+        isLandline: (lead as { is_landline?: boolean }).is_landline ?? false,
         images: Array.isArray(lead.images) ? (lead.images as string[]) : [],
         originalLeadLink: lead.original_lead_link,
       }}
