@@ -2125,7 +2125,14 @@ function LeadCard({
                 <Copy className="h-3 w-3" />
               </button>
             </div>
-            <StatusBadge status={status} />
+            <div className="flex items-center gap-1.5 shrink-0">
+              {lead.is_landline && (
+                <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-300">
+                  Landline
+                </span>
+              )}
+              <StatusBadge status={status} />
+            </div>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <PhoneCopyLink phone={lead.customer_number} compact />
