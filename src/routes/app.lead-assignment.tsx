@@ -408,6 +408,26 @@ function AnalyticsTab() {
         )}
       </div>
 
+      {(stateQ.isError || userQ.isError) && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm flex items-start justify-between gap-3">
+          <div>
+            <div className="font-semibold text-destructive">Failed to load analytics</div>
+            <div className="text-muted-foreground text-xs mt-1 break-words">
+              {((stateQ.error as Error) ?? (userQ.error as Error))?.message ?? "Unknown error"}
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => { if (stateQ.isError) stateQ.refetch(); if (userQ.isError) userQ.refetch(); }}
+            disabled={stateQ.isFetching || userQ.isFetching}
+          >
+            {(stateQ.isFetching || userQ.isFetching) ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Retry
+          </Button>
+        </div>
+      )}
+
       <div className="glass-card p-4">
         <div className="text-sm font-semibold mb-3">Per-State Breakdown</div>
         <div className="overflow-auto max-h-[520px]">
