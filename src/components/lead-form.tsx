@@ -159,6 +159,7 @@ export function LeadForm({
   const [importantValue, setImportantValue] = useState(
     (initialValues?.isImportant ?? false) ? "yes" : "no",
   );
+  const [isLandline, setIsLandline] = useState<boolean>(initialValues?.isLandline ?? false);
   const [existingImages, setExistingImages] = useState<string[]>(initialValues?.images ?? []);
   const existingImageUrls = useSignedLeadUrls(existingImages);
   const [files, setFiles] = useState<File[]>([]);
