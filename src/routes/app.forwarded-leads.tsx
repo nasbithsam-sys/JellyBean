@@ -102,6 +102,7 @@ function Inner() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
+  const [reminderLead, setReminderLead] = useState<ReminderLeadInfo | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
   const [debouncedQuery, setDebouncedQuery] = useState("");
