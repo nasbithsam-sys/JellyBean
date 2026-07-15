@@ -279,6 +279,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         userEmail={auth.user?.email ?? auth.profile?.email ?? null}
       />
       <CrmUpdatesNotifier />
+      <LeadReminderNotifier />
     </div>
   );
 }
