@@ -511,6 +511,7 @@ function SubmitForm({
         created_by: auth.user.id,
         assigned_by: auth.user.id,
         cs_status: "new",
+        is_landline: values.isLandline,
       } as never);
       if (error) throw error;
       await supabase.from("activity_logs").insert({
