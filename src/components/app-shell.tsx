@@ -50,7 +50,7 @@ const ADMIN: Item[] = [
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/analytics", label: "Analytics", icon: LineChart, shortcut: "N" },
   { to: "/app/reports", label: "Reports", icon: BarChart3, shortcut: "R" },
-  { to: "/app/cs-reports", label: "CS Reports", icon: PieChart },
+  { to: "/app/lead-assignment", label: "Lead Assignment", icon: PieChart },
   { to: "/app/logs", label: "Activity", icon: ScrollText, shortcut: "G" },
   { to: "/app/health", label: "Health", icon: ShieldCheck, shortcut: "H" },
   { to: "/app/crm-updates", label: "CRM Updates", icon: Megaphone },
