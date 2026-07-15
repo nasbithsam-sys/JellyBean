@@ -116,7 +116,7 @@ export const DOC_SECTIONS: DocSection[] = [
           ["Map", "Geographic lead view", "admin, sub_admin, acc_handler", "—"],
           ["Analytics", "Trend charts", "admin, sub_admin", "—"],
           ["Reports", "Operational reports", "admin, sub_admin", "CSV export admin-only"],
-          ["CS Reports", "CS performance reports", "admin, sub_admin", "—"],
+          ["Lead Assignment", "State-based routing + CS analytics", "admin, cs_admin", "Replaces CS Reports"],
           ["Activity", "Audit log", "admin only", "Hidden from sub_admin"],
           ["Health", "System health checks", "admin, sub_admin", "—"],
           ["CRM Updates", "Publish live notifications", "admin only", "Hidden from all other roles"],
