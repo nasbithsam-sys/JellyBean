@@ -525,7 +525,8 @@ function Inner() {
 
       <LeadReminderDialog
         lead={reminderLead}
-        onClose={() => setReminderLead(null)}
+        open={!!reminderLead}
+        onOpenChange={(o) => { if (!o) setReminderLead(null); }}
       />
     </div>
   );
