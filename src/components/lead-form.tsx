@@ -673,6 +673,18 @@ export function LeadForm({
         </RadioGroup>
       </Field>
 
+      <Field label="">
+        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-white/30 bg-transparent accent-primary"
+            checked={isLandline}
+            onChange={(e) => setIsLandline(e.target.checked)}
+          />
+          <span className="text-sm">Landline</span>
+        </label>
+      </Field>
+
       {showAttachments ? (
         <Field label="Add Attachment">
           <div className="space-y-3">
