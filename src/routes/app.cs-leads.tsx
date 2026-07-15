@@ -1785,6 +1785,11 @@ function CsLeadsTable({
                       )
                     )}
                     <span>{lead.customer_name}</span>
+                    {lead.is_landline && (
+                      <span className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-300">
+                        Landline
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">
