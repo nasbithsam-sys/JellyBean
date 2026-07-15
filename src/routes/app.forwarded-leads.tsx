@@ -704,6 +704,7 @@ function UnifiedForwardedLeadForm({
           post_text: values.exactCustomerText,
           reference: values.reference,
           is_important: lead.pinned_important ? true : values.isImportant,
+          is_landline: values.isLandline,
           images: [...(values.existingImages ?? []), ...uploadedImages],
           original_lead_link: values.originalLeadLink !== undefined ? values.originalLeadLink : lead.original_lead_link,
         } as never)
