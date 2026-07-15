@@ -545,16 +545,20 @@ function Stat({ label, value, sub }: { label: string; value?: number | null; sub
 function ForwardedTable({
   rows,
   onEdit,
+  onRemind,
   auth,
   qc,
   profilesById,
+  csById,
   isAdmin,
 }: {
   rows: Row[];
   onEdit: (row: Row) => void;
+  onRemind: (info: ReminderLeadInfo) => void;
   auth: ReturnType<typeof useAuth>;
   qc: ReturnType<typeof useQueryClient>;
   profilesById: Map<string, { full_name: string | null; email: string }>;
+  csById: Map<string, { full_name: string; email: string }>;
   isAdmin: boolean;
 }) {
   return (
