@@ -215,7 +215,7 @@ function AssignDialog({
   const [selectedCodes, setSelectedCodes] = useState<string[]>(editing ? [editing.state_code] : []);
   const [filter, setFilter] = useState("");
 
-  useMemo(() => {
+  useEffect(() => {
     setCsUserId(editing?.assigned_cs_user_id ?? "");
     setSelectedCodes(editing ? [editing.state_code] : []);
     setFilter("");
