@@ -69,6 +69,10 @@ const MATURING: Item[] = [
 ];
 
 const CS: Item[] = [{ to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard }];
+const CS_ADMIN_ITEMS: Item[] = [
+  { to: "/app/cs-leads", label: "CS Pipeline", icon: Headphones },
+  { to: "/app/lead-assignment", label: "Lead Assignment", icon: PieChart },
+];
 const ACC_HANDLER: Item[] = [
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe, shortcut: "B" },
