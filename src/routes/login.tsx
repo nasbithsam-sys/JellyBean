@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useClockSkew } from "@/hooks/use-clock-skew";
+import jellybeanLogo from "@/assets/jellybean-logo.png";
 
 type LoginProfile = {
   is_active: boolean;
@@ -119,11 +120,11 @@ function LoginPage() {
         <section className="hidden md:flex flex-col justify-between bg-[linear-gradient(135deg,color-mix(in_oklch,var(--primary)_88%,black),color-mix(in_oklch,var(--primary-glow)_72%,var(--surface)))] p-9 text-primary-foreground">
           <div>
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-white/95 text-primary ring-1 ring-white/30 grid place-items-center shadow-sm">
-                <span className="text-sm font-semibold">LG</span>
+              <div className="h-11 w-11 rounded-2xl bg-white/95 ring-1 ring-white/30 grid place-items-center shadow-sm overflow-hidden">
+                <img src={jellybeanLogo} alt="JellyBean logo" width={44} height={44} className="h-8 w-8 object-contain" />
               </div>
               <div>
-                <div className="text-lg font-semibold tracking-tight">Leadgrid</div>
+                <div className="text-lg font-semibold tracking-tight">JellyBean</div>
                 <div className="text-sm text-primary-foreground/80">Lead operations CRM</div>
               </div>
             </div>
@@ -151,11 +152,11 @@ function LoginPage() {
 
         <section className="p-7 sm:p-10 md:p-12 bg-card/72">
           <div className="md:hidden mb-8 flex items-center gap-3">
-            <div className="h-11 w-11 rounded-2xl bg-primary text-primary-foreground grid place-items-center">
-              <span className="text-sm font-semibold">LG</span>
+            <div className="h-11 w-11 rounded-2xl bg-primary grid place-items-center overflow-hidden">
+              <img src={jellybeanLogo} alt="JellyBean logo" width={44} height={44} className="h-8 w-8 object-contain" />
             </div>
             <div>
-              <div className="text-lg font-semibold tracking-tight">Leadgrid</div>
+              <div className="text-lg font-semibold tracking-tight">JellyBean</div>
               <div className="text-sm text-muted-foreground">Lead operations CRM</div>
             </div>
           </div>
