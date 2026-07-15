@@ -122,7 +122,7 @@ async function classifyWithOpenAi({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "openai/gpt-5.4-nano",
+      model: "gpt-5.4-nano",
       input: [
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify({ leads }) },
@@ -344,7 +344,7 @@ Forbidden Phrases (do not use in any field):
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5.4-nano",
+        model: "gpt-5.4-nano",
         input: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userContent },
