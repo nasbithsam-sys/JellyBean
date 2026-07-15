@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { listCsTeam } from "@/lib/cs-team.functions";
 import { RouteSkeleton } from "@/components/route-skeleton";
 import { useMemo, useState, useEffect } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink } from "lucide-react";
+import { CalendarRange, Edit3, Loader2, MapPin, Phone, RefreshCw, Search, Trash2, Lock, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Bell } from "lucide-react";
 import { formatDistanceToNow, startOfDay, endOfDay } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
@@ -31,6 +33,7 @@ import type { ForwardedStatus } from "@/lib/crm-types";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import { cn } from "@/lib/utils";
 import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
+import { LeadReminderDialog, type ReminderLeadInfo } from "@/components/lead-reminder-dialog";
 
 export const Route = createFileRoute("/app/forwarded-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
@@ -58,6 +61,7 @@ type Row = {
   pinned_important: boolean;
   submitted_by_role: string | null;
   is_landline: boolean;
+  assigned_to: string | null;
 };
 
 const OUTCOME_FILTERS = [
@@ -100,6 +104,7 @@ function Inner() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
+  const [reminderLead, setReminderLead] = useState<ReminderLeadInfo | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -184,6 +189,21 @@ function Inner() {
     return map;
   }, [allProfiles.data]);
 
+  const listTeamFn = useServerFn(listCsTeam);
+  const csTeam = useQuery({
+    queryKey: ["cs-team-forwarded"],
+    enabled: !!auth.user?.id,
+    queryFn: () => listTeamFn(),
+    staleTime: 5 * 60_000,
+  });
+  const csById = useMemo(() => {
+    const map = new Map<string, { full_name: string; email: string }>();
+    for (const m of csTeam.data ?? []) {
+      map.set(m.user_id, { full_name: m.full_name, email: m.email });
+    }
+    return map;
+  }, [csTeam.data]);
+
   const list = useQuery({
     queryKey: ["forwarded-leads", auth.user?.id, isAdmin, { page, dbDateFrom, dbDateTo, forwardedByFilter, outcomeFilter, dbSearch }],
     enabled: !!auth.user?.id,
@@ -194,7 +214,7 @@ function Inner() {
       let q = supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, post_text, pass_it_to, main_area, sub_area, original_lead_link, reference, is_important, pinned_important, is_landline, images, submitted_by_role, cs_status, assigned_at, assigned_by, updated_at, created_by",
+          "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, post_text, pass_it_to, main_area, sub_area, original_lead_link, reference, is_important, pinned_important, is_landline, images, submitted_by_role, cs_status, assigned_at, assigned_by, assigned_to, updated_at, created_by",
         )
         .order("updated_at", { ascending: false })
         .range(from, to);
@@ -412,9 +432,11 @@ function Inner() {
             <ForwardedTable
               rows={filtered}
               onEdit={setEditing}
+              onRemind={setReminderLead}
               auth={auth}
               qc={qc}
               profilesById={profilesById}
+              csById={csById}
               isAdmin={isAdmin}
             />
           </div>
@@ -500,6 +522,12 @@ function Inner() {
           )}
         </DialogContent>
       </Dialog>
+
+      <LeadReminderDialog
+        lead={reminderLead}
+        open={!!reminderLead}
+        onOpenChange={(o) => { if (!o) setReminderLead(null); }}
+      />
     </div>
   );
 }
@@ -517,16 +545,20 @@ function Stat({ label, value, sub }: { label: string; value?: number | null; sub
 function ForwardedTable({
   rows,
   onEdit,
+  onRemind,
   auth,
   qc,
   profilesById,
+  csById,
   isAdmin,
 }: {
   rows: Row[];
   onEdit: (row: Row) => void;
+  onRemind: (info: ReminderLeadInfo) => void;
   auth: ReturnType<typeof useAuth>;
   qc: ReturnType<typeof useQueryClient>;
   profilesById: Map<string, { full_name: string | null; email: string }>;
+  csById: Map<string, { full_name: string; email: string }>;
   isAdmin: boolean;
 }) {
   return (
@@ -628,6 +660,25 @@ function ForwardedTable({
               </td>
               <td className="px-3 py-2">
                 <div className="flex justify-end gap-1.5">
+                  {r.assigned_to && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => {
+                        const cs = r.assigned_to ? csById.get(r.assigned_to) : undefined;
+                        onRemind({
+                          id: r.id,
+                          customer_name: r.customer_name,
+                          customer_number: r.customer_number,
+                          assignee_name: cs?.full_name ?? r.pass_it_to ?? null,
+                        });
+                      }}
+                      title="Send reminder to assigned CS"
+                    >
+                      <Bell className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                   {isAdmin || (r.cs_status === "new" && r.created_by === auth.user?.id) ? (
                     <>
                       <Button
