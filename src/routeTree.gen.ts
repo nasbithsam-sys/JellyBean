@@ -21,6 +21,7 @@ import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppRawLeadsRouteImport } from './routes/app.raw-leads'
 import { Route as AppMapRouteImport } from './routes/app.map'
 import { Route as AppLogsRouteImport } from './routes/app.logs'
+import { Route as AppLeadAssignmentRouteImport } from './routes/app.lead-assignment'
 import { Route as AppHealthRouteImport } from './routes/app.health'
 import { Route as AppForwardedLeadsRouteImport } from './routes/app.forwarded-leads'
 import { Route as AppCsReportsRouteImport } from './routes/app.cs-reports'
@@ -90,6 +91,11 @@ const AppLogsRoute = AppLogsRouteImport.update({
   path: '/logs',
   getParentRoute: () => AppRoute,
 } as any)
+const AppLeadAssignmentRoute = AppLeadAssignmentRouteImport.update({
+  id: '/lead-assignment',
+  path: '/lead-assignment',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppHealthRoute = AppHealthRouteImport.update({
   id: '/health',
   path: '/health',
@@ -144,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/app/cs-reports': typeof AppCsReportsRoute
   '/app/forwarded-leads': typeof AppForwardedLeadsRoute
   '/app/health': typeof AppHealthRoute
+  '/app/lead-assignment': typeof AppLeadAssignmentRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
   '/app/raw-leads': typeof AppRawLeadsRoute
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/app/cs-reports': typeof AppCsReportsRoute
   '/app/forwarded-leads': typeof AppForwardedLeadsRoute
   '/app/health': typeof AppHealthRoute
+  '/app/lead-assignment': typeof AppLeadAssignmentRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
   '/app/raw-leads': typeof AppRawLeadsRoute
@@ -188,6 +196,7 @@ export interface FileRoutesById {
   '/app/cs-reports': typeof AppCsReportsRoute
   '/app/forwarded-leads': typeof AppForwardedLeadsRoute
   '/app/health': typeof AppHealthRoute
+  '/app/lead-assignment': typeof AppLeadAssignmentRoute
   '/app/logs': typeof AppLogsRoute
   '/app/map': typeof AppMapRoute
   '/app/raw-leads': typeof AppRawLeadsRoute
@@ -212,6 +221,7 @@ export interface FileRouteTypes {
     | '/app/cs-reports'
     | '/app/forwarded-leads'
     | '/app/health'
+    | '/app/lead-assignment'
     | '/app/logs'
     | '/app/map'
     | '/app/raw-leads'
@@ -233,6 +243,7 @@ export interface FileRouteTypes {
     | '/app/cs-reports'
     | '/app/forwarded-leads'
     | '/app/health'
+    | '/app/lead-assignment'
     | '/app/logs'
     | '/app/map'
     | '/app/raw-leads'
@@ -255,6 +266,7 @@ export interface FileRouteTypes {
     | '/app/cs-reports'
     | '/app/forwarded-leads'
     | '/app/health'
+    | '/app/lead-assignment'
     | '/app/logs'
     | '/app/map'
     | '/app/raw-leads'
@@ -360,6 +372,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLogsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/lead-assignment': {
+      id: '/app/lead-assignment'
+      path: '/lead-assignment'
+      fullPath: '/app/lead-assignment'
+      preLoaderRoute: typeof AppLeadAssignmentRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/health': {
       id: '/app/health'
       path: '/health'
@@ -427,6 +446,7 @@ interface AppRouteChildren {
   AppCsReportsRoute: typeof AppCsReportsRoute
   AppForwardedLeadsRoute: typeof AppForwardedLeadsRoute
   AppHealthRoute: typeof AppHealthRoute
+  AppLeadAssignmentRoute: typeof AppLeadAssignmentRoute
   AppLogsRoute: typeof AppLogsRoute
   AppMapRoute: typeof AppMapRoute
   AppRawLeadsRoute: typeof AppRawLeadsRoute
@@ -444,6 +464,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppCsReportsRoute: AppCsReportsRoute,
   AppForwardedLeadsRoute: AppForwardedLeadsRoute,
   AppHealthRoute: AppHealthRoute,
+  AppLeadAssignmentRoute: AppLeadAssignmentRoute,
   AppLogsRoute: AppLogsRoute,
   AppMapRoute: AppMapRoute,
   AppRawLeadsRoute: AppRawLeadsRoute,
@@ -466,13 +487,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -50,7 +50,7 @@ const ADMIN: Item[] = [
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/analytics", label: "Analytics", icon: LineChart, shortcut: "N" },
   { to: "/app/reports", label: "Reports", icon: BarChart3, shortcut: "R" },
-  { to: "/app/cs-reports", label: "CS Reports", icon: PieChart },
+  { to: "/app/lead-assignment", label: "Lead Assignment", icon: PieChart },
   { to: "/app/logs", label: "Activity", icon: ScrollText, shortcut: "G" },
   { to: "/app/health", label: "Health", icon: ShieldCheck, shortcut: "H" },
   { to: "/app/crm-updates", label: "CRM Updates", icon: Megaphone },
@@ -69,6 +69,10 @@ const MATURING: Item[] = [
 ];
 
 const CS: Item[] = [{ to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard }];
+const CS_ADMIN_ITEMS: Item[] = [
+  { to: "/app/cs-leads", label: "CS Pipeline", icon: Headphones },
+  { to: "/app/lead-assignment", label: "Lead Assignment", icon: PieChart },
+];
 const ACC_HANDLER: Item[] = [
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe, shortcut: "B" },
@@ -103,7 +107,7 @@ function itemsForRole(role: AppRole | null): Item[] {
   if (role === "scraping") return SCRAPING;
   if (role === "maturing") return MATURING;
   if (role === "cs") return CS;
-  if (role === "cs_admin") return CS;
+  if (role === "cs_admin") return CS_ADMIN_ITEMS;
   if (role === "acc_handler") return ACC_HANDLER;
   if (role === "facebook" || role === "seo") return SUBMITTER;
   return [];
