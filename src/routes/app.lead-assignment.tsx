@@ -373,11 +373,16 @@ function AnalyticsTab() {
   const stateQ = useQuery({
     queryKey: ["state-analytics", range.from, range.to],
     queryFn: () => stateFn({ data: { from: range.from, to: range.to } }),
+    retry: false,
+    refetchOnWindowFocus: false,
   });
   const userQ = useQuery({
     queryKey: ["cs-user-totals", range.from, range.to],
     queryFn: () => userFn({ data: { from: range.from, to: range.to } }),
+    retry: false,
+    refetchOnWindowFocus: false,
   });
+
 
   const statusKeys = Object.keys(STATUS_LABEL);
 
