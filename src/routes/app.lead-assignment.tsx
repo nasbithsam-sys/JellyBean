@@ -84,7 +84,7 @@ function LeadAssignmentInner() {
         <AssignmentsTab />
       </TabsContent>
       <TabsContent value="analytics" className="mt-4">
-        <AnalyticsTab />
+        {tab === "analytics" ? <AnalyticsTab /> : null}
       </TabsContent>
     </Tabs>
   );
@@ -99,11 +99,16 @@ function AssignmentsTab() {
   const rowsQ = useQuery({
     queryKey: ["state-assignments"],
     queryFn: () => listFn(),
+    retry: false,
+    refetchOnWindowFocus: false,
   });
   const teamQ = useQuery({
     queryKey: ["cs-team-for-assignment"],
     queryFn: () => teamFn(),
+    retry: false,
+    refetchOnWindowFocus: false,
   });
+
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<StateAssignmentRow | null>(null);
