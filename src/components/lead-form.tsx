@@ -43,6 +43,7 @@ export type LeadFormValues = {
   exactCustomerText: string;
   reference: string;
   isImportant: boolean;
+  isLandline: boolean;
   files: File[];
   existingImages?: string[];
   extraNumbers?: string[];
@@ -58,6 +59,7 @@ type LeadFormInitialValues = {
   exactCustomerText?: string;
   reference?: string;
   isImportant?: boolean;
+  isLandline?: boolean;
   extraNumbers?: string[];
   images?: string[];
   id?: string;

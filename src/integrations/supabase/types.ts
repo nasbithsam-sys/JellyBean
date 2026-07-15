@@ -379,6 +379,7 @@ export type Database = {
           images: Json
           is_important: boolean
           is_important_by_cs: boolean
+          is_landline: boolean
           main_area: string | null
           marketing_notes: string | null
           number_name: string | null
@@ -417,6 +418,7 @@ export type Database = {
           images?: Json
           is_important?: boolean
           is_important_by_cs?: boolean
+          is_landline?: boolean
           main_area?: string | null
           marketing_notes?: string | null
           number_name?: string | null
@@ -455,6 +457,7 @@ export type Database = {
           images?: Json
           is_important?: boolean
           is_important_by_cs?: boolean
+          is_landline?: boolean
           main_area?: string | null
           marketing_notes?: string | null
           number_name?: string | null
