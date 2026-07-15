@@ -45,7 +45,7 @@ const AFFECTED_SECTIONS: string[] = [
   "Map",
   "Analytics",
   "Reports",
-  "CS Reports",
+  "Lead Assignment",
   "Activity",
   "Health",
   "CRM Updates",
