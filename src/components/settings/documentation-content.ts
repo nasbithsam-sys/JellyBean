@@ -384,17 +384,20 @@ export const DOC_SECTIONS: DocSection[] = [
     ],
   },
   {
-    id: "cs-reports",
+    id: "lead-assignment",
     number: 18,
-    title: "CS Reports",
+    title: "Lead Assignment",
     blocks: [
       {
         kind: "ul",
         items: [
-          "CS Reports (src/routes/app.cs-reports.tsx) shows per-CS performance",
-          "Columns include 'New To Contact' (formerly 'Still New') and 'Contacted' (raw count, not %)",
-          "Filtered by date range and CS operator",
-          "Available to admin and sub_admin",
+          "Lead Assignment (src/routes/app.lead-assignment.tsx) replaces the previous CS Reports section",
+          "Admin and CS Admin assign one or many U.S. states to a CS user; a state can belong to only one CS user at a time",
+          "New incoming leads whose resolved state matches an assignment are auto-routed to the owning CS user (BEFORE INSERT trigger on qualified_leads)",
+          "Reassigning a state affects only future incoming leads; existing leads are not silently reassigned",
+          "State visibility: CS users only see leads from their assigned states (RLS via public.state_assignments)",
+          "Analytics tab: per-state breakdown across every lead status, plus CS-user totals (assigned states, total, processed, pending, by state, by status). Filters: Today / 7d / 30d / Custom",
+          "Access: admin and cs_admin only — enforced server-side by requireAdmin() in src/lib/lead-assignment.functions.ts",
         ],
       },
     ],
