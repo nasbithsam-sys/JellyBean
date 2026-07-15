@@ -84,7 +84,7 @@ function LeadAssignmentInner() {
         <AssignmentsTab />
       </TabsContent>
       <TabsContent value="analytics" className="mt-4">
-        <AnalyticsTab />
+        {tab === "analytics" ? <AnalyticsTab /> : null}
       </TabsContent>
     </Tabs>
   );
@@ -99,11 +99,16 @@ function AssignmentsTab() {
   const rowsQ = useQuery({
     queryKey: ["state-assignments"],
     queryFn: () => listFn(),
+    retry: false,
+    refetchOnWindowFocus: false,
   });
   const teamQ = useQuery({
     queryKey: ["cs-team-for-assignment"],
     queryFn: () => teamFn(),
+    retry: false,
+    refetchOnWindowFocus: false,
   });
+
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<StateAssignmentRow | null>(null);
@@ -133,7 +138,11 @@ function AssignmentsTab() {
     <div className="glass-card p-4 md:p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm text-muted-foreground">
-          {rowsQ.data?.length ?? 0} state{rowsQ.data?.length === 1 ? "" : "s"} assigned
+          {rowsQ.isLoading
+            ? "Loading assignments…"
+            : rowsQ.isError
+              ? "Unable to load assignments"
+              : `${rowsQ.data?.length ?? 0} state${rowsQ.data?.length === 1 ? "" : "s"} assigned`}
         </div>
         <Button
           size="sm"
@@ -142,6 +151,20 @@ function AssignmentsTab() {
           <Plus className="w-4 h-4 mr-1" /> Assign States
         </Button>
       </div>
+      {rowsQ.isError ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm flex items-start justify-between gap-3">
+          <div>
+            <div className="font-semibold text-destructive">Failed to load state assignments</div>
+            <div className="text-muted-foreground text-xs mt-1 break-words">
+              {(rowsQ.error as Error)?.message ?? "Unknown error"}
+            </div>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => rowsQ.refetch()} disabled={rowsQ.isFetching}>
+            {rowsQ.isFetching ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Retry
+          </Button>
+        </div>
+      ) : (
       <div className="rounded-md border overflow-hidden">
         <Table>
           <TableHeader>
@@ -184,6 +207,8 @@ function AssignmentsTab() {
           </TableBody>
         </Table>
       </div>
+      )}
+
 
       <AssignDialog
         open={dialogOpen}
@@ -348,11 +373,16 @@ function AnalyticsTab() {
   const stateQ = useQuery({
     queryKey: ["state-analytics", range.from, range.to],
     queryFn: () => stateFn({ data: { from: range.from, to: range.to } }),
+    retry: false,
+    refetchOnWindowFocus: false,
   });
   const userQ = useQuery({
     queryKey: ["cs-user-totals", range.from, range.to],
     queryFn: () => userFn({ data: { from: range.from, to: range.to } }),
+    retry: false,
+    refetchOnWindowFocus: false,
   });
+
 
   const statusKeys = Object.keys(STATUS_LABEL);
 
@@ -377,6 +407,26 @@ function AnalyticsTab() {
           </>
         )}
       </div>
+
+      {(stateQ.isError || userQ.isError) && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm flex items-start justify-between gap-3">
+          <div>
+            <div className="font-semibold text-destructive">Failed to load analytics</div>
+            <div className="text-muted-foreground text-xs mt-1 break-words">
+              {((stateQ.error as Error) ?? (userQ.error as Error))?.message ?? "Unknown error"}
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => { if (stateQ.isError) stateQ.refetch(); if (userQ.isError) userQ.refetch(); }}
+            disabled={stateQ.isFetching || userQ.isFetching}
+          >
+            {(stateQ.isFetching || userQ.isFetching) ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Retry
+          </Button>
+        </div>
+      )}
 
       <div className="glass-card p-4">
         <div className="text-sm font-semibold mb-3">Per-State Breakdown</div>
