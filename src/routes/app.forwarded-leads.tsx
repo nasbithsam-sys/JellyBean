@@ -432,9 +432,11 @@ function Inner() {
             <ForwardedTable
               rows={filtered}
               onEdit={setEditing}
+              onRemind={setReminderLead}
               auth={auth}
               qc={qc}
               profilesById={profilesById}
+              csById={csById}
               isAdmin={isAdmin}
             />
           </div>
