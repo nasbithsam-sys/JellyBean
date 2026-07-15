@@ -213,6 +213,21 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
                             </Button>
                             <Button
                               size="sm"
+                              variant="default"
+                              onClick={() => void handleSendToCS(d)}
+                              disabled={sendingId === d.id}
+                              aria-label="Send draft to CS"
+                            >
+                              {sendingId === d.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <>
+                                  <Send className="w-3.5 h-3.5 mr-1" />
+                                  Send to CS
+                                </>
+                              )}
+                            <Button
+                              size="sm"
                               variant="ghost"
                               onClick={() => void handleDelete(d.id)}
                               disabled={deletingId === d.id}
