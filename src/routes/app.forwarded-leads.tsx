@@ -660,6 +660,25 @@ function ForwardedTable({
               </td>
               <td className="px-3 py-2">
                 <div className="flex justify-end gap-1.5">
+                  {r.assigned_to && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => {
+                        const cs = r.assigned_to ? csById.get(r.assigned_to) : undefined;
+                        onRemind({
+                          id: r.id,
+                          customer_name: r.customer_name,
+                          customer_number: r.customer_number,
+                          assignee_name: cs?.full_name ?? r.pass_it_to ?? null,
+                        });
+                      }}
+                      title="Send reminder to assigned CS"
+                    >
+                      <Bell className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                   {isAdmin || (r.cs_status === "new" && r.created_by === auth.user?.id) ? (
                     <>
                       <Button
