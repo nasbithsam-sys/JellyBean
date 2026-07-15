@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { listMyDrafts, deleteDraft, type LeadDraft, type DraftSourceType } from "@/lib/lead-drafts";
+import { sendDraftToCS, DraftValidationError } from "@/lib/send-draft-to-cs";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, Trash2, FolderOpen } from "lucide-react";
+import { Loader2, Trash2, FolderOpen, Send } from "lucide-react";
 import { toast } from "sonner";
 import { confirmDialog } from "@/components/confirm-dialog";
 import {
@@ -34,11 +35,12 @@ interface DraftsDialogProps {
 }
 
 export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenDraft }: DraftsDialogProps) {
-  const { user } = useAuth();
+  const { user, profile, primaryRole } = useAuth();
   const qc = useQueryClient();
   const [drafts, setDrafts] = useState<LeadDraft[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -78,6 +80,41 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
       toast.error(err instanceof Error ? err.message : "Failed to delete draft");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function handleSendToCS(draft: LeadDraft) {
+    if (!user?.id) return;
+    setSendingId(draft.id);
+    try {
+      await sendDraftToCS(draft, {
+        userId: user.id,
+        actorName: profile?.full_name ?? profile?.username ?? profile?.email ?? null,
+        actorRole: primaryRole ?? null,
+      });
+      // Remove draft only after successful submission.
+      try {
+        await deleteDraft(draft.id);
+      } catch {
+        // best-effort; the send already succeeded.
+      }
+      setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+      qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
+      qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+      qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
+      qc.invalidateQueries({ queryKey: ["my-submitted-leads"] });
+      toast.success("Lead sent to CS successfully.");
+    } catch (err) {
+      if (err instanceof DraftValidationError) {
+        toast.error(
+          "Required fields are missing. Open the draft and complete all required information before sending it to CS.",
+          { description: `Missing: ${err.missing.join(", ")}` },
+        );
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to send draft");
+      }
+    } finally {
+      setSendingId(null);
     }
   }
 
@@ -173,6 +210,22 @@ export function DraftsDialog({ open, onOpenChange, filterSource = "all", onOpenD
                               }}
                             >
                               Open
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => void handleSendToCS(d)}
+                              disabled={sendingId === d.id}
+                              aria-label="Send draft to CS"
+                            >
+                              {sendingId === d.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <>
+                                  <Send className="w-3.5 h-3.5 mr-1" />
+                                  Send to CS
+                                </>
+                              )}
                             </Button>
                             <Button
                               size="sm"

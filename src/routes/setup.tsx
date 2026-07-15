@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useServerFn } from "@tanstack/react-start";
 import { bootstrapFirstAdmin } from "@/lib/admin-users.functions";
 import { friendlyError } from "@/lib/error-messages";
+import jellybeanLogo from "@/assets/jellybean-logo.png";
 
 export const Route = createFileRoute("/setup")({
   component: SetupPage,
@@ -93,11 +94,11 @@ function SetupPage() {
         <section className="hidden md:flex flex-col justify-between bg-primary p-9 text-primary-foreground">
           <div>
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-card ring-1 ring-border/20 grid place-items-center">
-                <span className="text-sm font-semibold text-foreground">LG</span>
+              <div className="h-11 w-11 rounded-2xl bg-card ring-1 ring-border/20 grid place-items-center overflow-hidden">
+                <img src={jellybeanLogo} alt="JellyBean logo" width={44} height={44} className="h-8 w-8 object-contain" />
               </div>
               <div>
-                <div className="font-bold tracking-tight text-primary-foreground">Leadgrid</div>
+                <div className="font-bold tracking-tight text-primary-foreground">JellyBean</div>
                 <div className="text-sm text-primary-foreground/80">Lead operations CRM</div>
               </div>
             </div>
@@ -124,11 +125,11 @@ function SetupPage() {
         {/* Right Side Form */}
         <section className="p-7 sm:p-10 md:p-12">
           <div className="md:hidden mb-8 flex items-center gap-3">
-            <div className="h-11 w-11 rounded-2xl bg-primary text-primary-foreground grid place-items-center">
-              <span className="text-sm font-semibold">LG</span>
+            <div className="h-11 w-11 rounded-2xl bg-primary grid place-items-center overflow-hidden">
+              <img src={jellybeanLogo} alt="JellyBean logo" width={44} height={44} className="h-8 w-8 object-contain" />
             </div>
             <div>
-              <div className="text-lg font-semibold tracking-tight">Leadgrid</div>
+              <div className="text-lg font-semibold tracking-tight">JellyBean</div>
               <div className="text-sm text-muted-foreground">Lead operations CRM</div>
             </div>
           </div>

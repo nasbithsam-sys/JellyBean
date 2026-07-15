@@ -1,4 +1,4 @@
-// Lead Flow CRM — Complete System Documentation content.
+// JellyBean — Complete System Documentation content.
 // Derived from the current codebase (routes, components, hooks,
 // Supabase migrations, RLS policies and role helpers). Update when
 // system workflows or permissions change.
@@ -23,11 +23,11 @@ export type DocSection = {
 
 export const DOC_VERSION = "1.1";
 export const DOC_DATE = "July 14, 2026";
-export const DOC_TITLE = "Lead Flow CRM — Complete System Documentation";
+export const DOC_TITLE = "JellyBean — Complete System Documentation";
 export const DOC_SUBTITLE = `Version ${DOC_VERSION} · ${DOC_DATE} · Full reference for roles, leads, workflows, permissions, notifications, integrations, and technical architecture.`;
 
 export const DOC_NOTE =
-  "This documentation reflects the currently implemented Lead Flow CRM behavior and should be updated when system workflows or permissions change.";
+  "This documentation reflects the currently implemented JellyBean behavior and should be updated when system workflows or permissions change.";
 
 export const DOC_SECTIONS: DocSection[] = [
   {
@@ -37,7 +37,7 @@ export const DOC_SECTIONS: DocSection[] = [
     blocks: [
       {
         kind: "p",
-        text: "Lead Flow CRM is an internal lead-operations workspace that ingests raw leads from external sources, allows operators to qualify and forward them, and gives Customer Success (CS) a pipeline to work qualified leads to close.",
+        text: "JellyBean is an internal lead-operations workspace that ingests raw leads from external sources, allows operators to qualify and forward them, and gives Customer Success (CS) a pipeline to work qualified leads to close.",
       },
       {
         kind: "p",

@@ -24,6 +24,7 @@ import { useRealtimeSync } from "@/hooks/use-realtime-sync";
 import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useClockSkew } from "@/hooks/use-clock-skew";
+import jellybeanLogo from "@/assets/jellybean-logo.png";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -133,12 +134,18 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
       <aside className="crm-sidebar-shell w-[76px] lg:w-[236px] shrink-0 text-sidebar-foreground flex flex-col h-full">
         <div className="px-3 lg:px-5 pt-5 pb-4">
           <div className="flex items-center justify-center lg:justify-start gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-sidebar-primary text-white ring-1 ring-white/30 shadow-[0_14px_30px_-16px_color-mix(in_srgb,var(--sidebar-primary)_80%,transparent)]">
-              <span className="text-[12px] font-bold tracking-[0.02em] text-white">LG</span>
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-sidebar-primary/90 ring-1 ring-white/30 shadow-[0_14px_30px_-16px_color-mix(in_srgb,var(--sidebar-primary)_80%,transparent)] overflow-hidden">
+              <img
+                src={jellybeanLogo}
+                alt="JellyBean logo"
+                width={44}
+                height={44}
+                className="h-8 w-8 object-contain"
+              />
             </div>
             <div className="hidden lg:block leading-tight">
               <div className="text-[14px] font-bold tracking-[-0.015em] text-white">
-                Leadgrid
+                JellyBean
               </div>
               <div className="text-[11px] font-medium tracking-[0.02em] uppercase text-white/50">
                 CRM
