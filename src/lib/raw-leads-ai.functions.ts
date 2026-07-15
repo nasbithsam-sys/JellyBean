@@ -157,9 +157,17 @@ async function classifyWithOpenAi({
   });
 
   const body = (await response.json()) as OpenAiResponse;
+  console.log("[raw-leads-ai] OpenAI response", {
+    model: "gpt-5.4-nano",
+    status: response.status,
+    ok: response.ok,
+    leadCount: leads.length,
+    error: body.error?.message,
+  });
   if (!response.ok) {
     throw new Error(body.error?.message ?? `OpenAI request failed (${response.status})`);
   }
+
 
   return extractOutputText(body);
 }
