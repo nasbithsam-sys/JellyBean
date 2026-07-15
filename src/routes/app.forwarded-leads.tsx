@@ -550,22 +550,22 @@ function ForwardedTable({
           {rows.map((r) => (
             <tr key={r.id} className="crm-data-row border-t border-border">
               <td className="px-3 py-2 font-semibold text-foreground">
+                {r.customer_name}
+              </td>
+              <td className="px-3 py-2">
                 <span className="inline-flex items-center gap-1.5 flex-wrap">
-                  <span>{r.customer_name}</span>
+                  <a
+                    href={`tel:${r.customer_number}`}
+                    className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary"
+                  >
+                    <Phone className="h-3 w-3" /> {formatPhone(r.customer_number)}
+                  </a>
                   {r.is_landline && (
                     <span className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-300">
                       Landline
                     </span>
                   )}
                 </span>
-              </td>
-              <td className="px-3 py-2">
-                <a
-                  href={`tel:${r.customer_number}`}
-                  className="inline-flex items-center gap-1 text-muted-foreground hover:text-primary"
-                >
-                  <Phone className="h-3 w-3" /> {formatPhone(r.customer_number)}
-                </a>
               </td>
               <td className="px-3 py-2 text-muted-foreground">
                 {r.sub_area && (
