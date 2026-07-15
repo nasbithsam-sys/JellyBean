@@ -246,6 +246,7 @@ export function LeadForm({
     exactCustomerText !== (initialValues?.exactCustomerText ?? "") ||
     reference !== resolveInitialReference(referenceMode, initialValues?.reference) ||
     importantValue !== ((initialValues?.isImportant ?? false) ? "yes" : "no") ||
+    isLandline !== (initialValues?.isLandline ?? false) ||
     files.length > 0 ||
     existingImages.length !== (initialValues?.images?.length ?? 0) ||
     JSON.stringify(extraNumbers) !== JSON.stringify(initialValues?.extraNumbers ?? []);
