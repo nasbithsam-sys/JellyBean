@@ -193,7 +193,7 @@ function Inner() {
       let q = supabase
         .from("qualified_leads")
         .select(
-          "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, post_text, pass_it_to, main_area, sub_area, original_lead_link, reference, is_important, pinned_important, images, submitted_by_role, cs_status, assigned_at, assigned_by, updated_at, created_by",
+          "id, customer_name, customer_number, customer_number_2, extra_numbers, service, context, post_text, pass_it_to, main_area, sub_area, original_lead_link, reference, is_important, pinned_important, is_landline, images, submitted_by_role, cs_status, assigned_at, assigned_by, updated_at, created_by",
         )
         .order("updated_at", { ascending: false })
         .range(from, to);
