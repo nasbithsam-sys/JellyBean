@@ -391,6 +391,7 @@ export type Database = {
           requirement_1: string | null
           requirement_2: string | null
           service: string | null
+          state_code: string | null
           sub_area: string | null
           submitted_by_role: string | null
           updated_at: string
@@ -428,6 +429,7 @@ export type Database = {
           requirement_1?: string | null
           requirement_2?: string | null
           service?: string | null
+          state_code?: string | null
           sub_area?: string | null
           submitted_by_role?: string | null
           updated_at?: string
@@ -465,6 +467,7 @@ export type Database = {
           requirement_1?: string | null
           requirement_2?: string | null
           service?: string | null
+          state_code?: string | null
           sub_area?: string | null
           submitted_by_role?: string | null
           updated_at?: string
@@ -644,6 +647,33 @@ export type Database = {
         }
         Relationships: []
       }
+      state_assignments: {
+        Row: {
+          assigned_by: string | null
+          assigned_cs_user_id: string
+          created_at: string
+          state_code: string
+          state_name: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          assigned_cs_user_id: string
+          created_at?: string
+          state_code: string
+          state_name: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_by?: string | null
+          assigned_cs_user_id?: string
+          created_at?: string
+          state_code?: string
+          state_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -681,6 +711,20 @@ export type Database = {
         }[]
       }
       cs_leads_status_counts: { Args: never; Returns: Json }
+      cs_user_assignment_totals: {
+        Args: { _from?: string; _to?: string }
+        Returns: {
+          assigned_states: string[]
+          by_state: Json
+          by_status: Json
+          cs_user_email: string
+          cs_user_id: string
+          cs_user_name: string
+          pending_leads: number
+          processed_leads: number
+          total_leads: number
+        }[]
+      }
       current_user_has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
@@ -710,6 +754,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      list_state_assignments: {
+        Args: never
+        Returns: {
+          assigned_cs_user_id: string
+          cs_user_email: string
+          cs_user_name: string
+          state_code: string
+          state_name: string
+          total_leads: number
+          updated_at: string
+        }[]
+      }
+      normalize_us_state: { Args: { _input: string }; Returns: string }
       raw_lead_cache_category_counts: {
         Args: { _is_admin?: boolean; _user_id: string }
         Returns: {
@@ -758,6 +815,17 @@ export type Database = {
           user_email: string
           user_id: string
           user_name: string
+        }[]
+      }
+      state_assignment_analytics: {
+        Args: { _from?: string; _to?: string }
+        Returns: {
+          assigned_cs_user_id: string
+          by_status: Json
+          cs_user_name: string
+          state_code: string
+          state_name: string
+          total_leads: number
         }[]
       }
     }
