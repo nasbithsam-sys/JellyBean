@@ -501,6 +501,7 @@ export function LeadForm({
       exactCustomerText: exactCustomerText.trim(),
       reference: reference.trim(),
       isImportant: importantValue === "yes",
+      isLandline,
       files,
       existingImages,
       extraNumbers: (extraNumbers ?? []).filter((n) => n.trim() !== ""),
