@@ -20,7 +20,9 @@ export type ReminderLeadInfo = {
   customer_name: string;
   customer_number: string;
   assignee_name: string | null;
+  is_unassigned?: boolean;
 };
+
 
 const MAX_LEN = 1000;
 
