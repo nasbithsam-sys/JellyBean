@@ -48,6 +48,8 @@ import {
   Eye,
   EyeOff,
   BookOpen,
+  Copy,
+  RefreshCw,
 } from "lucide-react";
 import { DocumentationTab } from "@/components/settings/documentation-tab";
 import { supabase } from "@/integrations/supabase/client";
