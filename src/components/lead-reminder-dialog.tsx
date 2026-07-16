@@ -20,7 +20,9 @@ export type ReminderLeadInfo = {
   customer_name: string;
   customer_number: string;
   assignee_name: string | null;
+  is_unassigned?: boolean;
 };
+
 
 const MAX_LEN = 1000;
 
@@ -51,11 +53,19 @@ export function LeadReminderDialog({
     }
     setSending(true);
     try {
-      const { error } = await (
-        supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>
+      const { data, error } = await (
+        supabase.rpc as unknown as (
+          fn: string,
+          args: Record<string, unknown>,
+        ) => Promise<{ data: { mode?: string; recipient_count?: number } | null; error: { message: string } | null }>
       )("send_lead_reminder", { _lead_id: lead.id, _message: trimmed });
       if (error) throw new Error(error.message);
-      toast.success(`Reminder sent to ${lead.assignee_name ?? "assigned CS user"}.`);
+      const count = data?.recipient_count ?? 0;
+      if (lead.is_unassigned) {
+        toast.success(`Reminder sent to ${count} active CS user${count === 1 ? "" : "s"}.`);
+      } else {
+        toast.success(`Reminder sent to ${lead.assignee_name ?? "assigned CS user"}.`);
+      }
       setNote("");
       onOpenChange(false);
     } catch (err) {
@@ -64,6 +74,7 @@ export function LeadReminderDialog({
       setSending(false);
     }
   }
+
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -88,8 +99,15 @@ export function LeadReminderDialog({
             <div className="rounded-lg border border-border bg-surface/60 px-3 py-2.5 text-[12.5px] space-y-1">
               <Row label="Customer" value={lead.customer_name} />
               <Row label="Phone" value={formatPhone(lead.customer_number) || lead.customer_number} />
-              <Row label="Assigned CS" value={lead.assignee_name ?? "—"} />
+              {lead.is_unassigned ? (
+                <Row label="Recipient" value="All CS Users" />
+              ) : (
+                <Row label="Assigned CS" value={lead.assignee_name ?? "—"} />
+              )}
             </div>
+
+
+
 
             <div className="space-y-1.5">
               <label className="text-[12px] font-medium text-foreground/90">
