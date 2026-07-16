@@ -373,17 +373,28 @@ function UsersTab() {
   const usersQuery = useQuery({
     queryKey: ["admin-users"],
     queryFn: async (): Promise<UserRow[]> => {
-      const [{ data: profiles, error: pErr }, { data: roles, error: rErr }] = await Promise.all([
+      const [
+        { data: profiles, error: pErr },
+        { data: roles, error: rErr },
+        { data: codes, error: cErr },
+      ] = await Promise.all([
         supabase
           .from("profiles")
           .select("user_id, full_name, username, email, is_active")
           .order("created_at", { ascending: false }),
         supabase.from("user_roles").select("user_id, role"),
+        supabase.rpc("admin_list_access_codes" as never) as unknown as Promise<{
+          data: Array<{ user_id: string; code: string }> | null;
+          error: unknown;
+        }>,
       ]);
       if (pErr) throw pErr;
       if (rErr) throw rErr;
+      if (cErr) console.warn("[admin] access codes fetch failed", cErr);
       const roleMap = new Map<string, string>();
       (roles ?? []).forEach((r) => roleMap.set(r.user_id, r.role));
+      const codeMap = new Map<string, string>();
+      (codes ?? []).forEach((c) => codeMap.set(c.user_id, c.code));
       return (profiles ?? []).map((p) => ({
         user_id: p.user_id,
         full_name: p.full_name,
@@ -391,6 +402,7 @@ function UsersTab() {
         email: p.email,
         is_active: p.is_active,
         role: roleMap.get(p.user_id) ?? null,
+        access_code: codeMap.get(p.user_id) ?? null,
       }));
     },
   });
