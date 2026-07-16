@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { RouteSkeleton } from "@/components/route-skeleton";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -113,7 +113,14 @@ Forbidden Phrases (do not use in any field):
 - "our schedule"
 - "arrange a visit"`;
 
-export const Route = createFileRoute("/app/cs-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
+export const Route = createFileRoute("/app/cs-leads")({
+  component: Page,
+  pendingComponent: () => <RouteSkeleton />,
+  pendingMs: 200,
+  validateSearch: (search: Record<string, unknown>) => ({
+    leadId: typeof search.leadId === "string" ? search.leadId : undefined,
+  }),
+});
 
 const UNASSIGNED_VALUE = "__unassigned__";
 
@@ -637,6 +644,52 @@ function Inner() {
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
+
+  // ── Deep-link: open a specific lead via ?leadId=... (used by reminder notifier) ──
+  const { leadId: deepLinkLeadId } = Route.useSearch();
+  const navigate = useNavigate();
+  const deepLinkAttemptedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkLeadId) return;
+    if (opened?.id === deepLinkLeadId) return;
+    if (deepLinkAttemptedRef.current === deepLinkLeadId) return;
+    deepLinkAttemptedRef.current = deepLinkLeadId;
+
+    const inList = (list.data ?? []).find((l) => l.id === deepLinkLeadId);
+    if (inList) {
+      setOpened(inList);
+      return;
+    }
+    (async () => {
+      const { data, error } = await supabase
+        .from("qualified_leads")
+        .select(
+          "id, customer_name, customer_number, customer_number_2, context, post_text, pass_it_to, main_area, sub_area, marketing_notes, requirement_1, requirement_2, number_name, original_lead_link, cs_status, cs_notes, followup_at, assigned_at, assigned_to, assigned_by, created_by, is_important, pinned_important, service, reference, images, submitted_by_role, is_landline",
+        )
+        .eq("id", deepLinkLeadId)
+        .maybeSingle();
+      if (error) {
+        toast.error(friendlyError(error));
+        void navigate({ to: "/app/cs-leads", search: {} });
+        return;
+      }
+      if (!data) {
+        toast.error("Lead not found");
+        void navigate({ to: "/app/cs-leads", search: {} });
+        return;
+      }
+      setOpened(data as unknown as Lead);
+    })();
+  }, [deepLinkLeadId, opened?.id, list.data, navigate]);
+
+  const clearDeepLink = () => {
+    if (deepLinkLeadId) {
+      void navigate({ to: "/app/cs-leads", search: {} });
+    }
+    deepLinkAttemptedRef.current = null;
+  };
+
+
 
 
   // ── Lightweight count query — runs only when indexed filter params change ──
@@ -1667,9 +1720,13 @@ function Inner() {
           team={team.data ?? []}
           teamById={teamById}
           templates={composeTemplatesList.templates}
-          onClose={() => setOpened(null)}
+          onClose={() => {
+            setOpened(null);
+            clearDeepLink();
+          }}
           onSaved={() => {
             setOpened(null);
+            clearDeepLink();
             qc.invalidateQueries({ queryKey: ["cs_leads"] });
           }}
           profilesById={profilesById}
