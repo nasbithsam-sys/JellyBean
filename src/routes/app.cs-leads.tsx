@@ -648,16 +648,20 @@ function Inner() {
   // ── Deep-link: open a specific lead via ?leadId=... (used by reminder notifier) ──
   const { leadId: deepLinkLeadId } = Route.useSearch();
   const navigate = useNavigate();
-  const deepLinkAttemptedRef = useRef<string | null>(null);
+  const handledLeadIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!deepLinkLeadId) return;
-    if (opened?.id === deepLinkLeadId) return;
-    if (deepLinkAttemptedRef.current === deepLinkLeadId) return;
-    deepLinkAttemptedRef.current = deepLinkLeadId;
+    if (handledLeadIdRef.current === deepLinkLeadId) return;
+    handledLeadIdRef.current = deepLinkLeadId;
+
+    const stripParam = () => {
+      void navigate({ to: "/app/cs-leads", search: {}, replace: true });
+    };
 
     const inList = (list.data ?? []).find((l) => l.id === deepLinkLeadId);
     if (inList) {
       setOpened(inList);
+      stripParam();
       return;
     }
     (async () => {
@@ -670,24 +674,24 @@ function Inner() {
         .maybeSingle();
       if (error) {
         toast.error(friendlyError(error));
-        void navigate({ to: "/app/cs-leads", search: {} });
+        stripParam();
         return;
       }
       if (!data) {
         toast.error("Lead not found");
-        void navigate({ to: "/app/cs-leads", search: {} });
+        stripParam();
         return;
       }
       setOpened(data as unknown as Lead);
+      stripParam();
     })();
-  }, [deepLinkLeadId, opened?.id, list.data, navigate]);
+  }, [deepLinkLeadId, list.data, navigate]);
 
   const clearDeepLink = () => {
-    if (deepLinkLeadId) {
-      void navigate({ to: "/app/cs-leads", search: {} });
-    }
-    deepLinkAttemptedRef.current = null;
+    // URL is already cleaned when the lead was opened; nothing to do here.
+    // Kept for call-site compatibility.
   };
+
 
 
 
