@@ -527,6 +527,9 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
       <td>{user.email}</td>
       <td className="capitalize">{roleLabel(user.role)}</td>
       <td>
+        <AccessCodeCell user={user} onChange={onChange} />
+      </td>
+      <td>
         <span className={user.is_active ? "text-success" : "text-muted-foreground"}>
           {user.is_active ? "Active" : "Inactive"}
         </span>
