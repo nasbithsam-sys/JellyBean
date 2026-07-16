@@ -422,6 +422,7 @@ function UsersTab() {
               <th>Username</th>
               <th>Email</th>
               <th>Role</th>
+              <th>Access Code</th>
               <th>Status</th>
               <th className="text-right">Actions</th>
             </tr>
