@@ -1720,9 +1720,13 @@ function Inner() {
           team={team.data ?? []}
           teamById={teamById}
           templates={composeTemplatesList.templates}
-          onClose={() => setOpened(null)}
+          onClose={() => {
+            setOpened(null);
+            clearDeepLink();
+          }}
           onSaved={() => {
             setOpened(null);
+            clearDeepLink();
             qc.invalidateQueries({ queryKey: ["cs_leads"] });
           }}
           profilesById={profilesById}
