@@ -357,6 +357,7 @@ type UserRow = {
   email: string;
   is_active: boolean;
   role: string | null;
+  access_code: string | null;
 };
 
 function roleLabel(role: string | null) {
