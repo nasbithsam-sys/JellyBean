@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuthState } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { AccessCodeGate } from "@/components/access-code-gate";
 
 export const Route = createFileRoute("/app")({
   component: AuthenticatedLayout,
@@ -55,6 +56,22 @@ function AuthenticatedLayout() {
       </div>
     );
   }
+
+  // Second-step: non-admin users must enter the admin-issued 6-digit access code.
+  const isAdmin = auth.roles.includes("admin");
+  if (!isAdmin) {
+    if (auth.accessCodeChecking && !auth.accessCodeVerified) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (!auth.accessCodeVerified) {
+      return <AccessCodeGate auth={auth} />;
+    }
+  }
+
 
   return (
     <AuthProvider value={auth}>

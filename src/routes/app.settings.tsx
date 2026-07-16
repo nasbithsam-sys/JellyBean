@@ -48,6 +48,8 @@ import {
   Eye,
   EyeOff,
   BookOpen,
+  Copy,
+  RefreshCw,
 } from "lucide-react";
 import { DocumentationTab } from "@/components/settings/documentation-tab";
 import { supabase } from "@/integrations/supabase/client";
@@ -357,6 +359,7 @@ type UserRow = {
   email: string;
   is_active: boolean;
   role: string | null;
+  access_code: string | null;
 };
 
 function roleLabel(role: string | null) {
@@ -372,17 +375,28 @@ function UsersTab() {
   const usersQuery = useQuery({
     queryKey: ["admin-users"],
     queryFn: async (): Promise<UserRow[]> => {
-      const [{ data: profiles, error: pErr }, { data: roles, error: rErr }] = await Promise.all([
+      const [
+        { data: profiles, error: pErr },
+        { data: roles, error: rErr },
+        { data: codes, error: cErr },
+      ] = await Promise.all([
         supabase
           .from("profiles")
           .select("user_id, full_name, username, email, is_active")
           .order("created_at", { ascending: false }),
         supabase.from("user_roles").select("user_id, role"),
+        supabase.rpc("admin_list_access_codes" as never) as unknown as Promise<{
+          data: Array<{ user_id: string; code: string }> | null;
+          error: unknown;
+        }>,
       ]);
       if (pErr) throw pErr;
       if (rErr) throw rErr;
+      if (cErr) console.warn("[admin] access codes fetch failed", cErr);
       const roleMap = new Map<string, string>();
       (roles ?? []).forEach((r) => roleMap.set(r.user_id, r.role));
+      const codeMap = new Map<string, string>();
+      (codes ?? []).forEach((c) => codeMap.set(c.user_id, c.code));
       return (profiles ?? []).map((p) => ({
         user_id: p.user_id,
         full_name: p.full_name,
@@ -390,6 +404,7 @@ function UsersTab() {
         email: p.email,
         is_active: p.is_active,
         role: roleMap.get(p.user_id) ?? null,
+        access_code: codeMap.get(p.user_id) ?? null,
       }));
     },
   });
@@ -409,6 +424,7 @@ function UsersTab() {
               <th>Username</th>
               <th>Email</th>
               <th>Role</th>
+              <th>Access Code</th>
               <th>Status</th>
               <th className="text-right">Actions</th>
             </tr>
@@ -416,7 +432,7 @@ function UsersTab() {
           <tbody>
             {usersQuery.isLoading && (
               <tr>
-                <td colSpan={6} className="text-center text-muted-foreground py-6">
+                <td colSpan={7} className="text-center text-muted-foreground py-6">
                   Loading...
                 </td>
               </tr>
@@ -430,7 +446,7 @@ function UsersTab() {
             ))}
             {usersQuery.data?.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center text-muted-foreground py-6">
+                <td colSpan={7} className="text-center text-muted-foreground py-6">
                   No users yet.
                 </td>
               </tr>
@@ -512,6 +528,9 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
       <td className="font-mono text-xs">{user.username ?? "-"}</td>
       <td>{user.email}</td>
       <td className="capitalize">{roleLabel(user.role)}</td>
+      <td>
+        <AccessCodeCell user={user} onChange={onChange} />
+      </td>
       <td>
         <span className={user.is_active ? "text-success" : "text-muted-foreground"}>
           {user.is_active ? "Active" : "Inactive"}
@@ -746,6 +765,83 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <Label className="block mb-1.5">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+function AccessCodeCell({ user, onChange }: { user: UserRow; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [reveal, setReveal] = useState(false);
+
+  if (user.role === "admin") {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  if (!user.access_code) {
+    return <span className="text-xs text-muted-foreground">Not set</span>;
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(user.access_code!);
+      toast.success("Access code copied");
+    } catch {
+      toast.error("Copy failed");
+    }
+  }
+
+  async function regenerate() {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.rpc(
+        "admin_regenerate_access_code" as never,
+        { _user_id: user.user_id } as never,
+      );
+      if (error) throw error;
+      const newCode = typeof data === "string" ? data : String(data);
+      try {
+        await navigator.clipboard.writeText(newCode);
+        toast.success(`New code ${newCode} copied`);
+      } catch {
+        toast.success(`New code: ${newCode}`);
+      }
+      onChange();
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-mono text-sm tabular-nums tracking-[0.2em]">
+        {reveal ? user.access_code : "••••••"}
+      </span>
+      <button
+        type="button"
+        onClick={() => setReveal((v) => !v)}
+        aria-label={reveal ? "Hide code" : "Show code"}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent"
+      >
+        {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+      </button>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label="Copy access code"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent"
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={regenerate}
+        disabled={busy}
+        aria-label="Regenerate access code"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50"
+      >
+        <RefreshCw className={"h-3.5 w-3.5 " + (busy ? "animate-spin" : "")} />
+      </button>
     </div>
   );
 }

@@ -38,6 +38,10 @@ export interface AuthState {
   profile: AuthProfile | null;
   roles: AppRole[];
   primaryRole: AppRole | null;
+  accessCodeVerified: boolean;
+  accessCodeChecking: boolean;
+  refreshAccessCode: () => Promise<void>;
+  markAccessCodeVerified: () => void;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -57,6 +61,8 @@ export function useAuthState(): AuthState {
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const [accessCodeVerified, setAccessCodeVerified] = useState(false);
+  const [accessCodeChecking, setAccessCodeChecking] = useState(false);
   const latestSessionRef = useRef<Session | null>(null);
 
   const loadProfileAndRoles = useCallback(async (uid: string | undefined) => {
@@ -129,9 +135,39 @@ export function useAuthState(): AuthState {
     await loadProfileAndRoles(user?.id);
   }, [user?.id, loadProfileAndRoles]);
 
+  const refreshAccessCode = useCallback(async () => {
+    if (!latestSessionRef.current) {
+      setAccessCodeVerified(false);
+      return;
+    }
+    setAccessCodeChecking(true);
+    try {
+      const { data, error } = await supabase.rpc("is_my_access_verified" as never);
+      if (error) throw error;
+      setAccessCodeVerified(!!data);
+    } catch (err) {
+      console.error("[Auth] access code check failed", err);
+      setAccessCodeVerified(false);
+    } finally {
+      setAccessCodeChecking(false);
+    }
+  }, []);
+
+  const markAccessCodeVerified = useCallback(() => setAccessCodeVerified(true), []);
+
   const signOut = useCallback(async () => {
+    setAccessCodeVerified(false);
     await supabase.auth.signOut();
   }, []);
+
+  // Re-check verification whenever the auth session identity changes.
+  useEffect(() => {
+    if (!session) {
+      setAccessCodeVerified(false);
+      return;
+    }
+    void refreshAccessCode();
+  }, [session?.access_token, session, refreshAccessCode]);
 
   const primaryRole: AppRole | null = roles.includes("admin")
     ? "admin"
@@ -153,7 +189,20 @@ export function useAuthState(): AuthState {
                     ? "seo"
                     : null;
 
-  return { loading, session, user, profile, roles, primaryRole, refresh, signOut };
+  return {
+    loading,
+    session,
+    user,
+    profile,
+    roles,
+    primaryRole,
+    accessCodeVerified,
+    accessCodeChecking,
+    refreshAccessCode,
+    markAccessCodeVerified,
+    refresh,
+    signOut,
+  };
 }
 
 export function AuthProvider({ value, children }: { value: AuthState; children: ReactNode }) {
