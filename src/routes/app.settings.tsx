@@ -430,7 +430,7 @@ function UsersTab() {
           <tbody>
             {usersQuery.isLoading && (
               <tr>
-                <td colSpan={6} className="text-center text-muted-foreground py-6">
+                <td colSpan={7} className="text-center text-muted-foreground py-6">
                   Loading...
                 </td>
               </tr>
@@ -444,7 +444,7 @@ function UsersTab() {
             ))}
             {usersQuery.data?.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center text-muted-foreground py-6">
+                <td colSpan={7} className="text-center text-muted-foreground py-6">
                   No users yet.
                 </td>
               </tr>
