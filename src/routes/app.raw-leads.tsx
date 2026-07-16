@@ -1347,7 +1347,7 @@ function Inner() {
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>
                   {isAdmin
-                    ? "Editable by admin — saved prompt syncs to every user in real time."
+                    ? "Editable by admin & sub-admin — saved prompt syncs to every user in real time."
                     : "Prompt is managed by admin. Synced live."}
                 </span>
                 {isAdmin && (
