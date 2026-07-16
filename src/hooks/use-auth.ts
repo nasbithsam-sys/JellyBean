@@ -38,6 +38,10 @@ export interface AuthState {
   profile: AuthProfile | null;
   roles: AppRole[];
   primaryRole: AppRole | null;
+  accessCodeVerified: boolean;
+  accessCodeChecking: boolean;
+  refreshAccessCode: () => Promise<void>;
+  markAccessCodeVerified: () => void;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
