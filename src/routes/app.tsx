@@ -57,6 +57,22 @@ function AuthenticatedLayout() {
     );
   }
 
+  // Second-step: non-admin users must enter the admin-issued 6-digit access code.
+  const isAdmin = auth.roles.includes("admin");
+  if (!isAdmin) {
+    if (auth.accessCodeChecking && !auth.accessCodeVerified) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (!auth.accessCodeVerified) {
+      return <AccessCodeGate auth={auth} />;
+    }
+  }
+
+
   return (
     <AuthProvider value={auth}>
       <AppShell auth={auth}>
