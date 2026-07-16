@@ -863,22 +863,7 @@ export type Database = {
       }
       send_lead_reminder: {
         Args: { _lead_id: string; _message: string }
-        Returns: {
-          created_at: string
-          id: string
-          is_read: boolean
-          lead_id: string
-          message: string
-          read_at: string | null
-          recipient_user_id: string
-          sender_user_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "lead_reminders"
-          isOneToOne: true
-          isSetofReturn: false
-        }
+        Returns: Json
       }
       state_assignment_analytics: {
         Args: { _from?: string; _to?: string }
