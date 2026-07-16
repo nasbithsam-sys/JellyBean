@@ -104,6 +104,9 @@ export function LeadReminderDialog({
               ) : (
                 <Row label="Assigned CS" value={lead.assignee_name ?? "—"} />
               )}
+            </div>
+
+
 
 
             <div className="space-y-1.5">
