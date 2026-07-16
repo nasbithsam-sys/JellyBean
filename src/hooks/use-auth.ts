@@ -61,6 +61,8 @@ export function useAuthState(): AuthState {
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const [accessCodeVerified, setAccessCodeVerified] = useState(false);
+  const [accessCodeChecking, setAccessCodeChecking] = useState(false);
   const latestSessionRef = useRef<Session | null>(null);
 
   const loadProfileAndRoles = useCallback(async (uid: string | undefined) => {
