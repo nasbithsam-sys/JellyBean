@@ -768,3 +768,80 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
+
+function AccessCodeCell({ user, onChange }: { user: UserRow; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [reveal, setReveal] = useState(false);
+
+  if (user.role === "admin") {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  if (!user.access_code) {
+    return <span className="text-xs text-muted-foreground">Not set</span>;
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(user.access_code!);
+      toast.success("Access code copied");
+    } catch {
+      toast.error("Copy failed");
+    }
+  }
+
+  async function regenerate() {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.rpc(
+        "admin_regenerate_access_code" as never,
+        { _user_id: user.user_id } as never,
+      );
+      if (error) throw error;
+      const newCode = typeof data === "string" ? data : String(data);
+      try {
+        await navigator.clipboard.writeText(newCode);
+        toast.success(`New code ${newCode} copied`);
+      } catch {
+        toast.success(`New code: ${newCode}`);
+      }
+      onChange();
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-mono text-sm tabular-nums tracking-[0.2em]">
+        {reveal ? user.access_code : "••••••"}
+      </span>
+      <button
+        type="button"
+        onClick={() => setReveal((v) => !v)}
+        aria-label={reveal ? "Hide code" : "Show code"}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent"
+      >
+        {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+      </button>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label="Copy access code"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent"
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={regenerate}
+        disabled={busy}
+        aria-label="Regenerate access code"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50"
+      >
+        <RefreshCw className={"h-3.5 w-3.5 " + (busy ? "animate-spin" : "")} />
+      </button>
+    </div>
+  );
+}
