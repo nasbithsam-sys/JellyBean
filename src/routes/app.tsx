@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuthState } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { AccessCodeGate } from "@/components/access-code-gate";
 
 export const Route = createFileRoute("/app")({
   component: AuthenticatedLayout,
