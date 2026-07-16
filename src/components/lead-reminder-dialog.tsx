@@ -53,11 +53,19 @@ export function LeadReminderDialog({
     }
     setSending(true);
     try {
-      const { error } = await (
-        supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>
+      const { data, error } = await (
+        supabase.rpc as unknown as (
+          fn: string,
+          args: Record<string, unknown>,
+        ) => Promise<{ data: { mode?: string; recipient_count?: number } | null; error: { message: string } | null }>
       )("send_lead_reminder", { _lead_id: lead.id, _message: trimmed });
       if (error) throw new Error(error.message);
-      toast.success(`Reminder sent to ${lead.assignee_name ?? "assigned CS user"}.`);
+      const count = data?.recipient_count ?? 0;
+      if (lead.is_unassigned) {
+        toast.success(`Reminder sent to ${count} active CS user${count === 1 ? "" : "s"}.`);
+      } else {
+        toast.success(`Reminder sent to ${lead.assignee_name ?? "assigned CS user"}.`);
+      }
       setNote("");
       onOpenChange(false);
     } catch (err) {
@@ -66,6 +74,7 @@ export function LeadReminderDialog({
       setSending(false);
     }
   }
+
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
