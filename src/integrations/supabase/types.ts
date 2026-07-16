@@ -718,6 +718,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_access_codes: {
+        Row: {
+          code: string
+          updated_at: string
+          user_id: string
+          verified_session_id: string | null
+        }
+        Insert: {
+          code: string
+          updated_at?: string
+          user_id: string
+          verified_session_id?: string | null
+        }
+        Update: {
+          code?: string
+          updated_at?: string
+          user_id?: string
+          verified_session_id?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -744,6 +765,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_ensure_access_code: { Args: { _user_id: string }; Returns: string }
+      admin_list_access_codes: {
+        Args: never
+        Returns: {
+          code: string
+          updated_at: string
+          user_id: string
+          verified: boolean
+        }[]
+      }
+      admin_regenerate_access_code: {
+        Args: { _user_id: string }
+        Returns: string
+      }
       check_qualified_lead_phone_duplicates: {
         Args: { _phone_digits: string; _since: string }
         Returns: {
@@ -775,6 +810,7 @@ export type Database = {
       }
       current_user_has_role_text: { Args: { _role: string }; Returns: boolean }
       email_for_username: { Args: { _username: string }; Returns: string }
+      generate_access_code: { Args: never; Returns: string }
       generate_login_otp: { Args: never; Returns: string }
       get_admin_dashboard_stats: { Args: { _today: string }; Returns: Json }
       get_analytics_daily_stats: {
@@ -798,6 +834,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_my_access_verified: { Args: never; Returns: boolean }
       list_state_assignments: {
         Args: never
         Returns: {
@@ -876,6 +913,7 @@ export type Database = {
           total_leads: number
         }[]
       }
+      verify_my_access_code: { Args: { _code: string }; Returns: boolean }
     }
     Enums: {
       app_role:

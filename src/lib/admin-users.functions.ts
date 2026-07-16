@@ -204,5 +204,18 @@ async function createUserInternal(data: z.infer<typeof createUserSchema>) {
     throw new Error(roleErr.message);
   }
 
+  // Generate a personal 6-digit Access Code for non-admin users. Admins log
+  // in directly with email/password and don't use the code screen.
+  if (data.role !== "admin") {
+    const code = String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0");
+    const { error: codeErr } = await supabaseAdmin
+      .from("user_access_codes")
+      .upsert({ user_id: userId, code, verified_session_id: null }, { onConflict: "user_id" });
+    if (codeErr) {
+      // Non-fatal from a create-user standpoint, but surface so admin can retry via regenerate.
+      console.error("[admin-users] Failed to seed access code:", codeErr.message);
+    }
+  }
+
   return { ok: true, userId };
 }
