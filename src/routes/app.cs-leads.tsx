@@ -113,7 +113,14 @@ Forbidden Phrases (do not use in any field):
 - "our schedule"
 - "arrange a visit"`;
 
-export const Route = createFileRoute("/app/cs-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
+export const Route = createFileRoute("/app/cs-leads")({
+  component: Page,
+  pendingComponent: () => <RouteSkeleton />,
+  pendingMs: 200,
+  validateSearch: (search: Record<string, unknown>) => ({
+    leadId: typeof search.leadId === "string" ? search.leadId : undefined,
+  }),
+});
 
 const UNASSIGNED_VALUE = "__unassigned__";
 
