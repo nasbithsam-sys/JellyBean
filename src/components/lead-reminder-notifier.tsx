@@ -123,7 +123,7 @@ export function LeadReminderNotifier() {
       if (error) throw error;
       setQueue((q) => q.slice(1));
       if (nav) {
-        void navigate({ to: "/app/cs-leads" });
+        void navigate({ to: "/app/cs-leads", search: { leadId: current.lead_id } });
       }
     } catch (err) {
       toast.error((err as Error).message || "Could not update reminder");
