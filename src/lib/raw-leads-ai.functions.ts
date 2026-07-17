@@ -108,9 +108,11 @@ function trimForAi(value: string) {
 async function classifyWithOpenAi({
   systemPrompt,
   leads,
+  model,
 }: {
   systemPrompt: string;
   leads: Array<{ id: string; account: string; area: string; postText: string }>;
+  model: string;
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret");
@@ -122,7 +124,7 @@ async function classifyWithOpenAi({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.4-nano",
+      model,
       input: [
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify({ leads }) },
@@ -158,7 +160,7 @@ async function classifyWithOpenAi({
 
   const body = (await response.json()) as OpenAiResponse;
   console.log("[raw-leads-ai] OpenAI response", {
-    model: "gpt-5.4-nano",
+    model,
     status: response.status,
     ok: response.ok,
     leadCount: leads.length,
@@ -170,6 +172,58 @@ async function classifyWithOpenAi({
 
 
   return extractOutputText(body);
+}
+
+const PRIMARY_MODEL = "gpt-5-nano";
+const FALLBACK_MODEL = "gpt-5.4-nano";
+
+// Classify with gpt-5-nano first; retry any leads it couldn't classify
+// (missing from the response) with gpt-5.4-nano as a stronger fallback.
+async function classifyBatchWithFallback({
+  systemPrompt,
+  batch,
+}: {
+  systemPrompt: string;
+  batch: Array<{ rowKey: string; id: string; account: string; area: string; postText: string }>;
+}): Promise<RawLeadAiResult[]> {
+  const primaryText = await classifyWithOpenAi({
+    systemPrompt,
+    model: PRIMARY_MODEL,
+    leads: batch.map(({ id, account, area, postText }) => ({
+      id,
+      account,
+      area,
+      postText: trimForAi(postText),
+    })),
+  });
+  const primaryResults = parseAiResults(
+    primaryText,
+    batch.map((lead) => lead.rowKey),
+  );
+
+  const classifiedKeys = new Set(primaryResults.map((r) => r.row_key));
+  const missing = batch.filter((lead) => !classifiedKeys.has(lead.rowKey));
+  if (missing.length === 0) return primaryResults;
+
+  console.log("[raw-leads-ai] Falling back to", FALLBACK_MODEL, "for", missing.length, "leads");
+  // Re-index for the fallback call so ids are 1..N of the missing subset.
+  const reindexed = missing.map((lead, index) => ({ ...lead, id: String(index + 1) }));
+  const fallbackText = await classifyWithOpenAi({
+    systemPrompt,
+    model: FALLBACK_MODEL,
+    leads: reindexed.map(({ id, account, area, postText }) => ({
+      id,
+      account,
+      area,
+      postText: trimForAi(postText),
+    })),
+  });
+  const fallbackResults = parseAiResults(
+    fallbackText,
+    reindexed.map((lead) => lead.rowKey),
+  );
+
+  return [...primaryResults, ...fallbackResults];
 }
 
 export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
