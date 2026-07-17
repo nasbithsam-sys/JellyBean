@@ -270,21 +270,8 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
     const results: RawLeadAiResult[] = [];
     for (let i = 0; i < leads.length; i += OPENAI_BATCH_SIZE) {
       const batch = leads.slice(i, i + OPENAI_BATCH_SIZE);
-      const outputText = await classifyWithOpenAi({
-        systemPrompt,
-        leads: batch.map(({ id, account, area, postText }) => ({
-          id,
-          account,
-          area,
-          postText: trimForAi(postText),
-        })),
-      });
-      results.push(
-        ...parseAiResults(
-          outputText,
-          batch.map((lead) => lead.rowKey),
-        ),
-      );
+      const batchResults = await classifyBatchWithFallback({ systemPrompt, batch });
+      results.push(...batchResults);
     }
 
     if (results.length === 0) throw new Error("AI returned no usable lead decisions");
