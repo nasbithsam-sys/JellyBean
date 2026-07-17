@@ -283,12 +283,12 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
     // Chunk the .in() lookup — long row_keys can push the PostgREST GET URL
     // past its length limit and surface as a generic "Bad Request".
     const CHUNK = 10;
-    const rows: Array<{ row_key: string; data: unknown }> = [];
+    const rows: Array<{ row_key: string; data: unknown; duplicate_detected: boolean | null }> = [];
     for (let i = 0; i < orderedKeys.length; i += CHUNK) {
       const slice = orderedKeys.slice(i, i + CHUNK);
       const { data: part, error } = await supabaseAdmin
         .from("raw_lead_cache")
-        .select("row_key, data")
+        .select("row_key, data, duplicate_detected")
         .in("row_key", slice);
       if (error) throw new Error(error.message);
       if (part) rows.push(...part);
@@ -305,8 +305,11 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
           account: payload["Account Name"] ?? "",
           area: payload["Account Area"] ?? payload["Sub Area / Neighborhood"] ?? "",
           postText: payload["Post Text"] ?? "",
+          isDuplicate: row?.duplicate_detected === true,
         };
       })
+      // Skip duplicates — no point spending AI credits classifying them.
+      .filter((lead) => !lead.isDuplicate)
       // Posts under 20 chars are too short for reliable AI classification.
       .filter((lead) => lead.postText.trim().length >= 20);
 
