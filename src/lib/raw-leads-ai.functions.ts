@@ -81,12 +81,20 @@ function extractOutputText(response: OpenAiResponse) {
   return parts.join("\n").trim();
 }
 
-function parseAiResults(text: string, rowKeys: string[]): RawLeadAiResult[] {
-  const parsed = JSON.parse(text) as { results?: Array<{ id?: string; lead?: string }> };
+type ParsedAiItem = {
+  row_key: string;
+  lead: LeadDecision;
+  unsure: boolean;
+};
+
+function parseAiResultsWithConfidence(text: string, rowKeys: string[]): ParsedAiItem[] {
+  const parsed = JSON.parse(text) as {
+    results?: Array<{ id?: string; lead?: string; unsure?: boolean }>;
+  };
   const allowedIds = new Set(rowKeys.map((_, index) => String(index + 1)));
 
   return (parsed.results ?? [])
-    .filter((item): item is { id: string; lead: LeadDecision } => {
+    .filter((item): item is { id: string; lead: LeadDecision; unsure?: boolean } => {
       return (
         typeof item.id === "string" &&
         allowedIds.has(item.id) &&
@@ -96,6 +104,7 @@ function parseAiResults(text: string, rowKeys: string[]): RawLeadAiResult[] {
     .map((item) => ({
       row_key: rowKeys[Number(item.id) - 1],
       lead: item.lead,
+      unsure: item.unsure === true,
     }));
 }
 
@@ -105,17 +114,35 @@ function trimForAi(value: string) {
   return `${trimmed.slice(0, MAX_POST_TEXT_CHARS)}...`;
 }
 
+const UNSURE_INSTRUCTION = `
+For every lead, also include an "unsure" boolean:
+- Set "unsure": true when the post is ambiguous, context is unclear, or you are not confident about YES vs NO.
+- Set "unsure": false when the post clearly matches the YES or NO definition.
+Always still pick your best guess for "lead" (yes/no) even when unsure.`;
+
 async function classifyWithOpenAi({
   systemPrompt,
   leads,
   model,
+  includeUnsure,
 }: {
   systemPrompt: string;
   leads: Array<{ id: string; account: string; area: string; postText: string }>;
   model: string;
+  includeUnsure: boolean;
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret");
+
+  const itemProperties: Record<string, unknown> = {
+    id: { type: "string" },
+    lead: { type: "string", enum: ["yes", "no"] },
+  };
+  const itemRequired = ["id", "lead"];
+  if (includeUnsure) {
+    itemProperties.unsure = { type: "boolean" };
+    itemRequired.push("unsure");
+  }
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -126,7 +153,10 @@ async function classifyWithOpenAi({
     body: JSON.stringify({
       model,
       input: [
-        { role: "system", content: systemPrompt },
+        {
+          role: "system",
+          content: includeUnsure ? `${systemPrompt}\n${UNSURE_INSTRUCTION}` : systemPrompt,
+        },
         { role: "user", content: JSON.stringify({ leads }) },
       ],
       text: {
@@ -143,11 +173,8 @@ async function classifyWithOpenAi({
                 items: {
                   type: "object",
                   additionalProperties: false,
-                  properties: {
-                    id: { type: "string" },
-                    lead: { type: "string", enum: ["yes", "no"] },
-                  },
-                  required: ["id", "lead"],
+                  properties: itemProperties,
+                  required: itemRequired,
                 },
               },
             },
@@ -170,15 +197,15 @@ async function classifyWithOpenAi({
     throw new Error(body.error?.message ?? `OpenAI request failed (${response.status})`);
   }
 
-
   return extractOutputText(body);
 }
 
 const PRIMARY_MODEL = "gpt-5-nano";
 const FALLBACK_MODEL = "gpt-5.4-nano";
 
-// Classify with gpt-5-nano first; retry any leads it couldn't classify
-// (missing from the response) with gpt-5.4-nano as a stronger fallback.
+// Classify with gpt-5-nano first. Leads it flags as "unsure" (unclear
+// context / low confidence) or fails to return at all are re-classified
+// with gpt-5.4-nano.
 async function classifyBatchWithFallback({
   systemPrompt,
   batch,
@@ -189,6 +216,7 @@ async function classifyBatchWithFallback({
   const primaryText = await classifyWithOpenAi({
     systemPrompt,
     model: PRIMARY_MODEL,
+    includeUnsure: true,
     leads: batch.map(({ id, account, area, postText }) => ({
       id,
       account,
@@ -196,21 +224,39 @@ async function classifyBatchWithFallback({
       postText: trimForAi(postText),
     })),
   });
-  const primaryResults = parseAiResults(
+  const primaryResults = parseAiResultsWithConfidence(
     primaryText,
     batch.map((lead) => lead.rowKey),
   );
 
-  const classifiedKeys = new Set(primaryResults.map((r) => r.row_key));
-  const missing = batch.filter((lead) => !classifiedKeys.has(lead.rowKey));
-  if (missing.length === 0) return primaryResults;
+  const confidentByKey = new Map<string, RawLeadAiResult>();
+  const unsureKeys = new Set<string>();
+  for (const r of primaryResults) {
+    if (r.unsure) unsureKeys.add(r.row_key);
+    else confidentByKey.set(r.row_key, { row_key: r.row_key, lead: r.lead });
+  }
 
-  console.log("[raw-leads-ai] Falling back to", FALLBACK_MODEL, "for", missing.length, "leads");
-  // Re-index for the fallback call so ids are 1..N of the missing subset.
-  const reindexed = missing.map((lead, index) => ({ ...lead, id: String(index + 1) }));
+  const needsFallback = batch.filter(
+    (lead) => !confidentByKey.has(lead.rowKey), // unsure OR missing
+  );
+  if (needsFallback.length === 0) return Array.from(confidentByKey.values());
+
+  console.log(
+    "[raw-leads-ai] Falling back to",
+    FALLBACK_MODEL,
+    "for",
+    needsFallback.length,
+    "leads (unsure:",
+    unsureKeys.size,
+    ", missing:",
+    needsFallback.length - unsureKeys.size,
+    ")",
+  );
+  const reindexed = needsFallback.map((lead, index) => ({ ...lead, id: String(index + 1) }));
   const fallbackText = await classifyWithOpenAi({
     systemPrompt,
     model: FALLBACK_MODEL,
+    includeUnsure: false,
     leads: reindexed.map(({ id, account, area, postText }) => ({
       id,
       account,
@@ -218,12 +264,12 @@ async function classifyBatchWithFallback({
       postText: trimForAi(postText),
     })),
   });
-  const fallbackResults = parseAiResults(
+  const fallbackResults = parseAiResultsWithConfidence(
     fallbackText,
     reindexed.map((lead) => lead.rowKey),
-  );
+  ).map(({ row_key, lead }) => ({ row_key, lead }));
 
-  return [...primaryResults, ...fallbackResults];
+  return [...Array.from(confidentByKey.values()), ...fallbackResults];
 }
 
 export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
