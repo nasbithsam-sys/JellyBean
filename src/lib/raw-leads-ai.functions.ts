@@ -200,12 +200,9 @@ async function classifyWithOpenAi({
   return extractOutputText(body);
 }
 
-const PRIMARY_MODEL = "gpt-5-nano";
-const FALLBACK_MODEL = "gpt-5.4-nano";
+const PRIMARY_MODEL = "gpt-5.4-nano";
 
-// Classify with gpt-5-nano first. Leads it flags as "unsure" (unclear
-// context / low confidence) or fails to return at all are re-classified
-// with gpt-5.4-nano.
+// Classify all leads with gpt-5.4-nano.
 async function classifyBatchWithFallback({
   systemPrompt,
   batch,
@@ -213,10 +210,10 @@ async function classifyBatchWithFallback({
   systemPrompt: string;
   batch: Array<{ rowKey: string; id: string; account: string; area: string; postText: string }>;
 }): Promise<RawLeadAiResult[]> {
-  const primaryText = await classifyWithOpenAi({
+  const text = await classifyWithOpenAi({
     systemPrompt,
     model: PRIMARY_MODEL,
-    includeUnsure: true,
+    includeUnsure: false,
     leads: batch.map(({ id, account, area, postText }) => ({
       id,
       account,
@@ -224,52 +221,10 @@ async function classifyBatchWithFallback({
       postText: trimForAi(postText),
     })),
   });
-  const primaryResults = parseAiResultsWithConfidence(
-    primaryText,
+  return parseAiResultsWithConfidence(
+    text,
     batch.map((lead) => lead.rowKey),
-  );
-
-  const confidentByKey = new Map<string, RawLeadAiResult>();
-  const unsureKeys = new Set<string>();
-  for (const r of primaryResults) {
-    if (r.unsure) unsureKeys.add(r.row_key);
-    else confidentByKey.set(r.row_key, { row_key: r.row_key, lead: r.lead });
-  }
-
-  const needsFallback = batch.filter(
-    (lead) => !confidentByKey.has(lead.rowKey), // unsure OR missing
-  );
-  if (needsFallback.length === 0) return Array.from(confidentByKey.values());
-
-  console.log(
-    "[raw-leads-ai] Falling back to",
-    FALLBACK_MODEL,
-    "for",
-    needsFallback.length,
-    "leads (unsure:",
-    unsureKeys.size,
-    ", missing:",
-    needsFallback.length - unsureKeys.size,
-    ")",
-  );
-  const reindexed = needsFallback.map((lead, index) => ({ ...lead, id: String(index + 1) }));
-  const fallbackText = await classifyWithOpenAi({
-    systemPrompt,
-    model: FALLBACK_MODEL,
-    includeUnsure: false,
-    leads: reindexed.map(({ id, account, area, postText }) => ({
-      id,
-      account,
-      area,
-      postText: trimForAi(postText),
-    })),
-  });
-  const fallbackResults = parseAiResultsWithConfidence(
-    fallbackText,
-    reindexed.map((lead) => lead.rowKey),
   ).map(({ row_key, lead }) => ({ row_key, lead }));
-
-  return [...Array.from(confidentByKey.values()), ...fallbackResults];
 }
 
 export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
