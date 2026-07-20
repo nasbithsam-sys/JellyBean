@@ -272,18 +272,18 @@ export function LeadForm({
       isCheckingBeforeSubmit);
 
   const isDirty =
-    customerName !== (initialValues?.customerName ?? "") ||
-    customerNumber !== (initialValues?.customerNumber ?? "") ||
-    area !== (initialValues?.area ?? "") ||
-    service !== (initialValues?.service ?? "") ||
-    context !== (initialValues?.context ?? "") ||
-    exactCustomerText !== (initialValues?.exactCustomerText ?? "") ||
-    reference !== resolveInitialReference(referenceMode, initialValues?.reference) ||
-    importantValue !== ((initialValues?.isImportant ?? false) ? "yes" : "no") ||
-    isLandline !== (initialValues?.isLandline ?? false) ||
-    files.length > 0 ||
-    existingImages.length !== (initialValues?.images?.length ?? 0) ||
-    JSON.stringify(extraNumbers) !== JSON.stringify(initialValues?.extraNumbers ?? []);
+    customerName !== baseline.customerName ||
+    customerNumber !== baseline.customerNumber ||
+    area !== baseline.area ||
+    service !== baseline.service ||
+    context !== baseline.context ||
+    exactCustomerText !== baseline.exactCustomerText ||
+    reference !== baseline.reference ||
+    importantValue !== baseline.importantValue ||
+    isLandline !== baseline.isLandline ||
+    files.length !== baseline.filesLen ||
+    existingImages.length !== baseline.existingImagesLen ||
+    JSON.stringify(extraNumbers) !== JSON.stringify(baseline.extraNumbers);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
