@@ -628,6 +628,23 @@ export function LeadForm({
     setSavingDraft(true);
     try {
       await onSaveDraft(payload);
+      // Draft persisted successfully — snapshot the current form state as the
+      // new clean baseline so closing the modal doesn't warn about "unsaved"
+      // changes that were, in fact, just saved.
+      setBaseline({
+        customerName: payload.customerName,
+        customerNumber: payload.customerNumber,
+        area: payload.area,
+        service: payload.service,
+        context: payload.context,
+        exactCustomerText: payload.exactCustomerText,
+        reference: payload.reference,
+        importantValue: payload.isImportant ? "yes" : "no",
+        isLandline: payload.isLandline,
+        extraNumbers: payload.extraNumbers,
+        existingImagesLen: existingImages.length,
+        filesLen: files.length,
+      });
     } finally {
       setSavingDraft(false);
     }
