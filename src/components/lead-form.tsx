@@ -320,26 +320,72 @@ export function LeadForm({
 
     setIsCompressing(true);
     setCompressionProgress(0);
-    const toastId = toast.loading("Compressing video...");
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    let cancelled = false;
+    let canceling = false;
+
+    const toastId = toast.loading("Compressing video...", { duration: Infinity });
     toastIdRef.current = toastId;
 
-    abortControllerRef.current = new AbortController();
+    const renderToast = (progress: number) => {
+      toast.loading(
+        <div className="flex w-full items-center justify-between gap-3">
+          <span>
+            {canceling
+              ? "Canceling..."
+              : progress > 0
+                ? `Compressing video (${progress}%)...`
+                : "Compressing video..."}
+          </span>
+          <button
+            type="button"
+            aria-label="Cancel video compression"
+            disabled={canceling}
+            onClick={() => {
+              if (cancelled) return;
+              cancelled = true;
+              canceling = true;
+              try {
+                controller.abort();
+              } catch (e) {
+                console.error("Abort error:", e);
+              }
+              renderToast(progress);
+              setTimeout(() => toast.dismiss(toastId), 250);
+            }}
+            className="rounded-md p-1 text-muted-foreground opacity-70 transition hover:bg-muted hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>,
+        { id: toastId, duration: Infinity },
+      );
+    };
+
+    renderToast(0);
 
     try {
       const compressedFile = await compressVideoInBrowser(
         file,
         (progress) => {
+          if (cancelled) return;
           setCompressionProgress(progress);
-          toast.loading(`Compressing video (${progress}%)...`, { id: toastId });
+          renderToast(progress);
         },
-        abortControllerRef.current.signal
+        controller.signal,
       );
+
+      if (cancelled || controller.signal.aborted) {
+        throw new Error("AbortError");
+      }
 
       setFiles((prev) => [...prev, compressedFile]);
       toast.success("Video compressed and added!", { id: toastId });
     } catch (err) {
-      if (err instanceof Error && err.message === "AbortError") {
-        toast.error("Compression cancelled.", { id: toastId });
+      if (cancelled || (err instanceof Error && err.message === "AbortError")) {
+        toast.dismiss(toastId);
         return;
       }
       console.error("Video compression error:", err);
