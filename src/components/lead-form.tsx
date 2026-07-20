@@ -174,6 +174,40 @@ export function LeadForm({
   const pendingSubmitValuesRef = useRef<LeadFormValues | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
 
+  // Baseline snapshot representing the last "clean" state (initial values, or
+  // the values that were just persisted via Save Draft). isDirty compares
+  // against this baseline so that saving a draft clears the unsaved-changes
+  // warning without weakening it for genuine edits made afterwards.
+  type FormBaseline = {
+    customerName: string;
+    customerNumber: string;
+    area: string;
+    service: string;
+    context: string;
+    exactCustomerText: string;
+    reference: string;
+    importantValue: string;
+    isLandline: boolean;
+    extraNumbers: string[];
+    existingImagesLen: number;
+    filesLen: number;
+  };
+  const buildInitialBaseline = (): FormBaseline => ({
+    customerName: initialValues?.customerName ?? "",
+    customerNumber: initialValues?.customerNumber ?? "",
+    area: initialValues?.area ?? "",
+    service: initialValues?.service ?? "",
+    context: initialValues?.context ?? "",
+    exactCustomerText: initialValues?.exactCustomerText ?? "",
+    reference: resolveInitialReference(referenceMode, initialValues?.reference),
+    importantValue: (initialValues?.isImportant ?? false) ? "yes" : "no",
+    isLandline: initialValues?.isLandline ?? false,
+    extraNumbers: initialValues?.extraNumbers ?? [],
+    existingImagesLen: initialValues?.images?.length ?? 0,
+    filesLen: 0,
+  });
+  const [baseline, setBaseline] = useState<FormBaseline>(() => buildInitialBaseline());
+
 
   useEffect(() => {
     return () => {
@@ -238,18 +272,18 @@ export function LeadForm({
       isCheckingBeforeSubmit);
 
   const isDirty =
-    customerName !== (initialValues?.customerName ?? "") ||
-    customerNumber !== (initialValues?.customerNumber ?? "") ||
-    area !== (initialValues?.area ?? "") ||
-    service !== (initialValues?.service ?? "") ||
-    context !== (initialValues?.context ?? "") ||
-    exactCustomerText !== (initialValues?.exactCustomerText ?? "") ||
-    reference !== resolveInitialReference(referenceMode, initialValues?.reference) ||
-    importantValue !== ((initialValues?.isImportant ?? false) ? "yes" : "no") ||
-    isLandline !== (initialValues?.isLandline ?? false) ||
-    files.length > 0 ||
-    existingImages.length !== (initialValues?.images?.length ?? 0) ||
-    JSON.stringify(extraNumbers) !== JSON.stringify(initialValues?.extraNumbers ?? []);
+    customerName !== baseline.customerName ||
+    customerNumber !== baseline.customerNumber ||
+    area !== baseline.area ||
+    service !== baseline.service ||
+    context !== baseline.context ||
+    exactCustomerText !== baseline.exactCustomerText ||
+    reference !== baseline.reference ||
+    importantValue !== baseline.importantValue ||
+    isLandline !== baseline.isLandline ||
+    files.length !== baseline.filesLen ||
+    existingImages.length !== baseline.existingImagesLen ||
+    JSON.stringify(extraNumbers) !== JSON.stringify(baseline.extraNumbers);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -594,6 +628,23 @@ export function LeadForm({
     setSavingDraft(true);
     try {
       await onSaveDraft(payload);
+      // Draft persisted successfully — snapshot the current form state as the
+      // new clean baseline so closing the modal doesn't warn about "unsaved"
+      // changes that were, in fact, just saved.
+      setBaseline({
+        customerName: payload.customerName,
+        customerNumber: payload.customerNumber,
+        area: payload.area,
+        service: payload.service,
+        context: payload.context,
+        exactCustomerText: payload.exactCustomerText,
+        reference: payload.reference,
+        importantValue: payload.isImportant ? "yes" : "no",
+        isLandline: payload.isLandline,
+        extraNumbers: payload.extraNumbers ?? [],
+        existingImagesLen: existingImages.length,
+        filesLen: files.length,
+      });
     } finally {
       setSavingDraft(false);
     }
