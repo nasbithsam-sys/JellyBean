@@ -367,7 +367,7 @@ export function LeadForm({
 
     const renderToast = (progress: number) => {
       toast.loading(
-        <div className="relative w-full flex items-center pr-10">
+        <div className="relative flex items-center w-[300px] pr-9">
           <span className="flex-1 min-w-0 truncate">
             {state.canceling
               ? "Canceling..."
