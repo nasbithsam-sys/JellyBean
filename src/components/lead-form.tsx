@@ -318,22 +318,58 @@ export function LeadForm({
       }
     }
 
+    // Dismiss any lingering previous success toast before starting a new job
+    if (toastIdRef.current) {
+      toast.dismiss(toastIdRef.current);
+      toastIdRef.current = null;
+    }
+
     setIsCompressing(true);
     setCompressionProgress(0);
 
+    // Abort any previous in-flight compression
+    if (abortControllerRef.current) {
+      try { abortControllerRef.current.abort(); } catch {}
+    }
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    let cancelled = false;
-    let canceling = false;
+
+    // Stable job id — used to guard against stale async resolutions
+    const jobId = Symbol("compression-job");
+    const state = { cancelled: false, canceling: false };
 
     const toastId = toast.loading("Compressing video...", { duration: Infinity });
     toastIdRef.current = toastId;
 
+    const isActive = () =>
+      !state.cancelled &&
+      !controller.signal.aborted &&
+      abortControllerRef.current === controller;
+
+    const cancelJob = () => {
+      if (state.cancelled) return;
+      state.cancelled = true;
+      state.canceling = true;
+      try { controller.abort(); } catch (e) { console.error("Abort error:", e); }
+      renderToast(0);
+      setTimeout(() => toast.dismiss(toastId), 200);
+      // Reset input immediately so the same file can be reselected
+      if (videoFileRef.current) videoFileRef.current.value = "";
+      setIsCompressing(false);
+      setCompressionProgress(0);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      if (toastIdRef.current === toastId) {
+        toastIdRef.current = null;
+      }
+    };
+
     const renderToast = (progress: number) => {
       toast.loading(
-        <div className="flex w-full items-center justify-between gap-3">
-          <span>
-            {canceling
+        <div className="flex w-full items-center justify-between gap-3 pr-1">
+          <span className="flex-1 min-w-0 truncate">
+            {state.canceling
               ? "Canceling..."
               : progress > 0
                 ? `Compressing video (${progress}%)...`
@@ -342,25 +378,19 @@ export function LeadForm({
           <button
             type="button"
             aria-label="Cancel video compression"
-            disabled={canceling}
-            onClick={() => {
-              if (cancelled) return;
-              cancelled = true;
-              canceling = true;
-              try {
-                controller.abort();
-              } catch (e) {
-                console.error("Abort error:", e);
-              }
-              renderToast(progress);
-              setTimeout(() => toast.dismiss(toastId), 250);
+            disabled={state.canceling}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              cancelJob();
             }}
-            className="rounded-md p-1 text-muted-foreground opacity-70 transition hover:bg-muted hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ pointerEvents: "auto" }}
+            className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-background/80 text-foreground opacity-100 shadow-sm transition hover:bg-destructive hover:text-destructive-foreground hover:border-destructive focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" strokeWidth={2.5} />
           </button>
         </div>,
-        { id: toastId, duration: Infinity },
+        { id: toastId, duration: Infinity, dismissible: false },
       );
     };
 
@@ -370,32 +400,39 @@ export function LeadForm({
       const compressedFile = await compressVideoInBrowser(
         file,
         (progress) => {
-          if (cancelled) return;
+          if (!isActive()) return;
           setCompressionProgress(progress);
           renderToast(progress);
         },
         controller.signal,
       );
 
-      if (cancelled || controller.signal.aborted) {
+      if (!isActive()) {
         throw new Error("AbortError");
       }
 
       setFiles((prev) => [...prev, compressedFile]);
-      toast.success("Video compressed and added!", { id: toastId });
+      toast.success("Video compressed and added!", { id: toastId, duration: 3500 });
+      // Toast now owns its own auto-dismiss; drop our ref so future jobs don't dismiss it early via cleanup
+      toastIdRef.current = null;
     } catch (err) {
-      if (cancelled || (err instanceof Error && err.message === "AbortError")) {
+      if (state.cancelled || (err instanceof Error && err.message === "AbortError")) {
         toast.dismiss(toastId);
         return;
       }
       console.error("Video compression error:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-      toast.error(`Compression failed: ${errorMessage}`, { id: toastId });
-    } finally {
-      setIsCompressing(false);
-      setCompressionProgress(0);
-      abortControllerRef.current = null;
+      toast.error(`Compression failed: ${errorMessage}`, { id: toastId, duration: 5000 });
       toastIdRef.current = null;
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      // Only reset compression UI state if this job is still the active one
+      if (jobId && !state.cancelled) {
+        setIsCompressing(false);
+        setCompressionProgress(0);
+      }
       if (videoFileRef.current) videoFileRef.current.value = "";
     }
   }
