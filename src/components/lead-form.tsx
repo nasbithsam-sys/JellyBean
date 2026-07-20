@@ -174,6 +174,40 @@ export function LeadForm({
   const pendingSubmitValuesRef = useRef<LeadFormValues | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
 
+  // Baseline snapshot representing the last "clean" state (initial values, or
+  // the values that were just persisted via Save Draft). isDirty compares
+  // against this baseline so that saving a draft clears the unsaved-changes
+  // warning without weakening it for genuine edits made afterwards.
+  type FormBaseline = {
+    customerName: string;
+    customerNumber: string;
+    area: string;
+    service: string;
+    context: string;
+    exactCustomerText: string;
+    reference: string;
+    importantValue: string;
+    isLandline: boolean;
+    extraNumbers: string[];
+    existingImagesLen: number;
+    filesLen: number;
+  };
+  const buildInitialBaseline = (): FormBaseline => ({
+    customerName: initialValues?.customerName ?? "",
+    customerNumber: initialValues?.customerNumber ?? "",
+    area: initialValues?.area ?? "",
+    service: initialValues?.service ?? "",
+    context: initialValues?.context ?? "",
+    exactCustomerText: initialValues?.exactCustomerText ?? "",
+    reference: resolveInitialReference(referenceMode, initialValues?.reference),
+    importantValue: (initialValues?.isImportant ?? false) ? "yes" : "no",
+    isLandline: initialValues?.isLandline ?? false,
+    extraNumbers: initialValues?.extraNumbers ?? [],
+    existingImagesLen: initialValues?.images?.length ?? 0,
+    filesLen: 0,
+  });
+  const [baseline, setBaseline] = useState<FormBaseline>(() => buildInitialBaseline());
+
 
   useEffect(() => {
     return () => {
