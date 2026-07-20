@@ -641,7 +641,7 @@ export function LeadForm({
         reference: payload.reference,
         importantValue: payload.isImportant ? "yes" : "no",
         isLandline: payload.isLandline,
-        extraNumbers: payload.extraNumbers,
+        extraNumbers: payload.extraNumbers ?? [],
         existingImagesLen: existingImages.length,
         filesLen: files.length,
       });
