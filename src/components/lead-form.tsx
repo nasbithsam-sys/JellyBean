@@ -367,7 +367,7 @@ export function LeadForm({
 
     const renderToast = (progress: number) => {
       toast.loading(
-        <div className="flex w-full items-center justify-between gap-3 pr-1">
+        <div className="relative w-full flex items-center pr-10">
           <span className="flex-1 min-w-0 truncate">
             {state.canceling
               ? "Canceling..."
@@ -385,7 +385,7 @@ export function LeadForm({
               cancelJob();
             }}
             style={{ pointerEvents: "auto" }}
-            className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-background/80 text-foreground opacity-100 shadow-sm transition hover:bg-destructive hover:text-destructive-foreground hover:border-destructive focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="absolute right-0 top-1/2 -translate-y-1/2 shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-background/80 text-foreground opacity-100 shadow-sm transition hover:bg-destructive hover:text-destructive-foreground hover:border-destructive focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X className="h-4 w-4" strokeWidth={2.5} />
           </button>
