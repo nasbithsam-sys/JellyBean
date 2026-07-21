@@ -1266,9 +1266,10 @@ function Inner() {
                   if (error) throw error;
                 }
                 qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
-                toast.success(
-                  `Moved ${targets.length} duplicate lead${targets.length === 1 ? "" : "s"} to Duplicate`,
-                );
+                const msg = `Moved ${targets.length} duplicate lead${targets.length === 1 ? "" : "s"} to Duplicate`;
+                toast.success(msg);
+                broadcastBulkMove(msg);
+
               } catch (e) {
                 toast.error(friendlyError(e));
                 cacheQuery.refetch();
