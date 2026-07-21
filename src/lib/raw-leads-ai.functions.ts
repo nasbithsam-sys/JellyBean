@@ -4,17 +4,40 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { logActivity } from "@/lib/activity-log";
 
-// FROZEN PROMPT — do not edit. Approved home-repair lead filter.
-export const FROZEN_LEAD_PROMPT = `Home repair lead filter.
+// FROZEN PROMPT — batch-aware default used when no saved CRM prompt is available.
+export const FROZEN_LEAD_PROMPT = `You classify each item in the \`leads\` array independently as a residential home-service lead.
 
-Mark only YES or NO. Do not output anything else.
+For every input ID, return a \`yes\` or \`no\` decision using the required response schema.
 
-YES = person is asking for any home/property repair, install, maintenance, handyman, cleaning, moving, junk removal, pest, painting, plumbing, electrical, flooring, drywall, garage door, fence, concrete, appliance, sprinkler, pool/spa, hot tub service, or any recommendation for home service.
+YES means the author currently needs, wants, or is seeking someone to perform an included service at a home or residential property.
 
-NO = selling, garage sale, job search, ad, review, event, lost/found, general talk, not asking for home service, someone promoting their own services, cooking, food, meal prep, catering, nails, salon, grooming, nanny, babysitting, baby-sitting, daycare, child care, pet care, pet sitting, dog walking, animal parenting, or animal-related service, or unclear post, or asking only advice/cost/experience, or not enough information to confidently mark YES.`;
+YES includes:
+- Hiring or looking for a provider
+- Asking for a recommendation, referral, estimate, or quote
+- Describing a current home problem that normally requires professional help
+- Repair, diagnosis, installation, replacement, maintenance, improvement, remodeling, moving, junk removal, hauling, or heavy one-time cleanup
+
+Included services include handyman, plumbing, electrical, HVAC, roofing, gutters, flooring, drywall, painting, doors, windows, garage doors, fences, concrete, appliances, sprinklers, pools, remodeling, moving, junk removal, pest control, locksmith, tree removal or trimming, pressure washing, storm cleanup, hoarder cleanup, estate cleanout, and similar residential work.
+
+NO means:
+- The author is advertising or offering their own services
+- The service has already been completed and no additional work is requested
+- The author only wants DIY advice, products, supplies, moving boxes, or a disposal location
+- The requested service is routine house cleaning, cooking, catering, beauty, child care, pet care, lawn mowing, routine landscaping, car repair, employment, rentals, events, or unrelated discussion
+
+Important:
+- Classify the author's intent, not isolated keywords.
+- A current broken or malfunctioning home item is YES even without the words "hire," "recommend," or "looking for."
+- "My AC stopped cooling" is YES.
+- "I repair AC systems—call me" is NO.
+- "I need movers" is YES.
+- "I need moving boxes" is NO.
+- If a post clearly contains both qualifying and unrelated requests, choose YES.
+- When a post may reasonably be a qualifying residential-service need, choose YES.
+- Do not allow one post in the batch to influence another post.`;
 
 const analyzeInputSchema = z.object({
-  // Accepted for backward-compat but ignored — system prompt is frozen.
+  // Accepted for backward-compat; if omitted the frozen default is used.
   prompt: z.string().optional(),
   rowKeys: z.array(z.string().min(1)).min(1).max(50),
 });
@@ -26,10 +49,13 @@ type RawLeadAiResult = {
   lead: LeadDecision;
 };
 
-const OPENAI_BATCH_SIZE = 50;
+// Nano models handle small batches more reliably. 10 keeps id-mapping tight.
+const OPENAI_BATCH_SIZE = 10;
 const MAX_POST_TEXT_CHARS = 1500;
+const PRIMARY_MODEL = "gpt-5.4-nano";
 
 type OpenAiResponse = {
+  id?: string;
   output_text?: string;
   output?: Array<{
     content?: Array<{
@@ -81,68 +107,67 @@ function extractOutputText(response: OpenAiResponse) {
   return parts.join("\n").trim();
 }
 
-type ParsedAiItem = {
-  row_key: string;
-  lead: LeadDecision;
-  unsure: boolean;
-};
-
-function parseAiResultsWithConfidence(text: string, rowKeys: string[]): ParsedAiItem[] {
-  const parsed = JSON.parse(text) as {
-    results?: Array<{ id?: string; lead?: string; unsure?: boolean }>;
-  };
-  const allowedIds = new Set(rowKeys.map((_, index) => String(index + 1)));
-
-  return (parsed.results ?? [])
-    .filter((item): item is { id: string; lead: LeadDecision; unsure?: boolean } => {
-      return (
-        typeof item.id === "string" &&
-        allowedIds.has(item.id) &&
-        (item.lead === "yes" || item.lead === "no")
-      );
-    })
-    .map((item) => ({
-      row_key: rowKeys[Number(item.id) - 1],
-      lead: item.lead,
-      unsure: item.unsure === true,
-    }));
-}
-
 function trimForAi(value: string) {
   const trimmed = value.trim();
   if (trimmed.length <= MAX_POST_TEXT_CHARS) return trimmed;
   return `${trimmed.slice(0, MAX_POST_TEXT_CHARS)}...`;
 }
 
-const UNSURE_INSTRUCTION = `
-For every lead, also include an "unsure" boolean:
-- Set "unsure": true when the post is ambiguous, context is unclear, or you are not confident about YES vs NO.
-- Set "unsure": false when the post clearly matches the YES or NO definition.
-Always still pick your best guess for "lead" (yes/no) even when unsure.`;
+// Strict parser + completeness validator. Throws on any anomaly rather than
+// silently dropping a lead or defaulting a missing result to "no".
+export function parseAndValidateAiResults(
+  text: string,
+  rowKeys: string[],
+): RawLeadAiResult[] {
+  let parsed: { results?: Array<{ id?: unknown; lead?: unknown }> };
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`AI response is not valid JSON: ${(e as Error).message}`);
+  }
+
+  const results = parsed.results;
+  if (!Array.isArray(results)) {
+    throw new Error("AI response missing 'results' array");
+  }
+
+  const expectedIds = new Set(rowKeys.map((_, i) => String(i + 1)));
+  const seen = new Set<string>();
+  const out: RawLeadAiResult[] = [];
+
+  for (const item of results) {
+    if (typeof item.id !== "string" || !expectedIds.has(item.id)) {
+      throw new Error(`AI returned unexpected or missing id: ${JSON.stringify(item.id)}`);
+    }
+    if (seen.has(item.id)) {
+      throw new Error(`AI returned duplicate id: ${item.id}`);
+    }
+    if (item.lead !== "yes" && item.lead !== "no") {
+      throw new Error(`AI returned invalid decision for id ${item.id}: ${JSON.stringify(item.lead)}`);
+    }
+    seen.add(item.id);
+    out.push({ row_key: rowKeys[Number(item.id) - 1], lead: item.lead });
+  }
+
+  if (seen.size !== rowKeys.length) {
+    const missing = [...expectedIds].filter((id) => !seen.has(id));
+    throw new Error(`AI response incomplete — missing ids: ${missing.join(", ")}`);
+  }
+
+  return out;
+}
 
 async function classifyWithOpenAi({
   systemPrompt,
   leads,
   model,
-  includeUnsure,
 }: {
   systemPrompt: string;
-  leads: Array<{ id: string; account: string; area: string; postText: string }>;
+  leads: Array<{ id: string; postText: string }>;
   model: string;
-  includeUnsure: boolean;
 }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret");
-
-  const itemProperties: Record<string, unknown> = {
-    id: { type: "string" },
-    lead: { type: "string", enum: ["yes", "no"] },
-  };
-  const itemRequired = ["id", "lead"];
-  if (includeUnsure) {
-    itemProperties.unsure = { type: "boolean" };
-    itemRequired.push("unsure");
-  }
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -152,11 +177,9 @@ async function classifyWithOpenAi({
     },
     body: JSON.stringify({
       model,
+      reasoning: { effort: "medium" },
       input: [
-        {
-          role: "system",
-          content: includeUnsure ? `${systemPrompt}\n${UNSURE_INSTRUCTION}` : systemPrompt,
-        },
+        { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify({ leads }) },
       ],
       text: {
@@ -173,8 +196,11 @@ async function classifyWithOpenAi({
                 items: {
                   type: "object",
                   additionalProperties: false,
-                  properties: itemProperties,
-                  required: itemRequired,
+                  properties: {
+                    id: { type: "string" },
+                    lead: { type: "string", enum: ["yes", "no"] },
+                  },
+                  required: ["id", "lead"],
                 },
               },
             },
@@ -186,13 +212,20 @@ async function classifyWithOpenAi({
   });
 
   const body = (await response.json()) as OpenAiResponse;
+  const openaiRequestId =
+    response.headers.get("x-request-id") ?? response.headers.get("openai-request-id") ?? null;
+
   console.log("[raw-leads-ai] OpenAI response", {
     model,
     status: response.status,
     ok: response.ok,
-    leadCount: leads.length,
-    error: body.error?.message,
+    batchSize: leads.length,
+    requestedCount: leads.length,
+    openaiResponseId: body.id ?? null,
+    openaiRequestId,
+    error: body.error?.message ?? null,
   });
+
   if (!response.ok) {
     throw new Error(body.error?.message ?? `OpenAI request failed (${response.status})`);
   }
@@ -200,31 +233,26 @@ async function classifyWithOpenAi({
   return extractOutputText(body);
 }
 
-const PRIMARY_MODEL = "gpt-5.4-nano";
-
-// Classify all leads with gpt-5.4-nano.
-async function classifyBatchWithFallback({
+async function classifyBatch({
   systemPrompt,
   batch,
 }: {
   systemPrompt: string;
-  batch: Array<{ rowKey: string; id: string; account: string; area: string; postText: string }>;
+  batch: Array<{ rowKey: string; id: string; postText: string }>;
 }): Promise<RawLeadAiResult[]> {
   const text = await classifyWithOpenAi({
     systemPrompt,
     model: PRIMARY_MODEL,
-    includeUnsure: false,
-    leads: batch.map(({ id, account, area, postText }) => ({
-      id,
-      account,
-      area,
-      postText: trimForAi(postText),
-    })),
+    leads: batch.map(({ id, postText }) => ({ id, postText: trimForAi(postText) })),
   });
-  return parseAiResultsWithConfidence(
-    text,
-    batch.map((lead) => lead.rowKey),
-  ).map(({ row_key, lead }) => ({ row_key, lead }));
+  const rowKeys = batch.map((lead) => lead.rowKey);
+  const results = parseAndValidateAiResults(text, rowKeys);
+  console.log("[raw-leads-ai] batch validated", {
+    requested: batch.length,
+    returned: results.length,
+    complete: results.length === batch.length,
+  });
+  return results;
 }
 
 export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
@@ -251,14 +279,11 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
 
     const byKey = new Map(rows.map((row) => [row.row_key, row]));
     const leads = orderedKeys
-      .map((rowKey, index) => {
+      .map((rowKey) => {
         const row = byKey.get(rowKey);
         const payload = (row?.data ?? {}) as Record<string, string | null | undefined>;
         return {
           rowKey,
-          id: String(index + 1),
-          account: payload["Account Name"] ?? "",
-          area: payload["Account Area"] ?? payload["Sub Area / Neighborhood"] ?? "",
           postText: payload["Post Text"] ?? "",
           isDuplicate: row?.duplicate_detected === true,
         };
@@ -273,18 +298,19 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
     const systemPrompt = data.prompt?.trim() || FROZEN_LEAD_PROMPT;
     const results: RawLeadAiResult[] = [];
     for (let i = 0; i < leads.length; i += OPENAI_BATCH_SIZE) {
-      const batch = leads.slice(i, i + OPENAI_BATCH_SIZE);
-      const batchResults = await classifyBatchWithFallback({ systemPrompt, batch });
+      const slice = leads.slice(i, i + OPENAI_BATCH_SIZE);
+      const batch = slice.map((lead, idx) => ({
+        rowKey: lead.rowKey,
+        id: String(idx + 1),
+        postText: lead.postText,
+      }));
+      const batchResults = await classifyBatch({ systemPrompt, batch });
       results.push(...batchResults);
     }
 
     if (results.length === 0) throw new Error("AI returned no usable lead decisions");
 
-    const leadUpdates = results
-      .filter((result) => result.lead === "yes" || result.lead === "no")
-      .map(({ row_key, lead }) => ({ row_key, lead }));
-
-    for (const { row_key, lead } of leadUpdates) {
+    for (const { row_key, lead } of results) {
       const { error: updateError } = await supabaseAdmin
         .from("raw_lead_cache")
         .update({ lead } as never)
@@ -315,6 +341,7 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
       results,
     };
   });
+
 
 export const checkOpenAiConfig = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
