@@ -604,12 +604,19 @@ function Inner() {
         .select("value")
         .eq("key", "lead_ai_prompt")
         .maybeSingle();
-      if (error) return FROZEN_LEAD_PROMPT;
+      if (error) {
+        // Do not silently swallow — surface so admins know saved prompt didn't load.
+        console.error("[lead-ai-prompt] failed to load saved prompt:", error);
+        toast.error("Could not load saved AI prompt — using built-in default");
+        throw error;
+      }
       const v = data?.value as { text?: string } | null;
       return v?.text || FROZEN_LEAD_PROMPT;
     },
     refetchOnWindowFocus: false,
+    retry: 1,
   });
+
 
   // Sync remote prompt into local state unless user has unsaved edits
   const remotePrompt = promptQuery.data;
