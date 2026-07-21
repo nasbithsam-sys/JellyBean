@@ -52,7 +52,7 @@ type RawLeadAiResult = {
 // Nano models handle small batches more reliably. 10 keeps id-mapping tight.
 const OPENAI_BATCH_SIZE = 10;
 const MAX_POST_TEXT_CHARS = 1500;
-const PRIMARY_MODEL = "gpt-5.4-nano";
+const PRIMARY_MODEL = "gpt-5.4-nano-2026-03-17";
 
 type OpenAiResponse = {
   id?: string;
