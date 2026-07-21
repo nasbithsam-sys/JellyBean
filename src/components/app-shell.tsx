@@ -138,16 +138,12 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
     <div className="crm-app-shell flex h-screen overflow-hidden bg-background text-foreground">
       <aside className="crm-sidebar-shell w-[76px] lg:w-[236px] shrink-0 text-sidebar-foreground flex flex-col h-full">
         <div className="px-3 lg:px-5 pt-5 pb-4">
-          <div className="flex items-center justify-center lg:justify-start gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-sidebar-primary/90 ring-1 ring-white/30 shadow-[0_14px_30px_-16px_color-mix(in_srgb,var(--sidebar-primary)_80%,transparent)] overflow-hidden">
-              <img
-                src={jellybeanLogo}
-                alt="JellyBean logo"
-                width={44}
-                height={44}
-                className="h-8 w-8 object-contain"
-              />
-            </div>
+          <div className="flex items-center justify-center lg:justify-start gap-2.5">
+            <img
+              src={jellybeanLogo}
+              alt="JellyBean"
+              className="h-10 w-10 object-contain shrink-0"
+            />
             <div className="hidden lg:block leading-tight">
               <div className="text-[14px] font-bold tracking-[-0.015em] text-white">
                 JellyBean
