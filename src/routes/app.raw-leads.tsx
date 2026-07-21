@@ -685,6 +685,44 @@ function Inner() {
     return () => window.clearTimeout(timeoutId);
   }, [queryInput]);
 
+  // ── Lightweight cross-user broadcast for bulk moves ────────────────────────
+  // Uses Supabase Realtime broadcast (no DB writes) so every raw-leads viewer
+  // sees a toast + refresh when someone bulk-moves posts. This prevents the
+  // "posts randomly disappeared" confusion.
+  useEffect(() => {
+    const channel = supabase
+      .channel("raw-leads-bulk-moves")
+      .on("broadcast", { event: "bulk-move" }, (payload) => {
+        const data = (payload.payload ?? {}) as {
+          actorId?: string | null;
+          actorName?: string | null;
+          message?: string;
+        };
+        if (!data.message) return;
+        if (data.actorId && data.actorId === currentUserId) return;
+        const who = data.actorName ? ` by ${data.actorName}` : "";
+        toast.info(`${data.message}${who}`);
+        qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+        qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, qc]);
+
+  const broadcastBulkMove = useCallback(
+    (message: string) => {
+      void supabase.channel("raw-leads-bulk-moves").send({
+        type: "broadcast",
+        event: "bulk-move",
+        payload: { actorId: currentUserId, actorName: currentUserName, message },
+      });
+    },
+    [currentUserId, currentUserName],
+  );
+
+
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const cacheQuery = useQuery({
     queryKey: ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter],
