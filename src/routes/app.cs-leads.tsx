@@ -784,7 +784,52 @@ function Inner() {
   });
 
 
-  const totalPages = Math.max(1, Math.ceil((totalCount.data ?? 0) / PAGE_SIZE));
+  // Exact database count of Garage Door leads matching current filters.
+  // Used for the toolbar badge and (when garageDoorOnly is active) pagination.
+  const garageDoorCount = useQuery({
+    queryKey: [
+      "cs_leads",
+      "cs_garage_door_count",
+      { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, areaFilter },
+    ],
+    queryFn: async () => {
+      let q = supabase
+        .from("qualified_leads")
+        .select("id", { count: "exact", head: true });
+
+      if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
+      if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
+
+      if (dbOwner === "__unassigned__") {
+        q = q.is("assigned_to", null);
+      } else if (dbOwner !== null) {
+        q = q.eq("assigned_to", dbOwner);
+      }
+
+      if (dbStatus) q = q.eq("cs_status", dbStatus);
+
+      if (dbSearch) {
+        const s = `%${dbSearch}%`;
+        q = q.or(
+          `customer_name.ilike.${s},customer_number.ilike.${s},customer_number_2.ilike.${s},number_name.ilike.${s},main_area.ilike.${s},sub_area.ilike.${s},pass_it_to.ilike.${s},requirement_1.ilike.${s},requirement_2.ilike.${s}`,
+        );
+      }
+
+      q = q.or(GARAGE_DOOR_OR_CLAUSE);
+
+      const { count, error } = await q;
+      if (error) throw error;
+      return count ?? 0;
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
+  });
+
+  const effectiveTotalCount = garageDoorOnly
+    ? (garageDoorCount.data ?? 0)
+    : (totalCount.data ?? 0);
+  const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / PAGE_SIZE));
 
   const todayStart = useMemo(() => csPipelineTodayStartUtcIso(), []);
   const sentToday = useQuery({
@@ -1139,9 +1184,9 @@ function Inner() {
         >
           <Warehouse className="h-3.5 w-3.5 mr-1.5" />
           Garage Door
-          {garageDoorOnly && typeof totalCount.data === "number" && (
-            <span className="ml-1.5 tabular-nums opacity-90">({totalCount.data})</span>
-          )}
+          <span className="ml-1.5 tabular-nums opacity-90">
+            ({garageDoorCount.data ?? (garageDoorCount.isLoading ? "—" : 0)})
+          </span>
         </Button>
         {(isAdmin || isCs) && (
           <Popover>
@@ -1726,9 +1771,7 @@ function Inner() {
           </Button>
           <span className="text-[12px] text-muted-foreground tabular-nums px-2">
             Page {page} of {totalPages}
-            {totalCount.data != null && (
-              <span className="ml-1 text-[11px]">({totalCount.data} total)</span>
-            )}
+            <span className="ml-1 text-[11px]">({effectiveTotalCount} total)</span>
           </span>
           <Button
             variant="outline"
