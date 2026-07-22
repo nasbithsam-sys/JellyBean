@@ -94,7 +94,7 @@ import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
 // Garage Door filter: match specific phrases (case-insensitive) across
 // service/pass_it_to and lead text fields. Avoids bare "garage" which
 // would incorrectly include garage remodeling/cleaning/flooring leads.
-const GARAGE_DOOR_PATTERNS = ["*garage door*", "*garage opener*", "*overhead door*"];
+const GARAGE_DOOR_PATTERNS = ["%garage door%", "%garage opener%", "%overhead door%"];
 const GARAGE_DOOR_FIELDS = ["service", "pass_it_to", "context", "post_text", "requirement_1", "requirement_2"];
 const GARAGE_DOOR_OR_CLAUSE = GARAGE_DOOR_FIELDS.flatMap((f) =>
   GARAGE_DOOR_PATTERNS.map((p) => `${f}.ilike.${p}`),
