@@ -1184,9 +1184,9 @@ function Inner() {
         >
           <Warehouse className="h-3.5 w-3.5 mr-1.5" />
           Garage Door
-          {garageDoorOnly && typeof totalCount.data === "number" && (
-            <span className="ml-1.5 tabular-nums opacity-90">({totalCount.data})</span>
-          )}
+          <span className="ml-1.5 tabular-nums opacity-90">
+            ({garageDoorCount.data ?? (garageDoorCount.isLoading ? "—" : 0)})
+          </span>
         </Button>
         {(isAdmin || isCs) && (
           <Popover>
