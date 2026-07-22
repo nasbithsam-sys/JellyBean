@@ -734,6 +734,11 @@ function Inner() {
         );
       }
 
+      if (garageDoorOnly) {
+        q = q.or(GARAGE_DOOR_OR_CLAUSE);
+      }
+
+
       const { count, error } = await q;
       if (error) throw error;
       return count ?? 0;
