@@ -87,6 +87,7 @@ import { NumberNameSelect } from "@/components/number-name-select";
 import { STATUS_LABEL, STATUS_TONE } from "@/lib/lead-statuses";
 import { renderCsComposeSuggestion } from "@/lib/cs-compose-template";
 import { rephraseLeadTemplateWithAi } from "@/lib/raw-leads-ai.functions";
+import { SERVICE_CATEGORIES } from "@/data/service-options";
 
 import { cn } from "@/lib/utils";
 import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
@@ -100,6 +101,17 @@ const GARAGE_DOOR_OR_CLAUSE = GARAGE_DOOR_FIELDS.flatMap((f) =>
   GARAGE_DOOR_PATTERNS.map((p) => `${f}.ilike.${p}`),
 ).join(",");
 
+function formatLeadServiceLabel(service: string | null): string | null {
+  if (!service) return null;
+
+  for (const group of SERVICE_CATEGORIES) {
+    if (group.services.some((option) => option === service)) {
+      return `${group.category} / ${service}`;
+    }
+  }
+
+  return service;
+}
 
 export const DEFAULT_REPHRASE_PROMPT = `You are an expert customer service assistant. Your goal is to clean, extract, and normalize three parts of a customer lead request to prepare them for an outbound message.
 
@@ -2014,6 +2026,7 @@ function LeadCard({
     : lead.created_by
       ? "Unknown user"
       : null;
+  const serviceLabel = formatLeadServiceLabel(lead.service);
 
   const [rephrasing, setRephrasing] = useState(false);
   const [selectedTemplateText, setSelectedTemplateText] = useState("");
@@ -2308,11 +2321,11 @@ function LeadCard({
         </div>
       )}
 
-      {lead.service && (
+      {serviceLabel && (
         <div className="mt-2.5 flex items-center gap-2 crm-lead-meta">
           <span className="inline-flex items-center gap-1.5 rounded-md bg-accent/60 px-2.5 py-1 text-[13px] font-semibold text-foreground ring-1 ring-border/70">
             <ArrowRightCircle className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="truncate max-w-[240px]">{lead.service}</span>
+            <span className="truncate max-w-[240px]">{serviceLabel}</span>
           </span>
         </div>
       )}
