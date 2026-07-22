@@ -596,12 +596,12 @@ function Inner() {
   // ── Reset page to 1 whenever any server-side filter changes ──────────────
   useEffect(() => {
     setPage(1);
-  }, [dbDateFrom, dbDateTo, dbOwner, dbStatus, areaFilter, dbSearch]);
+  }, [dbDateFrom, dbDateTo, dbOwner, dbStatus, areaFilter, dbSearch, garageDoorOnly]);
 
   const list = useQuery({
     queryKey: [
       "cs_leads",
-      { page, dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch },
+      { page, dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, garageDoorOnly },
     ],
     queryFn: async () => {
       const from = (page - 1) * PAGE_SIZE;
