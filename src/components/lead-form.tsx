@@ -14,6 +14,7 @@ import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
 import { compressVideoInBrowser, MAX_VIDEO_BYTES, ALLOWED_VIDEO_MIME_TYPES, getVideoDimensions } from "@/lib/video-compressor";
 import { DuplicateLeadDialog, type DuplicateMatchPreview } from "@/components/duplicate-lead-dialog";
 import { useSignedLeadUrls } from "@/lib/lead-attachments";
+import { ServiceCombobox } from "@/components/service-combobox";
 
 const BUCKET = "lead-attachments";
 const MAX_IMAGES = 20;
@@ -684,8 +685,14 @@ export function LeadForm({
             placeholder={areaRequired ? "Required area" : "Optional area"}
           />
         </Field>
-        <Field label="Service" required>
-          <Input value={service} onChange={(e) => setService(e.target.value)} maxLength={120} />
+        <Field label="Service" required htmlFor="lead-service">
+          <ServiceCombobox
+            id="lead-service"
+            value={service}
+            onChange={setService}
+            required
+            maxLength={120}
+          />
         </Field>
       </div>
 
@@ -1058,15 +1065,17 @@ function resolveInitialReference(mode: LeadReferenceMode, provided?: string) {
 function Field({
   label,
   required = false,
+  htmlFor,
   children,
 }: {
   label: string;
   required?: boolean;
+  htmlFor?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="min-w-0">
-      <Label className="block mb-1.5">
+      <Label htmlFor={htmlFor} className="block mb-1.5">
         {label}
         {required ? <span className="text-destructive"> (Required)</span> : null}
       </Label>
