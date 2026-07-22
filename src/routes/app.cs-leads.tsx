@@ -91,6 +91,16 @@ import { rephraseLeadTemplateWithAi } from "@/lib/raw-leads-ai.functions";
 import { cn } from "@/lib/utils";
 import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
 
+// Garage Door filter: match specific phrases (case-insensitive) across
+// service/pass_it_to and lead text fields. Avoids bare "garage" which
+// would incorrectly include garage remodeling/cleaning/flooring leads.
+const GARAGE_DOOR_PATTERNS = ["*garage door*", "*garage opener*", "*overhead door*"];
+const GARAGE_DOOR_FIELDS = ["service", "pass_it_to", "context", "post_text", "requirement_1", "requirement_2"];
+const GARAGE_DOOR_OR_CLAUSE = GARAGE_DOOR_FIELDS.flatMap((f) =>
+  GARAGE_DOOR_PATTERNS.map((p) => `${f}.ilike.${p}`),
+).join(",");
+
+
 export const DEFAULT_REPHRASE_PROMPT = `You are an expert customer service assistant. Your goal is to clean, extract, and normalize three parts of a customer lead request to prepare them for an outbound message.
 
 You must output a JSON object containing exactly three fields:
