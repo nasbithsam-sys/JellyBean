@@ -68,7 +68,16 @@ import {
   checkDuplicatePhone,
   fetchRawLeadCache,
   fetchRawLeadCounts,
+  fetchRawLeadTotal,
 } from "@/lib/raw-leads.functions";
+import {
+  getFirstCursor,
+  getLastCursor,
+  getLastPageSize,
+  getTotalPages,
+  resetRawLeadPageRequest,
+  type RawLeadPageRequest,
+} from "@/lib/raw-leads-pagination";
 
 import { confirmDialog, confirmDiscardUnsaved } from "@/components/confirm-dialog";
 import { saveDraft, deleteDraftForSource, countMyDrafts, type LeadDraft } from "@/lib/lead-drafts";
@@ -138,13 +147,11 @@ type CacheEntry = {
 };
 type RawLeadPage = {
   entries: CacheEntry[];
-  totalCount: number;
   counts: { new: number; forwarded: number; not_found: number; wrong: number; duplicate: number; assigned_myself: number };
   pageSize: number;
-  offset: number;
   hasMore: boolean;
-  nextOffset: number | null;
 };
+type RawLeadTotal = { totalCount: number };
 const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
 const SEARCH_DEBOUNCE_MS = 500;
 type SortDirection = "asc" | "desc";
@@ -565,6 +572,7 @@ function Inner() {
   const analyzeWithAi = useServerFn(analyzeRawLeadsWithAi);
   const fetchRawLeads = useServerFn(fetchRawLeadCache);
   const fetchCounts = useServerFn(fetchRawLeadCounts);
+  const fetchTotal = useServerFn(fetchRawLeadTotal);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const nextdoorWebhookUrl =
@@ -582,7 +590,8 @@ function Inner() {
     key: "posted_at",
     direction: "desc",
   });
-  const [pageIndex, setPageIndex] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageRequest, setPageRequest] = useState<RawLeadPageRequest>(() => resetRawLeadPageRequest());
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [duplicateDetailsFor, setDuplicateDetailsFor] = useState<CacheEntry | null>(null);
@@ -654,13 +663,19 @@ function Inner() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const resetPagination = useCallback(() => {
+    setCurrentPage(1);
+    setPageRequest(resetRawLeadPageRequest());
+  }, []);
+
   const toggleRawLeadSort = useCallback((key: RawLeadSortKey) => {
     setRawLeadSort((current) =>
       current.key === key
         ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
         : { key, direction: key === "posted_at" ? "desc" : "asc" },
     );
-  }, []);
+    resetPagination();
+  }, [resetPagination]);
 
   const toggleSelect = useCallback((key: string) => {
     setSelected((prev) => {
@@ -724,13 +739,51 @@ function Inner() {
 
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
+  const rawLeadFiltersKey = useMemo(
+    () => [tab, query, leadFilter, areaFilter, duplicateFilter] as const,
+    [tab, query, leadFilter, areaFilter, duplicateFilter],
+  );
+
+  const totalQuery = useQuery({
+    queryKey: ["raw-lead-total", ...rawLeadFiltersKey],
+    queryFn: async () =>
+      (await fetchTotal({
+        data: {
+          category: tab,
+          query,
+          leadFilter,
+          areaFilter,
+          duplicateFilter,
+        },
+      })) as RawLeadTotal,
+    placeholderData: keepPreviousData,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+
+  const requestedLastPageSize =
+    pageRequest.direction === "last"
+      ? getLastPageSize(totalQuery.isPlaceholderData ? 0 : totalQuery.data?.totalCount ?? 0, pageSize)
+      : undefined;
+
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter],
+    queryKey: [
+      "raw-lead-cache",
+      ...rawLeadFiltersKey,
+      pageSize,
+      pageRequest.direction,
+      pageRequest.cursor?.captured_at ?? null,
+      pageRequest.cursor?.id ?? null,
+      pageRequest.targetPage,
+      requestedLastPageSize ?? null,
+    ],
     queryFn: async () =>
       (await fetchRawLeads({
         data: {
           limit: pageSize,
-          offset: pageIndex * pageSize,
+          direction: pageRequest.direction,
+          cursor: pageRequest.cursor,
+          expectedLastPageSize: requestedLastPageSize,
           category: tab,
           query,
           leadFilter,
@@ -744,8 +797,17 @@ function Inner() {
   });
 
   const cacheKey = useMemo(
-    () => ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter] as const,
-    [tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter],
+    () => [
+      "raw-lead-cache",
+      ...rawLeadFiltersKey,
+      pageSize,
+      pageRequest.direction,
+      pageRequest.cursor?.captured_at ?? null,
+      pageRequest.cursor?.id ?? null,
+      pageRequest.targetPage,
+      requestedLastPageSize ?? null,
+    ] as const,
+    [pageRequest, pageSize, rawLeadFiltersKey, requestedLastPageSize],
   );
 
   const countsQuery = useQuery({
@@ -764,6 +826,12 @@ function Inner() {
     refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
+
+  useEffect(() => {
+    if (cacheQuery.data && !cacheQuery.isPlaceholderData && !cacheQuery.error) {
+      setCurrentPage(pageRequest.targetPage);
+    }
+  }, [cacheQuery.data, cacheQuery.error, cacheQuery.isPlaceholderData, pageRequest.targetPage]);
 
   const draftCountQuery = useQuery({
     queryKey: ["lead-drafts-count", auth.user?.id, "raw_lead"],
@@ -885,8 +953,9 @@ function Inner() {
     duplicate: 0,
     assigned_myself: 0,
   };
-  const totalCount = cacheQuery.data?.totalCount ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const totalCount = totalQuery.isPlaceholderData ? null : totalQuery.data?.totalCount ?? null;
+  const totalPages = getTotalPages(totalCount, pageSize);
+  const isFinalPage = totalPages !== null && currentPage >= totalPages;
 
   const areaOptions = useMemo(() => {
     const areas = new Set<string>();
@@ -907,6 +976,8 @@ function Inner() {
   }, [actions, currentUserId, entries, rawLeadSort]);
 
   const shownRows = visible;
+  const firstCursor = getFirstCursor(entries);
+  const lastCursor = getLastCursor(entries);
 
   // Only feed AI rows that haven't been classified yet (no sheet Lead value
   // AND no user/AI override), so each click marches through the next 50.
@@ -1091,7 +1162,7 @@ function Inner() {
               key={k}
               onClick={() => {
                 setTab(k);
-                setPageIndex(0);
+                resetPagination();
               }}
               className={cn(
                 "crm-motion px-3 h-8 text-[12px] font-medium rounded-md inline-flex items-center gap-1.5",
@@ -1123,7 +1194,7 @@ function Inner() {
             value={queryInput}
             onChange={(e) => {
               setQueryInput(e.target.value);
-              setPageIndex(0);
+              resetPagination();
             }}
             placeholder="Search…"
             className="h-9 pl-9"
@@ -1134,7 +1205,7 @@ function Inner() {
           value={leadFilter}
           onValueChange={(value) => {
             setLeadFilter(value);
-            setPageIndex(0);
+            resetPagination();
           }}
         >
           <SelectTrigger className="h-9 w-[118px] text-[12px]">
@@ -1151,7 +1222,7 @@ function Inner() {
           value={areaFilter}
           onValueChange={(value) => {
             setAreaFilter(value);
-            setPageIndex(0);
+            resetPagination();
           }}
         >
           <SelectTrigger className="h-9 w-[150px] text-[12px]">
@@ -1171,7 +1242,7 @@ function Inner() {
           value={duplicateFilter}
           onValueChange={(value) => {
             setDuplicateFilter(value as "all" | "duplicates" | "unique");
-            setPageIndex(0);
+            resetPagination();
           }}
         >
           <SelectTrigger className="h-9 w-[140px] text-[12px]">
@@ -1746,9 +1817,12 @@ function Inner() {
 
       <div className="crm-toolbar-panel flex flex-wrap items-center justify-between gap-3">
         <div className="text-[11.5px] text-muted-foreground">
-          {totalCount === 0
+          {totalCount === 0 && !totalQuery.isError
             ? "No leads in this category"
-            : `Showing ${pageIndex * pageSize + 1}-${pageIndex * pageSize + entries.length} of ${totalCount.toLocaleString()}`}
+            : totalCount === null
+              ? `Showing ${entries.length.toLocaleString()} rows`
+              : `Showing ${((currentPage - 1) * pageSize + 1).toLocaleString()}-${((currentPage - 1) * pageSize + entries.length).toLocaleString()} of ${totalCount.toLocaleString()}`}
+          {totalQuery.isError && <> · Count unavailable</>}
           {visible.length !== entries.length && <> · {visible.length} match current filters</>}
         </div>
         <div className="flex items-center gap-2">
@@ -1762,7 +1836,7 @@ function Inner() {
             value={String(pageSize)}
             onValueChange={(v) => {
               setPageSize(Number(v));
-              setPageIndex(0);
+              resetPagination();
             }}
           >
             <SelectTrigger className="h-8 w-[88px] text-[12px]">
@@ -1780,8 +1854,8 @@ function Inner() {
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex(0)}
-            disabled={pageIndex === 0 || cacheQuery.isFetching}
+            onClick={resetPagination}
+            disabled={currentPage === 1 || cacheQuery.isFetching}
           >
             « First
           </Button>
@@ -1789,20 +1863,34 @@ function Inner() {
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex((page) => Math.max(0, page - 1))}
-            disabled={pageIndex === 0 || cacheQuery.isFetching}
+            onClick={() => {
+              if (!firstCursor) return;
+              setPageRequest({
+                direction: "previous",
+                cursor: firstCursor,
+                targetPage: Math.max(1, currentPage - 1),
+              });
+            }}
+            disabled={currentPage === 1 || cacheQuery.isFetching || !firstCursor}
           >
             Previous
           </Button>
           <div className="h-8 inline-flex items-center justify-center rounded-md border border-border bg-card px-3 text-[12px] font-medium tabular-nums">
-            Page {pageIndex + 1} / {totalPages}
+            Page {currentPage} / {totalPages ?? "…"}
           </div>
           <Button
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex((page) => Math.min(totalPages - 1, page + 1))}
-            disabled={pageIndex >= totalPages - 1 || cacheQuery.isFetching}
+            onClick={() => {
+              if (!lastCursor) return;
+              setPageRequest({
+                direction: "next",
+                cursor: lastCursor,
+                targetPage: currentPage + 1,
+              });
+            }}
+            disabled={isFinalPage || cacheQuery.isFetching || !lastCursor || entries.length === 0}
           >
             Next
           </Button>
@@ -1810,8 +1898,15 @@ function Inner() {
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex(totalPages - 1)}
-            disabled={pageIndex >= totalPages - 1 || cacheQuery.isFetching}
+            onClick={() => {
+              if (totalPages === null) return;
+              setPageRequest({
+                direction: "last",
+                cursor: null,
+                targetPage: totalPages,
+              });
+            }}
+            disabled={isFinalPage || cacheQuery.isFetching || totalPages === null}
           >
             Last »
           </Button>
