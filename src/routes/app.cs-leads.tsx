@@ -788,6 +788,7 @@ function Inner() {
   // Used for the toolbar badge and (when garageDoorOnly is active) pagination.
   const garageDoorCount = useQuery({
     queryKey: [
+      "cs_leads",
       "cs_garage_door_count",
       { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, areaFilter },
     ],
