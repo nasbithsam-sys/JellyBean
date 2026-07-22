@@ -1771,9 +1771,7 @@ function Inner() {
           </Button>
           <span className="text-[12px] text-muted-foreground tabular-nums px-2">
             Page {page} of {totalPages}
-            {totalCount.data != null && (
-              <span className="ml-1 text-[11px]">({totalCount.data} total)</span>
-            )}
+            <span className="ml-1 text-[11px]">({effectiveTotalCount} total)</span>
           </span>
           <Button
             variant="outline"
