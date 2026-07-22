@@ -1,3 +1,4 @@
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -15,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Popover, PopoverAnchor } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -489,16 +490,16 @@ function ServiceMultiSelector({
           />
         </div>
       </PopoverAnchor>
-      <PopoverContent
-           side="bottom"
-           align="start"
-           sideOffset={6}
-           collisionPadding={16}
-          onOpenAutoFocus={(event) => event.preventDefault()}
-         className="z-[80] overflow-hidden p-0"
-         style={{ width: contentWidth }}
-   >
-  <ScrollArea className="h-[280px] max-h-[calc(100vh-10rem)]">
+     <PopoverPrimitive.Content
+              side="bottom"
+              align="start"
+              sideOffset={6}
+              collisionPadding={16}
+              onOpenAutoFocus={(event) => event.preventDefault()}
+              className="z-[80] overflow-hidden rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none"
+              style={{ width: contentWidth }}
+            >
+  <div className="h-[280px] max-h-[calc(100vh-10rem)] overflow-y-auto overscroll-contain">
           <div role="listbox" className="p-1">
             {items.length === 0 ? (
               <div className="px-3 py-5 text-center text-sm text-muted-foreground">No matching services</div>
@@ -543,8 +544,8 @@ function ServiceMultiSelector({
               );
             })}
           </div>
-        </ScrollArea>
-      </PopoverContent>
+         </div>
+</PopoverPrimitive.Content>
     </Popover>
   );
 }
