@@ -372,6 +372,7 @@ function Inner() {
 
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [garageDoorOnly, setGarageDoorOnly] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
