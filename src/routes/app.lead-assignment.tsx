@@ -22,6 +22,7 @@ import { Loader2, Plus, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { confirmDialog } from "@/components/confirm-dialog";
 import { listCsTeam } from "@/lib/cs-team.functions";
+import { ServiceAssignmentTab } from "@/components/service-assignment-tab";
 import {
   listStateAssignments,
   upsertStateAssignments,
@@ -61,7 +62,7 @@ function Page() {
     <>
       <PageHeader
         title="Lead Assignment"
-        description="Route incoming leads to CS users by state, and monitor per-state performance."
+        description="Route incoming leads to CS users by state or service, and monitor assignment performance."
       />
       <PageBody>
         <RoleGate allow={["admin", "cs_admin"]} current={primaryRole}>
@@ -73,15 +74,19 @@ function Page() {
 }
 
 function LeadAssignmentInner() {
-  const [tab, setTab] = useState<"assignments" | "analytics">("assignments");
+  const [tab, setTab] = useState<"assignments" | "service-assignment" | "analytics">("assignments");
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
       <TabsList>
         <TabsTrigger value="assignments">State Assignments</TabsTrigger>
+        <TabsTrigger value="service-assignment">Service Assignment</TabsTrigger>
         <TabsTrigger value="analytics">Analytics</TabsTrigger>
       </TabsList>
       <TabsContent value="assignments" className="mt-4">
         <AssignmentsTab />
+      </TabsContent>
+      <TabsContent value="service-assignment" className="mt-4">
+        {tab === "service-assignment" ? <ServiceAssignmentTab /> : null}
       </TabsContent>
       <TabsContent value="analytics" className="mt-4">
         {tab === "analytics" ? <AnalyticsTab /> : null}

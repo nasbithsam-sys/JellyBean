@@ -691,6 +691,36 @@ export type Database = {
         }
         Relationships: []
       }
+      service_assignments: {
+        Row: {
+          assigned_by: string | null
+          assigned_cs_user_id: string
+          created_at: string
+          service_category: string | null
+          service_key: string
+          service_name: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          assigned_cs_user_id: string
+          created_at?: string
+          service_category?: string | null
+          service_key: string
+          service_name: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_by?: string | null
+          assigned_cs_user_id?: string
+          created_at?: string
+          service_category?: string | null
+          service_key?: string
+          service_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       state_assignments: {
         Row: {
           assigned_by: string | null
@@ -847,6 +877,20 @@ export type Database = {
           updated_at: string
         }[]
       }
+      list_service_assignments: {
+        Args: never
+        Returns: {
+          assigned_cs_user_id: string
+          cs_user_email: string
+          cs_user_name: string
+          service_category: string | null
+          service_key: string
+          service_name: string
+          total_leads: number
+          updated_at: string
+        }[]
+      }
+      normalize_lead_service: { Args: { _input: string }; Returns: string }
       normalize_us_state: { Args: { _input: string }; Returns: string }
       raw_lead_cache_category_counts: {
         Args: { _is_admin?: boolean; _user_id: string }
