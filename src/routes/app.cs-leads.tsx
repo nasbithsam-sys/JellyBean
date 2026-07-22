@@ -638,6 +638,10 @@ function Inner() {
         );
       }
 
+      if (garageDoorOnly) {
+        q = q.or(GARAGE_DOOR_OR_CLAUSE);
+      }
+
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as Lead[];
