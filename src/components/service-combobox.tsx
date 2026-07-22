@@ -1,8 +1,8 @@
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Check, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverAnchor } from "@/components/ui/popover";
 import {
   filterServiceCategories,
   isExistingService,
@@ -178,14 +178,19 @@ export function ServiceCombobox({
           ) : null}
         </div>
       </PopoverAnchor>
-      <PopoverContent
-        align="start"
-        sideOffset={6}
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        className="z-[70] max-h-[min(420px,calc(100vh-6rem))] overflow-hidden p-0"
-        style={{ width: contentWidth }}
-      >
-        <ScrollArea className="max-h-[min(420px,calc(100vh-6rem))]">
+      <PopoverPrimitive.Content
+  side="bottom"
+  align="start"
+  sideOffset={6}
+  collisionPadding={16}
+  onOpenAutoFocus={(event) => event.preventDefault()}
+  className="z-[70] overflow-hidden rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none"
+  style={{ width: contentWidth }}
+>
+  <div
+    className="max-h-[300px] overflow-y-auto overscroll-contain"
+    onWheel={(event) => event.stopPropagation()}
+  >
           <div id={listboxId} role="listbox" className="p-1">
             {showCustomAction ? (
               <ServiceOptionButton
@@ -235,8 +240,8 @@ export function ServiceCombobox({
               </div>
             )}
           </div>
-        </ScrollArea>
-      </PopoverContent>
+         </div>
+</PopoverPrimitive.Content>
     </Popover>
   );
 }
