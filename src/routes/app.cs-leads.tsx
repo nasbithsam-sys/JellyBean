@@ -709,7 +709,7 @@ function Inner() {
   // calls). Pagination UI tolerates a slightly approximate total; per-status
   // badges still come from the exact `cs_leads_status_counts` RPC below.
   const totalCount = useQuery({
-    queryKey: ["cs_leads_count", { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch }],
+    queryKey: ["cs_leads_count", { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, garageDoorOnly }],
     queryFn: async () => {
       let q = supabase
         .from("qualified_leads")
