@@ -490,13 +490,15 @@ function ServiceMultiSelector({
         </div>
       </PopoverAnchor>
       <PopoverContent
-        align="start"
-        sideOffset={6}
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        className="z-[80] max-h-[min(420px,calc(100vh-6rem))] overflow-hidden p-0"
-        style={{ width: contentWidth }}
-      >
-        <ScrollArea className="max-h-[min(420px,calc(100vh-6rem))]">
+           side="bottom"
+           align="start"
+           sideOffset={6}
+           collisionPadding={16}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+         className="z-[80] overflow-hidden p-0"
+         style={{ width: contentWidth }}
+   >
+  <ScrollArea className="h-[280px] max-h-[calc(100vh-10rem)]">
           <div role="listbox" className="p-1">
             {items.length === 0 ? (
               <div className="px-3 py-5 text-center text-sm text-muted-foreground">No matching services</div>
