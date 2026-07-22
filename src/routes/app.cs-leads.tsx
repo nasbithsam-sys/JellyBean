@@ -62,6 +62,7 @@ import {
   ChevronsRight,
   Paperclip,
   ExternalLink,
+  Warehouse,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -89,6 +90,16 @@ import { rephraseLeadTemplateWithAi } from "@/lib/raw-leads-ai.functions";
 
 import { cn } from "@/lib/utils";
 import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
+
+// Garage Door filter: match specific phrases (case-insensitive) across
+// service/pass_it_to and lead text fields. Avoids bare "garage" which
+// would incorrectly include garage remodeling/cleaning/flooring leads.
+const GARAGE_DOOR_PATTERNS = ["%garage door%", "%garage opener%", "%overhead door%"];
+const GARAGE_DOOR_FIELDS = ["service", "pass_it_to", "context", "post_text", "requirement_1", "requirement_2"];
+const GARAGE_DOOR_OR_CLAUSE = GARAGE_DOOR_FIELDS.flatMap((f) =>
+  GARAGE_DOOR_PATTERNS.map((p) => `${f}.ilike.${p}`),
+).join(",");
+
 
 export const DEFAULT_REPHRASE_PROMPT = `You are an expert customer service assistant. Your goal is to clean, extract, and normalize three parts of a customer lead request to prepare them for an outbound message.
 
@@ -371,6 +382,7 @@ function Inner() {
 
   const [ownerFilter, setOwnerFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
+  const [garageDoorOnly, setGarageDoorOnly] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
@@ -594,12 +606,12 @@ function Inner() {
   // ── Reset page to 1 whenever any server-side filter changes ──────────────
   useEffect(() => {
     setPage(1);
-  }, [dbDateFrom, dbDateTo, dbOwner, dbStatus, areaFilter, dbSearch]);
+  }, [dbDateFrom, dbDateTo, dbOwner, dbStatus, areaFilter, dbSearch, garageDoorOnly]);
 
   const list = useQuery({
     queryKey: [
       "cs_leads",
-      { page, dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch },
+      { page, dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, garageDoorOnly },
     ],
     queryFn: async () => {
       const from = (page - 1) * PAGE_SIZE;
@@ -634,6 +646,10 @@ function Inner() {
         q = q.or(
           `customer_name.ilike.${s},customer_number.ilike.${s},customer_number_2.ilike.${s},number_name.ilike.${s},main_area.ilike.${s},sub_area.ilike.${s},pass_it_to.ilike.${s},requirement_1.ilike.${s},requirement_2.ilike.${s}`,
         );
+      }
+
+      if (garageDoorOnly) {
+        q = q.or(GARAGE_DOOR_OR_CLAUSE);
       }
 
       const { data, error } = await q;
@@ -703,7 +719,7 @@ function Inner() {
   // calls). Pagination UI tolerates a slightly approximate total; per-status
   // badges still come from the exact `cs_leads_status_counts` RPC below.
   const totalCount = useQuery({
-    queryKey: ["cs_leads_count", { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch }],
+    queryKey: ["cs_leads_count", { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, garageDoorOnly }],
     queryFn: async () => {
       let q = supabase
         .from("qualified_leads")
@@ -727,6 +743,11 @@ function Inner() {
           `customer_name.ilike.${s},customer_number.ilike.${s},customer_number_2.ilike.${s},number_name.ilike.${s},main_area.ilike.${s},sub_area.ilike.${s},pass_it_to.ilike.${s},requirement_1.ilike.${s},requirement_2.ilike.${s}`,
         );
       }
+
+      if (garageDoorOnly) {
+        q = q.or(GARAGE_DOOR_OR_CLAUSE);
+      }
+
 
       const { count, error } = await q;
       if (error) throw error;
@@ -1108,6 +1129,20 @@ function Inner() {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          type="button"
+          size="sm"
+          variant={garageDoorOnly ? "default" : "outline"}
+          className="h-9 text-[12px]"
+          onClick={() => setGarageDoorOnly((v) => !v)}
+          title={garageDoorOnly ? "Showing garage door leads only — click to clear" : "Show only garage door leads"}
+        >
+          <Warehouse className="h-3.5 w-3.5 mr-1.5" />
+          Garage Door
+          {garageDoorOnly && typeof totalCount.data === "number" && (
+            <span className="ml-1.5 tabular-nums opacity-90">({totalCount.data})</span>
+          )}
+        </Button>
         {(isAdmin || isCs) && (
           <Popover>
             <PopoverTrigger asChild>
