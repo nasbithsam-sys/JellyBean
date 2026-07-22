@@ -1,20 +1,30 @@
 -- Raw Leads keyset pagination support.
--- These index statements are intentionally concurrent for production safety.
--- Do not wrap this migration in an explicit transaction.
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_raw_lead_cache_new_tab_cursor
+CREATE INDEX IF NOT EXISTS idx_raw_lead_cache_new_tab_cursor
   ON public.raw_lead_cache (captured_at DESC NULLS LAST, id DESC)
   WHERE category IS NULL AND assigned_myself_at IS NULL;
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_raw_lead_cache_assigned_myself_cursor
+CREATE INDEX IF NOT EXISTS idx_raw_lead_cache_assigned_myself_cursor
   ON public.raw_lead_cache (assigned_to, captured_at DESC NULLS LAST, id DESC)
   WHERE assigned_myself_at IS NOT NULL AND category IS NULL;
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_raw_lead_cache_category_cursor
+CREATE INDEX IF NOT EXISTS idx_raw_lead_cache_category_cursor
   ON public.raw_lead_cache (category, captured_at DESC NULLS LAST, id DESC)
   WHERE category IS NOT NULL;
 
 ANALYZE public.raw_lead_cache;
+
+DROP FUNCTION IF EXISTS public.get_raw_leads_cursor_page(
+  integer,
+  text,
+  timestamp with time zone,
+  uuid,
+  text,
+  text,
+  text,
+  text,
+  text
+);
 
 CREATE OR REPLACE FUNCTION public.raw_leads_filtered_match(
   r public.raw_lead_cache,
@@ -31,9 +41,9 @@ STABLE
 AS $$
   SELECT
     CASE
-      WHEN p_category = 'new' THEN r.category IS NULL AND r.assigned_myself_at IS NULL
-      WHEN p_category = 'assigned_myself' THEN r.assigned_to = p_user_id AND r.assigned_myself_at IS NOT NULL AND r.category IS NULL
-      WHEN p_category IN ('forwarded', 'not_found', 'wrong', 'duplicate') THEN r.category = p_category
+      WHEN coalesce(p_category, 'all') = 'new' THEN r.category IS NULL AND r.assigned_myself_at IS NULL
+      WHEN coalesce(p_category, 'all') = 'assigned_myself' THEN r.assigned_to = p_user_id AND r.assigned_myself_at IS NOT NULL AND r.category IS NULL
+      WHEN coalesce(p_category, 'all') IN ('forwarded', 'not_found', 'wrong', 'duplicate') THEN r.category = p_category
       ELSE true
     END
     AND NOT EXISTS (
@@ -43,16 +53,16 @@ AS $$
         AND d.source_type = 'raw_lead'
         AND d.source_lead_id = r.id
     )
-    AND (p_lead_filter = 'all' OR r.lead = p_lead_filter)
+    AND (coalesce(p_lead_filter, 'all') = 'all' OR r.lead = p_lead_filter)
     AND (
-      p_area = 'all'
+      coalesce(p_area, 'all') = 'all'
       OR r.data->>'Account Area' = p_area
       OR r.data->>'Sub Area / Neighborhood' = p_area
     )
     AND (
-      p_duplicate_filter = 'all'
-      OR (p_duplicate_filter = 'duplicates' AND r.duplicate_detected IS TRUE)
-      OR (p_duplicate_filter = 'unique' AND coalesce(r.duplicate_detected, false) IS FALSE)
+      coalesce(p_duplicate_filter, 'all') = 'all'
+      OR (coalesce(p_duplicate_filter, 'all') = 'duplicates' AND r.duplicate_detected IS TRUE)
+      OR (coalesce(p_duplicate_filter, 'all') = 'unique' AND coalesce(r.duplicate_detected, false) IS FALSE)
     )
     AND (
       btrim(coalesce(p_search, '')) = ''
@@ -71,7 +81,7 @@ CREATE OR REPLACE FUNCTION public.count_raw_leads_filtered(
   p_area text DEFAULT 'all',
   p_lead_filter text DEFAULT 'all',
   p_duplicate_filter text DEFAULT 'all',
-  p_search text DEFAULT ''
+  p_search text DEFAULT NULL
 )
 RETURNS bigint
 LANGUAGE sql
@@ -91,14 +101,14 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION public.get_raw_leads_cursor_page(
-  p_page_size integer DEFAULT 500,
-  p_direction text DEFAULT 'first',
+  p_area text DEFAULT NULL,
+  p_category text DEFAULT NULL,
   p_cursor_captured_at timestamptz DEFAULT NULL,
   p_cursor_id uuid DEFAULT NULL,
-  p_category text DEFAULT 'all',
-  p_area text DEFAULT 'all',
-  p_lead_filter text DEFAULT 'all',
-  p_duplicate_filter text DEFAULT 'all',
+  p_direction text DEFAULT 'first',
+  p_duplicate_filter text DEFAULT NULL,
+  p_lead_filter text DEFAULT NULL,
+  p_page_size integer DEFAULT 200,
   p_search text DEFAULT ''
 )
 RETURNS TABLE (
@@ -132,7 +142,7 @@ BEGIN
     RETURN;
   END IF;
 
-  IF p_direction = 'last' THEN
+  IF coalesce(p_direction, 'first') = 'last' THEN
     RETURN QUERY
     SELECT q.*
     FROM (
@@ -151,7 +161,7 @@ BEGIN
     RETURN;
   END IF;
 
-  IF p_direction = 'previous' THEN
+  IF coalesce(p_direction, 'first') = 'previous' THEN
     RETURN QUERY
     SELECT q.*
     FROM (
@@ -190,7 +200,7 @@ BEGIN
   FROM public.raw_lead_cache r
   WHERE public.raw_leads_filtered_match(r, auth.uid(), p_category, p_area, p_lead_filter, p_duplicate_filter, p_search)
     AND (
-      p_direction = 'first'
+      coalesce(p_direction, 'first') = 'first'
       OR p_cursor_id IS NULL
       OR (
         p_cursor_captured_at IS NOT NULL
@@ -210,3 +220,34 @@ BEGIN
   LIMIT requested_size;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.get_raw_leads_cursor_page(
+  text,
+  text,
+  timestamp with time zone,
+  uuid,
+  text,
+  text,
+  text,
+  integer,
+  text
+) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_raw_leads_cursor_page(
+  text,
+  text,
+  timestamp with time zone,
+  uuid,
+  text,
+  text,
+  text,
+  integer,
+  text
+) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.count_raw_leads_filtered(text, text, text, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.count_raw_leads_filtered(text, text, text, text, text) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.raw_leads_filtered_match(public.raw_lead_cache, uuid, text, text, text, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.raw_leads_filtered_match(public.raw_lead_cache, uuid, text, text, text, text, text) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';

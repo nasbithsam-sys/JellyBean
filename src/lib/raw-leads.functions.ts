@@ -123,14 +123,14 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const { data: rows, error } = await context.supabase.rpc(
       "get_raw_leads_cursor_page" as never,
       {
-        p_page_size: pageSize,
-        p_direction: data.direction as RawLeadCursorDirection,
+        p_area: data.areaFilter,
+        p_category: data.category,
         p_cursor_captured_at: data.cursor?.captured_at ?? null,
         p_cursor_id: data.cursor?.id ?? null,
-        p_category: data.category,
-        p_area: data.areaFilter,
-        p_lead_filter: data.leadFilter,
+        p_direction: data.direction as RawLeadCursorDirection,
         p_duplicate_filter: data.duplicateFilter,
+        p_lead_filter: data.leadFilter,
+        p_page_size: pageSize,
         p_search: data.query,
       } as never,
     );
