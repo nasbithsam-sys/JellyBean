@@ -1129,6 +1129,20 @@ function Inner() {
             ))}
           </SelectContent>
         </Select>
+        <Button
+          type="button"
+          size="sm"
+          variant={garageDoorOnly ? "default" : "outline"}
+          className="h-9 text-[12px]"
+          onClick={() => setGarageDoorOnly((v) => !v)}
+          title={garageDoorOnly ? "Showing garage door leads only — click to clear" : "Show only garage door leads"}
+        >
+          <Warehouse className="h-3.5 w-3.5 mr-1.5" />
+          Garage Door
+          {garageDoorOnly && typeof totalCount.data === "number" && (
+            <span className="ml-1.5 tabular-nums opacity-90">({totalCount.data})</span>
+          )}
+        </Button>
         {(isAdmin || isCs) && (
           <Popover>
             <PopoverTrigger asChild>
