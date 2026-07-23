@@ -670,27 +670,6 @@ export type Database = {
         }
         Relationships: []
       }
-      shared_state: {
-        Row: {
-          key: string
-          updated_at: string
-          updated_by: string | null
-          value: Json
-        }
-        Insert: {
-          key: string
-          updated_at?: string
-          updated_by?: string | null
-          value: Json
-        }
-        Update: {
-          key?: string
-          updated_at?: string
-          updated_by?: string | null
-          value?: Json
-        }
-        Relationships: []
-      }
       service_assignments: {
         Row: {
           assigned_by: string | null
@@ -718,6 +697,27 @@ export type Database = {
           service_key?: string
           service_name?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      shared_state: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
         }
         Relationships: []
       }
@@ -865,6 +865,19 @@ export type Database = {
         Returns: boolean
       }
       is_my_access_verified: { Args: never; Returns: boolean }
+      list_service_assignments: {
+        Args: never
+        Returns: {
+          assigned_cs_user_id: string
+          cs_user_email: string
+          cs_user_name: string
+          service_category: string
+          service_key: string
+          service_name: string
+          total_leads: number
+          updated_at: string
+        }[]
+      }
       list_state_assignments: {
         Args: never
         Returns: {
@@ -873,19 +886,6 @@ export type Database = {
           cs_user_name: string
           state_code: string
           state_name: string
-          total_leads: number
-          updated_at: string
-        }[]
-      }
-      list_service_assignments: {
-        Args: never
-        Returns: {
-          assigned_cs_user_id: string
-          cs_user_email: string
-          cs_user_name: string
-          service_category: string | null
-          service_key: string
-          service_name: string
           total_leads: number
           updated_at: string
         }[]
