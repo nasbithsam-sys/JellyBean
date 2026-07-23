@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { normalizePhone } from "./crm-lite";
+import { buildRawLeadKeysetFilter } from "./raw-leads-keyset";
 
 const ALLOWED_RAW_LEAD_ROLES = [
   "admin",
@@ -303,6 +304,178 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
       offset: data.offset,
       hasMore: data.offset + entries.length < totalForCategory,
       nextOffset: data.offset + entries.length < totalForCategory ? data.offset + data.limit : null,
+    };
+  });
+
+export const fetchRawLeadKeyset = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z
+      .object({
+        limit: z.number().int().min(1).max(500).default(100),
+        cursor: z
+          .object({
+            captured_at: z.string().nullable(),
+            id: z.string(),
+          })
+          .nullable()
+          .default(null),
+        direction: z.enum(["forward", "last"]).default("forward"),
+        category: z.enum(CATEGORY_FILTERS).default("all"),
+        query: z.string().max(120).default(""),
+        leadFilter: z.enum(LEAD_FILTERS).default("all"),
+        areaFilter: z.string().max(120).default("all"),
+        duplicateFilter: z.enum(DUPLICATE_FILTERS).default("all"),
+      })
+      .parse(input ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: rolesData, error: rolesError } = await context.supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId);
+    if (rolesError) throw new Error(rolesError.message);
+
+    const roles = (rolesData ?? []).map((row) => row.role as string);
+    const hasAllowedRole = roles.some((role): role is RawLeadRole =>
+      ALLOWED_RAW_LEAD_ROLES.includes(role as RawLeadRole),
+    );
+    if (!hasAllowedRole) throw new Error("Forbidden: raw leads access required");
+
+    const isAdmin = roles.includes("admin") || roles.includes("sub_admin");
+    const columns =
+      "id, row_key, data, lead, phone, category, captured_at, lead_link, sheet_row, assigned_to, assigned_myself_at, duplicate_detected, duplicate_reason, duplicate_match_type, duplicate_key, duplicate_of_raw_lead_id, duplicate_of_qualified_lead_id, canonical_post_id, canonical_lead_link";
+
+    const applyCategory = <T extends {
+      is: (...a: never[]) => T;
+      eq: (...a: never[]) => T;
+      not: (...a: never[]) => T;
+      or: (...a: never[]) => T;
+    }>(
+      query: T,
+      category: CategoryFilter,
+    ): T => {
+      if (category === "new") {
+        return query
+          .is("category" as never, null as never)
+          .is("assigned_myself_at" as never, null as never);
+      }
+      if (
+        category === "forwarded" ||
+        category === "not_found" ||
+        category === "wrong" ||
+        category === "duplicate"
+      )
+        return query.eq("category" as never, category as never);
+      return query;
+    };
+
+    const applyAssignment = <T extends { or: (...a: never[]) => T; eq: (...a: never[]) => T }>(
+      query: T,
+      category: CategoryFilter,
+    ): T => {
+      if (category === "assigned_myself")
+        return query.eq("assigned_to" as never, context.userId as never);
+      void isAdmin;
+      return query;
+    };
+
+    // Paged data
+    let dataQuery = context.supabase
+      .from("raw_lead_cache")
+      .select(columns);
+
+    if (data.direction === "forward") {
+      dataQuery = dataQuery
+        .order("captured_at", { ascending: false, nullsFirst: false })
+        .order("id", { ascending: false })
+        .limit(data.limit + 1);
+
+      if (data.cursor) {
+        dataQuery = dataQuery.or(buildRawLeadKeysetFilter(data.cursor) as never) as typeof dataQuery;
+      }
+    } else if (data.direction === "last") {
+      // Reverse order to grab the absolute oldest chunk
+      dataQuery = dataQuery
+        .order("captured_at", { ascending: true, nullsFirst: true })
+        .order("id", { ascending: true })
+        .limit(data.limit);
+    }
+
+    const { data: draftRows, error: draftError } = await context.supabase
+      .from("lead_drafts" as never)
+      .select("source_lead_id")
+      .eq("created_by" as never, context.userId as never)
+      .eq("source_type" as never, "raw_lead" as never)
+      .not("source_lead_id" as never, "is" as never, null as never);
+    if (draftError) throw new Error(draftError.message);
+    const draftedIds = ((draftRows ?? []) as Array<{ source_lead_id: string | null }>)
+      .map((r) => r.source_lead_id)
+      .filter((v): v is string => !!v);
+    const excludeDrafts = <T extends { not: (...a: never[]) => T }>(q: T): T =>
+      draftedIds.length
+        ? (q.not("id" as never, "in" as never, `(${draftedIds.join(",")})` as never) as T)
+        : q;
+
+    if (data.category === "assigned_myself") {
+      dataQuery = dataQuery
+        .eq("assigned_to" as never, context.userId as never)
+        .not("assigned_myself_at" as never, "is" as never, null as never)
+        .is("category" as never, null as never) as typeof dataQuery;
+    } else {
+      dataQuery = applyCategory(dataQuery as never, data.category) as typeof dataQuery;
+      dataQuery = applyAssignment(dataQuery as never, data.category) as typeof dataQuery;
+    }
+    dataQuery = excludeDrafts(dataQuery as never) as typeof dataQuery;
+    dataQuery = applySearchAndFilters(dataQuery as never, {
+      query: data.query,
+      leadFilter: data.leadFilter,
+      areaFilter: data.areaFilter,
+      duplicateFilter: data.duplicateFilter,
+    }) as typeof dataQuery;
+
+    const { data: rows, error } = await dataQuery;
+    if (error) throw new Error(error.message);
+
+    let fetchedRows = rows ?? [];
+    let hasMore = false;
+
+    if (data.direction === "forward") {
+      if (fetchedRows.length > data.limit) {
+        hasMore = true;
+        fetchedRows = fetchedRows.slice(0, data.limit);
+      }
+    } else if (data.direction === "last") {
+      // Reverse in memory so it renders top-down from newest to oldest
+      fetchedRows = fetchedRows.reverse();
+    }
+
+    const entries: RawLeadCacheRow[] = fetchedRows.map((entry) => ({
+      row_key: entry.row_key,
+      id: (entry as Record<string, unknown>).id as string,
+      data: normalizeData(entry.data),
+      lead: normalizeLead(entry.lead),
+      phone: entry.phone,
+      category: normalizeCategory(entry.category),
+      captured_at: entry.captured_at,
+      lead_link: entry.lead_link,
+      sheet_row: entry.sheet_row,
+      assigned_to: entry.assigned_to,
+      assigned_myself_at: (entry as Record<string, unknown>).assigned_myself_at as string | null ?? null,
+      duplicate_detected: ((entry as Record<string, unknown>).duplicate_detected as boolean | null) ?? null,
+      duplicate_reason: ((entry as Record<string, unknown>).duplicate_reason as string | null) ?? null,
+      duplicate_match_type: ((entry as Record<string, unknown>).duplicate_match_type as string | null) ?? null,
+      duplicate_key: ((entry as Record<string, unknown>).duplicate_key as string | null) ?? null,
+      duplicate_of_raw_lead_id: ((entry as Record<string, unknown>).duplicate_of_raw_lead_id as string | null) ?? null,
+      duplicate_of_qualified_lead_id: ((entry as Record<string, unknown>).duplicate_of_qualified_lead_id as string | null) ?? null,
+      canonical_post_id: ((entry as Record<string, unknown>).canonical_post_id as string | null) ?? null,
+      canonical_lead_link: ((entry as Record<string, unknown>).canonical_lead_link as string | null) ?? null,
+    }));
+
+    return {
+      entries,
+      pageSize: data.limit,
+      hasMore,
     };
   });
 

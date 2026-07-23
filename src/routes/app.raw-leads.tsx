@@ -67,6 +67,7 @@ import { analyzeRawLeadsWithAi, FROZEN_LEAD_PROMPT } from "@/lib/raw-leads-ai.fu
 import {
   checkDuplicatePhone,
   fetchRawLeadCache,
+  fetchRawLeadKeyset,
   fetchRawLeadCounts,
 } from "@/lib/raw-leads.functions";
 
@@ -90,6 +91,8 @@ const DraftsDialog = lazy(() =>
 
 
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
+import { formatCsPipelineShortDate } from "@/lib/cs-pipeline-time";
+import { type RawLeadCursor } from "@/lib/raw-leads-keyset";
 
 export const Route = createFileRoute("/app/raw-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
@@ -138,12 +141,8 @@ type CacheEntry = {
 };
 type RawLeadPage = {
   entries: CacheEntry[];
-  totalCount: number;
-  counts: { new: number; forwarded: number; not_found: number; wrong: number; duplicate: number; assigned_myself: number };
   pageSize: number;
-  offset: number;
   hasMore: boolean;
-  nextOffset: number | null;
 };
 const EMPTY_CACHE_ENTRIES: CacheEntry[] = [];
 const SEARCH_DEBOUNCE_MS = 500;
@@ -563,7 +562,7 @@ function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
   const analyzeWithAi = useServerFn(analyzeRawLeadsWithAi);
-  const fetchRawLeads = useServerFn(fetchRawLeadCache);
+  const fetchRawLeads = useServerFn(fetchRawLeadKeyset);
   const fetchCounts = useServerFn(fetchRawLeadCounts);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -582,8 +581,9 @@ function Inner() {
     key: "posted_at",
     direction: "desc",
   });
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState<number>(100);
+  const [cursorHistory, setCursorHistory] = useState<RawLeadCursor[]>([]);
+  const [currentCursor, setCurrentCursor] = useState<RawLeadCursor | "last" | null>(null);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [duplicateDetailsFor, setDuplicateDetailsFor] = useState<CacheEntry | null>(null);
   const [qualifyFor, setQualifyFor] = useState<CacheEntry | null>(null);
@@ -724,13 +724,29 @@ function Inner() {
 
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
+  const cacheKey = useMemo(
+    () =>
+      [
+        "raw-lead-cache",
+        tab,
+        currentCursor === "last" ? "last" : currentCursor?.id ?? "first",
+        pageSize,
+        query,
+        leadFilter,
+        areaFilter,
+        duplicateFilter,
+      ] as const,
+    [tab, currentCursor, pageSize, query, leadFilter, areaFilter, duplicateFilter],
+  );
+
   const cacheQuery = useQuery({
-    queryKey: ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter],
+    queryKey: cacheKey,
     queryFn: async () =>
       (await fetchRawLeads({
         data: {
           limit: pageSize,
-          offset: pageIndex * pageSize,
+          cursor: currentCursor === "last" ? null : currentCursor,
+          direction: currentCursor === "last" ? "last" : "forward",
           category: tab,
           query,
           leadFilter,
@@ -743,10 +759,52 @@ function Inner() {
     refetchOnWindowFocus: false,
   });
 
-  const cacheKey = useMemo(
-    () => ["raw-lead-cache", tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter] as const,
-    [tab, pageIndex, pageSize, query, leadFilter, areaFilter, duplicateFilter],
-  );
+  const [navigating, setNavigating] = useState(false);
+
+  const navigateTo = async (
+    targetCursor: RawLeadCursor | "last" | null,
+    targetHistory: RawLeadCursor[],
+  ) => {
+    setNavigating(true);
+    try {
+      await qc.fetchQuery({
+        queryKey: [
+          "raw-lead-cache",
+          tab,
+          targetCursor === "last" ? "last" : targetCursor?.id ?? "first",
+          pageSize,
+          query,
+          leadFilter,
+          areaFilter,
+          duplicateFilter,
+        ],
+        queryFn: async () =>
+          (await fetchRawLeads({
+            data: {
+              limit: pageSize,
+              cursor: targetCursor === "last" ? null : targetCursor,
+              direction: targetCursor === "last" ? "last" : "forward",
+              category: tab,
+              query,
+              leadFilter,
+              areaFilter,
+              duplicateFilter,
+            },
+          })) as RawLeadPage,
+      });
+      setCursorHistory(targetHistory);
+      setCurrentCursor(targetCursor);
+    } catch (e) {
+      toast.error(friendlyError(e));
+    } finally {
+      setNavigating(false);
+    }
+  };
+
+  const resetPagination = useCallback(() => {
+    setCurrentCursor(null);
+    setCursorHistory([]);
+  }, []);
 
   const countsQuery = useQuery({
     queryKey: ["raw-lead-counts"],
@@ -885,8 +943,7 @@ function Inner() {
     duplicate: 0,
     assigned_myself: 0,
   };
-  const totalCount = cacheQuery.data?.totalCount ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  // Removed totalCount and totalPages since keyset pagination does not use exact counts
 
   const areaOptions = useMemo(() => {
     const areas = new Set<string>();
@@ -1091,7 +1148,7 @@ function Inner() {
               key={k}
               onClick={() => {
                 setTab(k);
-                setPageIndex(0);
+                resetPagination();
               }}
               className={cn(
                 "crm-motion px-3 h-8 text-[12px] font-medium rounded-md inline-flex items-center gap-1.5",
@@ -1123,7 +1180,7 @@ function Inner() {
             value={queryInput}
             onChange={(e) => {
               setQueryInput(e.target.value);
-              setPageIndex(0);
+              resetPagination();
             }}
             placeholder="Search…"
             className="h-9 pl-9"
@@ -1134,7 +1191,7 @@ function Inner() {
           value={leadFilter}
           onValueChange={(value) => {
             setLeadFilter(value);
-            setPageIndex(0);
+            resetPagination();
           }}
         >
           <SelectTrigger className="h-9 w-[118px] text-[12px]">
@@ -1151,7 +1208,7 @@ function Inner() {
           value={areaFilter}
           onValueChange={(value) => {
             setAreaFilter(value);
-            setPageIndex(0);
+            resetPagination();
           }}
         >
           <SelectTrigger className="h-9 w-[150px] text-[12px]">
@@ -1171,7 +1228,7 @@ function Inner() {
           value={duplicateFilter}
           onValueChange={(value) => {
             setDuplicateFilter(value as "all" | "duplicates" | "unique");
-            setPageIndex(0);
+            resetPagination();
           }}
         >
           <SelectTrigger className="h-9 w-[140px] text-[12px]">
@@ -1746,13 +1803,17 @@ function Inner() {
 
       <div className="crm-toolbar-panel flex flex-wrap items-center justify-between gap-3">
         <div className="text-[11.5px] text-muted-foreground">
-          {totalCount === 0
-            ? "No leads in this category"
-            : `Showing ${pageIndex * pageSize + 1}-${pageIndex * pageSize + entries.length} of ${totalCount.toLocaleString()}`}
+          {entries.length === 0 ? "No leads in this view" : "Showing results"}
           {visible.length !== entries.length && <> · {visible.length} match current filters</>}
         </div>
         <div className="flex items-center gap-2">
-          {cacheQuery.isFetching && (
+          {navigating && (
+            <span className="inline-flex items-center text-[11.5px] text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              Loading
+            </span>
+          )}
+          {cacheQuery.isFetching && !navigating && (
             <span className="inline-flex items-center text-[11.5px] text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
               Updating
@@ -1762,7 +1823,7 @@ function Inner() {
             value={String(pageSize)}
             onValueChange={(v) => {
               setPageSize(Number(v));
-              setPageIndex(0);
+              resetPagination();
             }}
           >
             <SelectTrigger className="h-8 w-[88px] text-[12px]">
@@ -1780,8 +1841,8 @@ function Inner() {
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex(0)}
-            disabled={pageIndex === 0 || cacheQuery.isFetching}
+            onClick={() => navigateTo(null, [])}
+            disabled={currentCursor === null || navigating || cacheQuery.isFetching}
           >
             « First
           </Button>
@@ -1789,20 +1850,31 @@ function Inner() {
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex((page) => Math.max(0, page - 1))}
-            disabled={pageIndex === 0 || cacheQuery.isFetching}
+            onClick={() => {
+              if (cursorHistory.length === 0) return;
+              const prevCursor = cursorHistory[cursorHistory.length - 1];
+              const newHistory = cursorHistory.slice(0, -1);
+              navigateTo(prevCursor, newHistory);
+            }}
+            disabled={cursorHistory.length === 0 || navigating || cacheQuery.isFetching}
           >
             Previous
           </Button>
-          <div className="h-8 inline-flex items-center justify-center rounded-md border border-border bg-card px-3 text-[12px] font-medium tabular-nums">
-            Page {pageIndex + 1} / {totalPages}
+          <div className="h-8 inline-flex items-center justify-center rounded-md border border-border bg-card px-3 text-[12px] font-medium tabular-nums min-w-[70px]">
+            {currentCursor === "last" ? "Last page" : `Page ${cursorHistory.length + 1}`}
           </div>
           <Button
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex((page) => Math.min(totalPages - 1, page + 1))}
-            disabled={pageIndex >= totalPages - 1 || cacheQuery.isFetching}
+            onClick={() => {
+              if (!cacheQuery.data?.hasMore || entries.length === 0) return;
+              const lastEntry = entries[entries.length - 1];
+              const nextCursor = { captured_at: lastEntry.captured_at, id: lastEntry.id };
+              const newHistory = [...cursorHistory, currentCursor === "last" ? null : currentCursor];
+              navigateTo(nextCursor, newHistory as RawLeadCursor[]);
+            }}
+            disabled={!cacheQuery.data?.hasMore || currentCursor === "last" || navigating || cacheQuery.isFetching}
           >
             Next
           </Button>
@@ -1810,8 +1882,11 @@ function Inner() {
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => setPageIndex(totalPages - 1)}
-            disabled={pageIndex >= totalPages - 1 || cacheQuery.isFetching}
+            onClick={() => {
+              const newHistory = [...cursorHistory, currentCursor === "last" ? null : currentCursor];
+              navigateTo("last", newHistory as RawLeadCursor[]);
+            }}
+            disabled={currentCursor === "last" || navigating || cacheQuery.isFetching}
           >
             Last »
           </Button>
