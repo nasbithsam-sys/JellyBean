@@ -68,8 +68,10 @@ import {
   checkDuplicatePhone,
   fetchRawLeadCache,
   fetchRawLeadKeyset,
+  fetchRawLeadKeysetCount,
   fetchRawLeadCounts,
 } from "@/lib/raw-leads.functions";
+import { calculateTotalPages, calculateLastPageSize } from "@/lib/raw-leads-keyset";
 
 import { confirmDialog, confirmDiscardUnsaved } from "@/components/confirm-dialog";
 import { saveDraft, deleteDraftForSource, countMyDrafts, type LeadDraft } from "@/lib/lead-drafts";
@@ -563,6 +565,7 @@ function Inner() {
   const qc = useQueryClient();
   const analyzeWithAi = useServerFn(analyzeRawLeadsWithAi);
   const fetchRawLeads = useServerFn(fetchRawLeadKeyset);
+  const fetchExactCount = useServerFn(fetchRawLeadKeysetCount);
   const fetchCounts = useServerFn(fetchRawLeadCounts);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -581,8 +584,8 @@ function Inner() {
     key: "posted_at",
     direction: "desc",
   });
-  const [pageSize, setPageSize] = useState<number>(100);
-  const [cursorHistory, setCursorHistory] = useState<RawLeadCursor[]>([]);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [currentPage, setCurrentPage] = useState(1);
   const [currentCursor, setCurrentCursor] = useState<RawLeadCursor | "last" | null>(null);
   const [detailFor, setDetailFor] = useState<CacheEntry | null>(null);
   const [duplicateDetailsFor, setDuplicateDetailsFor] = useState<CacheEntry | null>(null);
@@ -724,6 +727,20 @@ function Inner() {
 
 
   // ── Persistent cache from Supabase ─────────────────────────────────────────
+  const isUnfiltered = query === "" && leadFilter === "all" && areaFilter === "all" && duplicateFilter === "all";
+
+  const exactCountQuery = useQuery({
+    queryKey: ["raw-lead-exact-count", tab],
+    queryFn: async () => await fetchExactCount({ data: { category: tab } }),
+    enabled: isUnfiltered,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const exactCount = exactCountQuery.data;
+  const totalPages = typeof exactCount === "number" ? calculateTotalPages(exactCount, pageSize) : undefined;
+  const lastPageSize = typeof exactCount === "number" ? calculateLastPageSize(exactCount, pageSize) : undefined;
+
   const cacheKey = useMemo(
     () =>
       [
@@ -746,7 +763,7 @@ function Inner() {
         data: {
           limit: pageSize,
           cursor: currentCursor === "last" ? null : currentCursor,
-          direction: currentCursor === "last" ? "last" : "forward",
+          direction: "next",
           category: tab,
           query,
           leadFilter,
@@ -762,8 +779,9 @@ function Inner() {
   const [navigating, setNavigating] = useState(false);
 
   const navigateTo = async (
+    direction: "next" | "previous" | "last",
     targetCursor: RawLeadCursor | "last" | null,
-    targetHistory: RawLeadCursor[],
+    targetPageNumber: number,
   ) => {
     setNavigating(true);
     try {
@@ -783,7 +801,8 @@ function Inner() {
             data: {
               limit: pageSize,
               cursor: targetCursor === "last" ? null : targetCursor,
-              direction: targetCursor === "last" ? "last" : "forward",
+              direction,
+              lastPageSize: direction === "last" ? lastPageSize : undefined,
               category: tab,
               query,
               leadFilter,
@@ -792,7 +811,7 @@ function Inner() {
             },
           })) as RawLeadPage,
       });
-      setCursorHistory(targetHistory);
+      setCurrentPage(targetPageNumber);
       setCurrentCursor(targetCursor);
     } catch (e) {
       toast.error(friendlyError(e));
@@ -803,7 +822,7 @@ function Inner() {
 
   const resetPagination = useCallback(() => {
     setCurrentCursor(null);
-    setCursorHistory([]);
+    setCurrentPage(1);
   }, []);
 
   const countsQuery = useQuery({
@@ -1841,8 +1860,8 @@ function Inner() {
             variant="outline"
             size="sm"
             className="h-8"
-            onClick={() => navigateTo(null, [])}
-            disabled={currentCursor === null || navigating || cacheQuery.isFetching}
+            onClick={() => navigateTo("next", null, 1)}
+            disabled={currentPage === 1 || navigating || cacheQuery.isFetching}
           >
             « First
           </Button>
@@ -1851,17 +1870,17 @@ function Inner() {
             size="sm"
             className="h-8"
             onClick={() => {
-              if (cursorHistory.length === 0) return;
-              const prevCursor = cursorHistory[cursorHistory.length - 1];
-              const newHistory = cursorHistory.slice(0, -1);
-              navigateTo(prevCursor, newHistory);
+              if (entries.length === 0) return;
+              const firstEntry = entries[0];
+              const prevCursor = { captured_at: firstEntry.captured_at, id: firstEntry.id };
+              navigateTo("previous", prevCursor, currentPage - 1);
             }}
-            disabled={cursorHistory.length === 0 || navigating || cacheQuery.isFetching}
+            disabled={currentPage === 1 || navigating || cacheQuery.isFetching}
           >
             Previous
           </Button>
           <div className="h-8 inline-flex items-center justify-center rounded-md border border-border bg-card px-3 text-[12px] font-medium tabular-nums min-w-[70px]">
-            {currentCursor === "last" ? "Last page" : `Page ${cursorHistory.length + 1}`}
+            Page {currentPage} {totalPages ? `/ ${totalPages}` : ""}
           </div>
           <Button
             variant="outline"
@@ -1871,10 +1890,9 @@ function Inner() {
               if (!cacheQuery.data?.hasMore || entries.length === 0) return;
               const lastEntry = entries[entries.length - 1];
               const nextCursor = { captured_at: lastEntry.captured_at, id: lastEntry.id };
-              const newHistory = [...cursorHistory, currentCursor === "last" ? null : currentCursor];
-              navigateTo(nextCursor, newHistory as RawLeadCursor[]);
+              navigateTo("next", nextCursor, currentPage + 1);
             }}
-            disabled={!cacheQuery.data?.hasMore || currentCursor === "last" || navigating || cacheQuery.isFetching}
+            disabled={(!cacheQuery.data?.hasMore && currentPage >= (totalPages ?? Infinity)) || navigating || cacheQuery.isFetching}
           >
             Next
           </Button>
@@ -1883,10 +1901,17 @@ function Inner() {
             size="sm"
             className="h-8"
             onClick={() => {
-              const newHistory = [...cursorHistory, currentCursor === "last" ? null : currentCursor];
-              navigateTo("last", newHistory as RawLeadCursor[]);
+              if (!totalPages) return;
+              navigateTo("last", "last", totalPages);
             }}
-            disabled={currentCursor === "last" || navigating || cacheQuery.isFetching}
+            disabled={
+              !isUnfiltered || 
+              !totalPages || 
+              exactCountQuery.isFetching || 
+              currentPage >= totalPages || 
+              navigating || 
+              cacheQuery.isFetching
+            }
           >
             Last »
           </Button>

@@ -320,7 +320,8 @@ export const fetchRawLeadKeyset = createServerFn({ method: "GET" })
           })
           .nullable()
           .default(null),
-        direction: z.enum(["forward", "last"]).default("forward"),
+        direction: z.enum(["next", "previous", "last"]).default("next"),
+        lastPageSize: z.number().int().min(0).max(500).optional(),
         category: z.enum(CATEGORY_FILTERS).default("all"),
         query: z.string().max(120).default(""),
         leadFilter: z.enum(LEAD_FILTERS).default("all"),
@@ -385,21 +386,30 @@ export const fetchRawLeadKeyset = createServerFn({ method: "GET" })
       .from("raw_lead_cache")
       .select(columns);
 
-    if (data.direction === "forward") {
+    if (data.direction === "next") {
       dataQuery = dataQuery
         .order("captured_at", { ascending: false, nullsFirst: false })
         .order("id", { ascending: false })
         .limit(data.limit + 1);
 
       if (data.cursor) {
-        dataQuery = dataQuery.or(buildRawLeadKeysetFilter(data.cursor) as never) as typeof dataQuery;
+        dataQuery = dataQuery.or(buildRawLeadKeysetFilter(data.cursor, "next") as never) as typeof dataQuery;
+      }
+    } else if (data.direction === "previous") {
+      dataQuery = dataQuery
+        .order("captured_at", { ascending: true, nullsFirst: true })
+        .order("id", { ascending: true })
+        .limit(data.limit + 1);
+
+      if (data.cursor) {
+        dataQuery = dataQuery.or(buildRawLeadKeysetFilter(data.cursor, "previous") as never) as typeof dataQuery;
       }
     } else if (data.direction === "last") {
       // Reverse order to grab the absolute oldest chunk
       dataQuery = dataQuery
         .order("captured_at", { ascending: true, nullsFirst: true })
         .order("id", { ascending: true })
-        .limit(data.limit);
+        .limit(data.lastPageSize ?? data.limit);
     }
 
     const { data: draftRows, error: draftError } = await context.supabase
@@ -440,11 +450,17 @@ export const fetchRawLeadKeyset = createServerFn({ method: "GET" })
     let fetchedRows = rows ?? [];
     let hasMore = false;
 
-    if (data.direction === "forward") {
+    if (data.direction === "next") {
       if (fetchedRows.length > data.limit) {
         hasMore = true;
         fetchedRows = fetchedRows.slice(0, data.limit);
       }
+    } else if (data.direction === "previous") {
+      if (fetchedRows.length > data.limit) {
+        hasMore = true;
+        fetchedRows = fetchedRows.slice(0, data.limit);
+      }
+      fetchedRows = fetchedRows.reverse();
     } else if (data.direction === "last") {
       // Reverse in memory so it renders top-down from newest to oldest
       fetchedRows = fetchedRows.reverse();
@@ -477,6 +493,100 @@ export const fetchRawLeadKeyset = createServerFn({ method: "GET" })
       pageSize: data.limit,
       hasMore,
     };
+  });
+
+export const fetchRawLeadKeysetCount = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z
+      .object({
+        category: z.enum(CATEGORY_FILTERS).default("all"),
+      })
+      .parse(input ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const { data: rolesData, error: rolesError } = await context.supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId);
+    if (rolesError) throw new Error(rolesError.message);
+
+    const roles = (rolesData ?? []).map((row) => row.role as string);
+    const hasAllowedRole = roles.some((role): role is RawLeadRole =>
+      ALLOWED_RAW_LEAD_ROLES.includes(role as RawLeadRole),
+    );
+    if (!hasAllowedRole) throw new Error("Forbidden: raw leads access required");
+
+    const isAdmin = roles.includes("admin") || roles.includes("sub_admin");
+
+    const applyCategory = <T extends {
+      is: (...a: never[]) => T;
+      eq: (...a: never[]) => T;
+      not: (...a: never[]) => T;
+      or: (...a: never[]) => T;
+    }>(
+      query: T,
+      category: CategoryFilter,
+    ): T => {
+      if (category === "new") {
+        return query
+          .is("category" as never, null as never)
+          .is("assigned_myself_at" as never, null as never);
+      }
+      if (
+        category === "forwarded" ||
+        category === "not_found" ||
+        category === "wrong" ||
+        category === "duplicate"
+      )
+        return query.eq("category" as never, category as never);
+      return query;
+    };
+
+    const applyAssignment = <T extends { or: (...a: never[]) => T; eq: (...a: never[]) => T }>(
+      query: T,
+      category: CategoryFilter,
+    ): T => {
+      if (category === "assigned_myself")
+        return query.eq("assigned_to" as never, context.userId as never);
+      void isAdmin;
+      return query;
+    };
+
+    let countQuery = context.supabase
+      .from("raw_lead_cache")
+      .select("row_key", { count: "exact", head: true });
+
+    const { data: draftRows, error: draftError } = await context.supabase
+      .from("lead_drafts" as never)
+      .select("source_lead_id")
+      .eq("created_by" as never, context.userId as never)
+      .eq("source_type" as never, "raw_lead" as never)
+      .not("source_lead_id" as never, "is" as never, null as never);
+    if (draftError) throw new Error(draftError.message);
+    const draftedIds = ((draftRows ?? []) as Array<{ source_lead_id: string | null }>)
+      .map((r) => r.source_lead_id)
+      .filter((v): v is string => !!v);
+    const excludeDrafts = <T extends { not: (...a: never[]) => T }>(q: T): T =>
+      draftedIds.length
+        ? (q.not("id" as never, "in" as never, `(${draftedIds.join(",")})` as never) as T)
+        : q;
+
+    if (data.category === "assigned_myself") {
+      countQuery = countQuery
+        .eq("assigned_to" as never, context.userId as never)
+        .not("assigned_myself_at" as never, "is" as never, null as never)
+        .is("category" as never, null as never) as typeof countQuery;
+    } else {
+      countQuery = applyCategory(countQuery as never, data.category) as typeof countQuery;
+      countQuery = applyAssignment(countQuery as never, data.category) as typeof countQuery;
+    }
+    countQuery = excludeDrafts(countQuery as never) as typeof countQuery;
+
+    const { count, error } = await countQuery;
+    if (error) throw new Error(error.message);
+
+    return count ?? 0;
   });
 
 export const fetchRawLeadCounts = createServerFn({ method: "GET" })
