@@ -1,4 +1,7 @@
 // CS Pipeline timezone helpers.
+// React is imported only for the useEtDateKey hook at the bottom of this
+// file.  All other exports are pure functions that work in any environment.
+import { useState, useEffect } from "react";
 //
 // The CS Pipeline (and only the CS Pipeline) displays and filters dates in
 // Eastern Time. Database timestamps remain stored in UTC — these helpers only
@@ -180,4 +183,37 @@ export function csPipelineInputValueToUtcIso(value: string | null | undefined): 
   if (!m) return null;
   const [, y, mo, d, h, mi, s] = m;
   return etWallToUtc(+y, +mo, +d, +h, +mi, s ? +s : 0, 0).toISOString();
+}
+
+/**
+ * React hook that tracks the current Eastern-Time calendar day.
+ *
+ * Returns a `"YYYY-MM-DD"` string representing today in `America/New_York`.
+ * A `setInterval` running every 60 s checks whether the ET date has changed
+ * and updates the state when it has — causing all hook consumers to re-render
+ * only at Eastern midnight, not at the browser's local midnight.
+ *
+ * Use this as the single reactive source of "what ET day is it?" anywhere
+ * inside the CS Pipeline:
+ *
+ * ```tsx
+ * const etDateKey = useEtDateKey();
+ * // Recompute ET-dependent values whenever the key changes:
+ * const todayStart = useMemo(() => csPipelineTodayStartUtcIso(), [etDateKey]);
+ * const etToday    = useMemo(() => csPipelineEtCalendarToday(),  [etDateKey]);
+ * ```
+ */
+export function useEtDateKey(): string {
+  const [key, setKey] = useState<string>(() => csPipelineTodayKey());
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const next = csPipelineTodayKey();
+      // Only trigger a re-render when the ET calendar day actually changed.
+      setKey((prev) => (prev !== next ? next : prev));
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  return key;
 }

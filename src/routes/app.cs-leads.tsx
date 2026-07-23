@@ -76,6 +76,7 @@ import {
   formatCsPipelineDateWithYear,
   formatCsPipelineShortDate,
   utcIsoToCsPipelineInputValue,
+  useEtDateKey,
 } from "@/lib/cs-pipeline-time";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
@@ -843,7 +844,64 @@ function Inner() {
     : (totalCount.data ?? 0);
   const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / PAGE_SIZE));
 
-  const todayStart = useMemo(() => csPipelineTodayStartUtcIso(), []);
+  // ── Eastern-Time date rollover ─────────────────────────────────────────
+  // `etDateKey` is a "YYYY-MM-DD" string (ET) that updates at Eastern midnight
+  // via a 60-second interval in the useEtDateKey hook. Everything that
+  // depends on "what ET day is it?" derives from this single value so the
+  // whole UI stays in sync.
+  const etDateKey = useEtDateKey();
+
+  // ET calendar day as a JS Date (y/m/d = ET today, time = local midnight).
+  // Re-derived only when the ET date changes.
+  const etToday = useMemo(() => csPipelineEtCalendarToday(), [etDateKey]);
+
+  // UTC ISO boundary for the start of ET today. Re-derived when ET date
+  // changes so the "Sent today" query key also changes and forces a refetch.
+  const todayStart = useMemo(() => csPipelineTodayStartUtcIso(), [etDateKey]);
+
+  // ── Auto-slide preset date ranges at Eastern midnight ────────────────────
+  // Helper: returns true when two Date values represent the same calendar day
+  // (year / month / day only — ignores time).
+  const isSameDayLocal = (a: Date | undefined, b: Date) =>
+    !!a &&
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  useEffect(() => {
+    // When the Eastern calendar date rolls over we need to:
+    //  1. Slide any active preset forward to reflect the new ET day.
+    //  2. Invalidate all CS-pipeline queries so the list, Garage Door count,
+    //     pagination total, and Sent-today badge all refresh together.
+    // We only mutate state if a preset (Today / 7d / 30d) was active;
+    // custom date ranges are left unchanged.
+    setDateRange((prev) => {
+      if (!prev?.from) return prev; // no range selected — nothing to do
+      const newToday = csPipelineEtCalendarToday();
+      const wasToday =
+        isSameDayLocal(prev.from, subDays(newToday, 0)) ||
+        // Detect the common case where "today" was yesterday's ET date:
+        // prev.from matches yesterday of newToday AND prev.to also matches yesterday.
+        (isSameDayLocal(prev.from, subDays(newToday, 1)) &&
+          isSameDayLocal(prev.to, subDays(newToday, 1)));
+      const was7d =
+        isSameDayLocal(prev.from, subDays(newToday, 7)) &&
+        isSameDayLocal(prev.to, subDays(newToday, 1));
+      const was30d =
+        isSameDayLocal(prev.from, subDays(newToday, 30)) &&
+        isSameDayLocal(prev.to, subDays(newToday, 1));
+      if (wasToday) return { from: newToday, to: newToday };
+      if (was7d) return { from: subDays(newToday, 6), to: newToday };
+      if (was30d) return { from: subDays(newToday, 29), to: newToday };
+      return prev; // custom range — leave unchanged
+    });
+    // Invalidate all pipeline queries so every data point refreshes together.
+    qc.invalidateQueries({ queryKey: ["cs_leads"] });
+    qc.invalidateQueries({ queryKey: ["cs_leads_count"] });
+    qc.invalidateQueries({ queryKey: ["cs_sent_today"] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [etDateKey]); // run only when ET calendar day changes
+
   const sentToday = useQuery({
     queryKey: ["cs_sent_today", auth.user?.id, todayStart],
     enabled: !!auth.user?.id,
@@ -1246,12 +1304,14 @@ function Inner() {
           </Popover>
         )}
         {(isAdmin || isCs) && (() => {
-          const t = csPipelineEtCalendarToday();
-          const isSameDay = (a: Date | undefined, b: Date) =>
-            !!a && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-          const activeToday = isSameDay(dateRange?.from, t) && isSameDay(dateRange?.to, t);
-          const active7d = isSameDay(dateRange?.from, subDays(t, 6)) && isSameDay(dateRange?.to, t);
-          const active30d = isSameDay(dateRange?.from, subDays(t, 29)) && isSameDay(dateRange?.to, t);
+          // Use the stable `etToday` value derived from `etDateKey` state so
+          // that all three preset buttons always reflect the current ET day
+          // without needing a page reload. The active-highlighting comparison
+          // uses isSameDayLocal (defined above) which compares y/m/d only.
+          const t = etToday;
+          const activeToday = isSameDayLocal(dateRange?.from, t) && isSameDayLocal(dateRange?.to, t);
+          const active7d = isSameDayLocal(dateRange?.from, subDays(t, 6)) && isSameDayLocal(dateRange?.to, t);
+          const active30d = isSameDayLocal(dateRange?.from, subDays(t, 29)) && isSameDayLocal(dateRange?.to, t);
           return (
             <div className="flex items-center gap-1">
               <Button
