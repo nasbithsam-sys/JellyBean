@@ -66,17 +66,17 @@ import {
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { subDays } from "date-fns";
 import {
   csPipelineDateRangeToUtcIso,
-  csPipelineEtCalendarToday,
+  csPipelineDateKeyRangeToUtcIso,
+  csPipelineRelativeDateRange,
   csPipelineInputValueToUtcIso,
-  csPipelineTodayStartUtcIso,
+  formatCsPipelineCalendarDateWithYear,
+  formatCsPipelineCalendarShortDate,
   formatCsPipelineDateTime,
-  formatCsPipelineDateWithYear,
-  formatCsPipelineShortDate,
   utcIsoToCsPipelineInputValue,
-  useEtDateKey,
+  useCsPipelineEasternDateKey,
+  type CsPipelineRelativePreset,
 } from "@/lib/cs-pipeline-time";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
@@ -397,6 +397,7 @@ function Inner() {
   const [areaFilter, setAreaFilter] = useState("all");
   const [garageDoorOnly, setGarageDoorOnly] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [activeDatePreset, setActiveDatePreset] = useState<CsPipelineRelativePreset | null>(null);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
   const [activeStatus, setActiveStatus] = useState<CsStatus | "__all__" | "templates">("__all__");
@@ -641,7 +642,7 @@ function Inner() {
 
       // Date range — pushed to DB (assigned_at is indexed)
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
-      if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
+      if (dbDateTo) q = q.lt("assigned_at", dbDateTo);
 
       // Owner filter — pushed to DB (assigned_to is indexed)
       if (dbOwner === "__unassigned__") {
@@ -740,7 +741,7 @@ function Inner() {
 
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
-      if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
+      if (dbDateTo) q = q.lt("assigned_at", dbDateTo);
 
       if (dbOwner === "__unassigned__") {
         q = q.is("assigned_to", null);
@@ -811,7 +812,7 @@ function Inner() {
         .select("id", { count: "exact", head: true });
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
-      if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
+      if (dbDateTo) q = q.lt("assigned_at", dbDateTo);
 
       if (dbOwner === "__unassigned__") {
         q = q.is("assigned_to", null);
@@ -845,62 +846,24 @@ function Inner() {
   const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / PAGE_SIZE));
 
   // ── Eastern-Time date rollover ─────────────────────────────────────────
-  // `etDateKey` is a "YYYY-MM-DD" string (ET) that updates at Eastern midnight
-  // via a 60-second interval in the useEtDateKey hook. Everything that
-  // depends on "what ET day is it?" derives from this single value so the
-  // whole UI stays in sync.
-  const etDateKey = useEtDateKey();
-
-  // ET calendar day as a JS Date (y/m/d = ET today, time = local midnight).
-  // Re-derived only when the ET date changes.
-  const etToday = useMemo(() => csPipelineEtCalendarToday(), [etDateKey]);
-
-  // UTC ISO boundary for the start of ET today. Re-derived when ET date
-  // changes so the "Sent today" query key also changes and forces a refetch.
-  const todayStart = useMemo(() => csPipelineTodayStartUtcIso(), [etDateKey]);
+  // `etDateKey` is a "YYYY-MM-DD" string (ET) that updates at the exact
+  // America/New_York midnight, independent of the browser timezone.
+  const etDateKey = useCsPipelineEasternDateKey();
+  const todayStart = useMemo(
+    () => csPipelineDateKeyRangeToUtcIso(etDateKey, etDateKey).fromIso ?? "",
+    [etDateKey],
+  );
 
   // ── Auto-slide preset date ranges at Eastern midnight ────────────────────
-  // Helper: returns true when two Date values represent the same calendar day
-  // (year / month / day only — ignores time).
-  const isSameDayLocal = (a: Date | undefined, b: Date) =>
-    !!a &&
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
+  const applyDatePreset = (preset: CsPipelineRelativePreset) => {
+    setActiveDatePreset(preset);
+    setDateRange(csPipelineRelativeDateRange(preset, etDateKey));
+  };
 
   useEffect(() => {
-    // When the Eastern calendar date rolls over we need to:
-    //  1. Slide any active preset forward to reflect the new ET day.
-    //  2. Invalidate all CS-pipeline queries so the list, Garage Door count,
-    //     pagination total, and Sent-today badge all refresh together.
-    // We only mutate state if a preset (Today / 7d / 30d) was active;
-    // custom date ranges are left unchanged.
-    setDateRange((prev) => {
-      if (!prev?.from) return prev; // no range selected — nothing to do
-      const newToday = csPipelineEtCalendarToday();
-      const wasToday =
-        isSameDayLocal(prev.from, subDays(newToday, 0)) ||
-        // Detect the common case where "today" was yesterday's ET date:
-        // prev.from matches yesterday of newToday AND prev.to also matches yesterday.
-        (isSameDayLocal(prev.from, subDays(newToday, 1)) &&
-          isSameDayLocal(prev.to, subDays(newToday, 1)));
-      const was7d =
-        isSameDayLocal(prev.from, subDays(newToday, 7)) &&
-        isSameDayLocal(prev.to, subDays(newToday, 1));
-      const was30d =
-        isSameDayLocal(prev.from, subDays(newToday, 30)) &&
-        isSameDayLocal(prev.to, subDays(newToday, 1));
-      if (wasToday) return { from: newToday, to: newToday };
-      if (was7d) return { from: subDays(newToday, 6), to: newToday };
-      if (was30d) return { from: subDays(newToday, 29), to: newToday };
-      return prev; // custom range — leave unchanged
-    });
-    // Invalidate all pipeline queries so every data point refreshes together.
-    qc.invalidateQueries({ queryKey: ["cs_leads"] });
-    qc.invalidateQueries({ queryKey: ["cs_leads_count"] });
-    qc.invalidateQueries({ queryKey: ["cs_sent_today"] });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [etDateKey]); // run only when ET calendar day changes
+    if (!activeDatePreset) return;
+    setDateRange(() => csPipelineRelativeDateRange(activeDatePreset, etDateKey));
+  }, [activeDatePreset, etDateKey]);
 
   const sentToday = useQuery({
     queryKey: ["cs_sent_today", auth.user?.id, todayStart],
@@ -1265,14 +1228,15 @@ function Inner() {
                 <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
                 {dateRange?.from
                   ? dateRange.to
-                    ? `${formatCsPipelineShortDate(dateRange.from)} – ${formatCsPipelineShortDate(dateRange.to)}`
-                    : formatCsPipelineDateWithYear(dateRange.from)
+                    ? `${formatCsPipelineCalendarShortDate(dateRange.from)} – ${formatCsPipelineCalendarShortDate(dateRange.to)}`
+                    : formatCsPipelineCalendarDateWithYear(dateRange.from)
                   : "Date range"}
                 {dateRange?.from && (
                   <span
                     role="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      setActiveDatePreset(null);
                       setDateRange(undefined);
                     }}
                     className="ml-1.5 -mr-1 h-4 w-4 grid place-items-center rounded-full hover:bg-destructive/20"
@@ -1288,7 +1252,10 @@ function Inner() {
                   size="sm"
                   variant="ghost"
                   className="h-7 text-[11px]"
-                  onClick={() => setDateRange(undefined)}
+                  onClick={() => {
+                    setActiveDatePreset(null);
+                    setDateRange(undefined);
+                  }}
                 >
                   Clear
                 </Button>
@@ -1296,7 +1263,10 @@ function Inner() {
               <Calendar
                 mode="range"
                 selected={dateRange}
-                onSelect={setDateRange}
+                onSelect={(range) => {
+                  setActiveDatePreset(null);
+                  setDateRange(range);
+                }}
                 numberOfMonths={2}
                 className={cn("p-3 pointer-events-auto")}
               />
@@ -1304,37 +1274,29 @@ function Inner() {
           </Popover>
         )}
         {(isAdmin || isCs) && (() => {
-          // Use the stable `etToday` value derived from `etDateKey` state so
-          // that all three preset buttons always reflect the current ET day
-          // without needing a page reload. The active-highlighting comparison
-          // uses isSameDayLocal (defined above) which compares y/m/d only.
-          const t = etToday;
-          const activeToday = isSameDayLocal(dateRange?.from, t) && isSameDayLocal(dateRange?.to, t);
-          const active7d = isSameDayLocal(dateRange?.from, subDays(t, 6)) && isSameDayLocal(dateRange?.to, t);
-          const active30d = isSameDayLocal(dateRange?.from, subDays(t, 29)) && isSameDayLocal(dateRange?.to, t);
           return (
             <div className="flex items-center gap-1">
               <Button
                 size="sm"
-                variant={activeToday ? "default" : "outline"}
+                variant={activeDatePreset === "today" ? "default" : "outline"}
                 className="h-9 text-[12px] px-2.5"
-                onClick={() => setDateRange({ from: t, to: t })}
+                onClick={() => applyDatePreset("today")}
               >
                 Today
               </Button>
               <Button
                 size="sm"
-                variant={active7d ? "default" : "outline"}
+                variant={activeDatePreset === "last7" ? "default" : "outline"}
                 className="h-9 text-[12px] px-2.5"
-                onClick={() => setDateRange({ from: subDays(t, 6), to: t })}
+                onClick={() => applyDatePreset("last7")}
               >
                 7d
               </Button>
               <Button
                 size="sm"
-                variant={active30d ? "default" : "outline"}
+                variant={activeDatePreset === "last30" ? "default" : "outline"}
                 className="h-9 text-[12px] px-2.5"
-                onClick={() => setDateRange({ from: subDays(t, 29), to: t })}
+                onClick={() => applyDatePreset("last30")}
               >
                 30d
               </Button>
