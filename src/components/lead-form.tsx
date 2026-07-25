@@ -176,6 +176,7 @@ export function LeadForm({
   // Holds the resolved form values waiting for user to confirm or cancel
   const pendingSubmitValuesRef = useRef<LeadFormValues | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [markingNotFound, setMarkingNotFound] = useState(false);
 
   // Baseline snapshot representing the last "clean" state (initial values, or
   // the values that were just persisted via Save Draft). isDirty compares
