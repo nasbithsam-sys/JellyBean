@@ -2020,6 +2020,14 @@ function Inner() {
             setQualifyDraft(null);
             toast.success("Forwarded to CS");
           }}
+          onNotFound={async () => {
+            await updateAction(qualifyFor.row_key, { category: "not_found" });
+            setQualifyFor(null);
+            setQualifySecondPhone("");
+            setQualifyDraft(null);
+            qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
+            toast.success("Moved to Number not found");
+          }}
         />
       )}
 
@@ -2431,6 +2439,7 @@ function QualifyDialog({
   draft,
   onClose,
   onSent,
+  onNotFound,
 }: {
   entry: CacheEntry;
   actorId: string | null;
@@ -2440,6 +2449,7 @@ function QualifyDialog({
   draft: LeadDraft | null;
   onClose: () => void;
   onSent: () => void;
+  onNotFound: () => Promise<void> | void;
 }) {
   const row = entry.data;
   const [busy, setBusy] = useState(false);
@@ -2616,6 +2626,17 @@ function QualifyDialog({
             onCancel={onClose}
             onSubmit={send}
             onSaveDraft={handleSaveDraft}
+            onNumberNotFound={async () => {
+              if (actorId) {
+                await deleteDraftForSource({
+                  userId: actorId,
+                  draftId: draft?.id ?? null,
+                  source_type: "raw_lead",
+                  source_lead_id: entry.id ?? null,
+                });
+              }
+              await onNotFound();
+            }}
           />
         </Suspense>
 

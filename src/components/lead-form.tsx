@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle, Video, ExternalLink } from "lucide-react";
+import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle, Video, ExternalLink, PhoneOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -123,6 +123,7 @@ export function LeadForm({
   onCancel,
   onSubmit,
   onSaveDraft,
+  onNumberNotFound,
   disableDuplicateCheck = false,
 }: {
   title?: string;
@@ -137,6 +138,7 @@ export function LeadForm({
   onCancel: () => void;
   onSubmit: (values: LeadFormValues) => Promise<void>;
   onSaveDraft?: (values: LeadFormValues) => Promise<void>;
+  onNumberNotFound?: () => Promise<void> | void;
   disableDuplicateCheck?: boolean;
 }) {
 
@@ -174,6 +176,7 @@ export function LeadForm({
   // Holds the resolved form values waiting for user to confirm or cancel
   const pendingSubmitValuesRef = useRef<LeadFormValues | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [markingNotFound, setMarkingNotFound] = useState(false);
 
   // Baseline snapshot representing the last "clean" state (initial values, or
   // the values that were just persisted via Save Draft). isDirty compares
@@ -982,7 +985,32 @@ export function LeadForm({
         </div>
       ) : null}
 
-      <div className="flex justify-end gap-2 pt-2 border-t border-border">
+      <div className="flex flex-col-reverse gap-2 pt-2 border-t border-border sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          {onNumberNotFound ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                setMarkingNotFound(true);
+                try {
+                  await onNumberNotFound();
+                } finally {
+                  setMarkingNotFound(false);
+                }
+              }}
+              disabled={submitting || savingDraft || isCompressing || markingNotFound}
+            >
+              {markingNotFound ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <PhoneOff className="h-4 w-4 mr-2" />
+              )}
+              Number not found
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2">
         <Button
           type="button"
           variant="outline"
@@ -1036,7 +1064,9 @@ export function LeadForm({
             </>
           )}
         </Button>
+        </div>
       </div>
+
 
 
       <DuplicateLeadDialog
