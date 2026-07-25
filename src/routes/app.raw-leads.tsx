@@ -2020,6 +2020,14 @@ function Inner() {
             setQualifyDraft(null);
             toast.success("Forwarded to CS");
           }}
+          onNotFound={async () => {
+            await updateAction(qualifyFor.row_key, { category: "not_found" });
+            setQualifyFor(null);
+            setQualifySecondPhone("");
+            setQualifyDraft(null);
+            qc.invalidateQueries({ queryKey: ["lead-drafts-count"] });
+            toast.success("Moved to Number not found");
+          }}
         />
       )}
 
