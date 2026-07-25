@@ -137,6 +137,7 @@ export function LeadForm({
   onCancel: () => void;
   onSubmit: (values: LeadFormValues) => Promise<void>;
   onSaveDraft?: (values: LeadFormValues) => Promise<void>;
+  onNumberNotFound?: () => Promise<void> | void;
   disableDuplicateCheck?: boolean;
 }) {
 
