@@ -985,7 +985,32 @@ export function LeadForm({
         </div>
       ) : null}
 
-      <div className="flex justify-end gap-2 pt-2 border-t border-border">
+      <div className="flex flex-col-reverse gap-2 pt-2 border-t border-border sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          {onNumberNotFound ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                setMarkingNotFound(true);
+                try {
+                  await onNumberNotFound();
+                } finally {
+                  setMarkingNotFound(false);
+                }
+              }}
+              disabled={submitting || savingDraft || isCompressing || markingNotFound}
+            >
+              {markingNotFound ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <PhoneOff className="h-4 w-4 mr-2" />
+              )}
+              Number not found
+            </Button>
+          ) : null}
+        </div>
+        <div className="flex justify-end gap-2">
         <Button
           type="button"
           variant="outline"
@@ -1039,7 +1064,9 @@ export function LeadForm({
             </>
           )}
         </Button>
+        </div>
       </div>
+
 
 
       <DuplicateLeadDialog
