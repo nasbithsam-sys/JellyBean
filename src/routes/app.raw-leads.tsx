@@ -2431,6 +2431,7 @@ function QualifyDialog({
   draft,
   onClose,
   onSent,
+  onNotFound,
 }: {
   entry: CacheEntry;
   actorId: string | null;
@@ -2440,6 +2441,7 @@ function QualifyDialog({
   draft: LeadDraft | null;
   onClose: () => void;
   onSent: () => void;
+  onNotFound: () => Promise<void> | void;
 }) {
   const row = entry.data;
   const [busy, setBusy] = useState(false);
