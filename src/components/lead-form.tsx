@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle, Video, ExternalLink } from "lucide-react";
+import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle, Video, ExternalLink, PhoneOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
