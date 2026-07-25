@@ -2618,6 +2618,17 @@ function QualifyDialog({
             onCancel={onClose}
             onSubmit={send}
             onSaveDraft={handleSaveDraft}
+            onNumberNotFound={async () => {
+              if (actorId) {
+                await deleteDraftForSource({
+                  userId: actorId,
+                  draftId: draft?.id ?? null,
+                  source_type: "raw_lead",
+                  source_lead_id: entry.id ?? null,
+                });
+              }
+              await onNotFound();
+            }}
           />
         </Suspense>
 
