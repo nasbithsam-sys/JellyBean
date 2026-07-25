@@ -123,6 +123,7 @@ export function LeadForm({
   onCancel,
   onSubmit,
   onSaveDraft,
+  onNumberNotFound,
   disableDuplicateCheck = false,
 }: {
   title?: string;
