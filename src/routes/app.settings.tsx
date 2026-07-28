@@ -49,16 +49,31 @@ import {
   EyeOff,
   BookOpen,
   Copy,
+  Megaphone,
   RefreshCw,
 } from "lucide-react";
 import { DocumentationTab } from "@/components/settings/documentation-tab";
+import { CrmUpdatesTab } from "@/components/settings/crm-updates-tab";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { adminCreateUser, adminResetPassword, adminSetActive } from "@/lib/admin-users.functions";
 import { adminDeleteUser } from "@/lib/login-otp.functions";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/app/settings")({ component: Page });
+type SettingsTab = "general" | "updates" | "users" | "docs" | "crm-updates";
+
+const SETTINGS_TABS = new Set<SettingsTab>(["general", "updates", "users", "docs", "crm-updates"]);
+
+function isSettingsTab(value: unknown): value is SettingsTab {
+  return typeof value === "string" && SETTINGS_TABS.has(value as SettingsTab);
+}
+
+export const Route = createFileRoute("/app/settings")({
+  component: Page,
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: isSettingsTab(search.tab) ? search.tab : undefined,
+  }),
+});
 
 const ADMIN_UPDATE_CHECKLIST_KEY = "admin_update_checklist";
 
@@ -89,7 +104,16 @@ function readAdminUpdateItems(value: Json | null | undefined): AdminUpdateItem[]
 
 function Page() {
   const auth = useAuth();
-  const [tab, setTab] = useState<"general" | "updates" | "users" | "docs">("general");
+  const { tab: searchTab } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const tab = searchTab ?? "general";
+
+  function setTab(nextTab: SettingsTab) {
+    void navigate({
+      search: { tab: nextTab === "general" ? undefined : nextTab },
+    });
+  }
+
   return (
     <div>
       <PageHeader title="Settings" description="System-wide preferences and team management." />
@@ -125,12 +149,20 @@ function Page() {
               >
                 Documentation
               </TabBtn>
+              <TabBtn
+                active={tab === "crm-updates"}
+                onClick={() => setTab("crm-updates")}
+                icon={<Megaphone className="h-3.5 w-3.5" />}
+              >
+                CRM Updates
+              </TabBtn>
             </div>
           </div>
           {tab === "general" && <GeneralTab />}
           {tab === "updates" && <UpdatesTab />}
           {tab === "users" && <UsersTab />}
           {tab === "docs" && <DocumentationTab />}
+          {tab === "crm-updates" && <CrmUpdatesTab />}
         </RoleGate>
       </PageBody>
     </div>
@@ -168,11 +200,11 @@ function GeneralTab() {
     <div className="space-y-4 max-w-2xl">
       <div className="crm-section-panel">
         <div className="crm-surface-card p-5">
-        <h3 className="text-sm font-semibold mb-1">Authentication</h3>
-        <p className="text-xs text-muted-foreground">
-          Login codes and OTP prompts are disabled for every role. Users sign in with their
-          provisioned username or email and password only.
-        </p>
+          <h3 className="text-sm font-semibold mb-1">Authentication</h3>
+          <p className="text-xs text-muted-foreground">
+            Login codes and OTP prompts are disabled for every role. Users sign in with their
+            provisioned username or email and password only.
+          </p>
         </div>
       </div>
     </div>
@@ -623,7 +655,11 @@ function UserRowItem({ user, onChange }: { user: UserRow; onChange: () => void }
                     aria-label={showResetPwValue ? "Hide password" : "Show password"}
                     className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    {showResetPwValue ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showResetPwValue ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
               </Field>
@@ -683,7 +719,12 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   }
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
       <DialogContent className="max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create user</DialogTitle>

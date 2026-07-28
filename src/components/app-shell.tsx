@@ -15,7 +15,6 @@ import {
   PieChart,
   MoreHorizontal,
   KeyRound,
-  Megaphone,
 } from "lucide-react";
 
 import { CrmUpdatesNotifier } from "@/components/crm-updates-notifier";
@@ -54,7 +53,6 @@ const ADMIN: Item[] = [
   { to: "/app/lead-assignment", label: "Lead Assignment", icon: PieChart },
   { to: "/app/logs", label: "Activity", icon: ScrollText, shortcut: "G" },
   { to: "/app/health", label: "Health", icon: ShieldCheck, shortcut: "H" },
-  { to: "/app/crm-updates", label: "CRM Updates", icon: Megaphone },
   { to: "/app/settings", label: "Settings", icon: Settings, shortcut: "S" },
 ];
 
@@ -95,11 +93,7 @@ const ADMIN_FULL: Item[] = [
 ];
 
 const SUB_ADMIN: Item[] = ADMIN_FULL.filter(
-  (item) =>
-    item.to !== "/app/cs-leads" &&
-    item.to !== "/app/logs" &&
-    item.to !== "/app/settings" &&
-    item.to !== "/app/crm-updates",
+  (item) => item.to !== "/app/cs-leads" && item.to !== "/app/logs" && item.to !== "/app/settings",
 );
 
 function itemsForRole(role: AppRole | null): Item[] {
@@ -131,7 +125,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   const displayName = auth.profile?.full_name || auth.user?.email || "-";
   const skewSeconds = useClockSkew();
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  
+
   useRealtimeSync(auth.primaryRole);
 
   return (
@@ -145,9 +139,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
               className="h-10 w-10 object-contain shrink-0"
             />
             <div className="hidden lg:block leading-tight">
-              <div className="text-[14px] font-bold tracking-[-0.015em] text-white">
-                JellyBean
-              </div>
+              <div className="text-[14px] font-bold tracking-[-0.015em] text-white">JellyBean</div>
               <div className="text-[11px] font-medium tracking-[0.02em] uppercase text-white/50">
                 CRM
               </div>
@@ -234,7 +226,6 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                     <KeyRound className="h-4 w-4" />
                     Change Password
                   </DropdownMenuItem>
-
                 </DropdownMenuContent>
               </DropdownMenu>
               <button
@@ -258,8 +249,8 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
               </div>
               <p className="text-xs leading-relaxed opacity-90">
                 Your computer's clock is out of sync with our servers by about{" "}
-                <strong>{Math.round(Math.abs(skewSeconds) / 60)} minutes</strong>. This
-                causes security checks to fail and will trigger automatic logout.
+                <strong>{Math.round(Math.abs(skewSeconds) / 60)} minutes</strong>. This causes
+                security checks to fail and will trigger automatic logout.
               </p>
             </div>
             <div className="shrink-0 text-xs font-semibold bg-warning/20 px-3 py-1.5 rounded border border-warning/40">
