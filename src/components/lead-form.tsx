@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ImagePlus, Loader2, Star, Upload, X, Plus, AlertTriangle, Video, ExternalLink, PhoneOff } from "lucide-react";
+import {
+  ImagePlus,
+  Loader2,
+  Star,
+  Upload,
+  X,
+  Plus,
+  AlertTriangle,
+  Video,
+  ExternalLink,
+  PhoneOff,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,8 +22,16 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
 import { formatPhone, normalizePhone } from "@/lib/crm-lite";
 import { checkDuplicatePhone } from "@/lib/raw-leads.functions";
-import { compressVideoInBrowser, MAX_VIDEO_BYTES, ALLOWED_VIDEO_MIME_TYPES, getVideoDimensions } from "@/lib/video-compressor";
-import { DuplicateLeadDialog, type DuplicateMatchPreview } from "@/components/duplicate-lead-dialog";
+import {
+  compressVideoInBrowser,
+  MAX_VIDEO_BYTES,
+  ALLOWED_VIDEO_MIME_TYPES,
+  getVideoDimensions,
+} from "@/lib/video-compressor";
+import {
+  DuplicateLeadDialog,
+  type DuplicateMatchPreview,
+} from "@/components/duplicate-lead-dialog";
 import { useSignedLeadUrls } from "@/lib/lead-attachments";
 import { ServiceCombobox } from "@/components/service-combobox";
 
@@ -109,7 +128,6 @@ export function uploadLeadImages({
   );
 }
 
-
 export function LeadForm({
   title = "Lead form",
   submitLabel = "Save",
@@ -141,7 +159,6 @@ export function LeadForm({
   onNumberNotFound?: () => Promise<void> | void;
   disableDuplicateCheck?: boolean;
 }) {
-
   const fileRef = useRef<HTMLInputElement | null>(null);
   const videoFileRef = useRef<HTMLInputElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -211,7 +228,6 @@ export function LeadForm({
     filesLen: 0,
   });
   const [baseline, setBaseline] = useState<FormBaseline>(() => buildInitialBaseline());
-
 
   useEffect(() => {
     return () => {
@@ -367,7 +383,11 @@ export function LeadForm({
 
     // Abort any previous in-flight compression
     if (abortControllerRef.current) {
-      try { abortControllerRef.current.abort(); } catch {}
+      try {
+        abortControllerRef.current.abort();
+      } catch {
+        // Ignored
+      }
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -380,15 +400,17 @@ export function LeadForm({
     toastIdRef.current = toastId;
 
     const isActive = () =>
-      !state.cancelled &&
-      !controller.signal.aborted &&
-      abortControllerRef.current === controller;
+      !state.cancelled && !controller.signal.aborted && abortControllerRef.current === controller;
 
     const cancelJob = () => {
       if (state.cancelled) return;
       state.cancelled = true;
       state.canceling = true;
-      try { controller.abort(); } catch (e) { console.error("Abort error:", e); }
+      try {
+        controller.abort();
+      } catch (e) {
+        console.error("Abort error:", e);
+      }
       renderToast(0);
       setTimeout(() => toast.dismiss(toastId), 200);
       // Reset input immediately so the same file can be reselected
@@ -551,7 +573,7 @@ export function LeadForm({
       let freshMatches: DupMatch[] = [];
       try {
         const results = await Promise.all(
-          phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } }))
+          phoneDigits.map((digits) => checkDuplicate({ data: { phone: digits } })),
         );
         const allMatches = results.flatMap((r) => (r.matches ?? []) as DupMatch[]);
         // Exclude the lead being edited (if any) so it doesn't flag itself
@@ -573,14 +595,17 @@ export function LeadForm({
       if (freshMatches.length > 0) {
         // Map matches to the preview format required by DuplicateLeadDialog
         // Map matches to the preview format required by DuplicateLeadDialog
-        const secondTargetNumbers = extraNumbers.map((n) => normalizePhone(n)).filter((n) => n.length >= 7);
-        
+        const secondTargetNumbers = extraNumbers
+          .map((n) => normalizePhone(n))
+          .filter((n) => n.length >= 7);
+
         const previewMatches: DuplicateMatchPreview[] = freshMatches.map((match) => {
           let sourceLabel = "Primary number";
           if (
             secondTargetNumbers.length > 0 &&
             (secondTargetNumbers.includes(normalizePhone(match.customer_number)) ||
-             (match.customer_number_2 && secondTargetNumbers.includes(normalizePhone(match.customer_number_2))))
+              (match.customer_number_2 &&
+                secondTargetNumbers.includes(normalizePhone(match.customer_number_2))))
           ) {
             sourceLabel = "Additional number";
           }
@@ -654,7 +679,6 @@ export function LeadForm({
     }
   }
 
-
   return (
     <form onSubmit={handleSubmit} onPaste={handlePaste} className="space-y-5">
       <div className="space-y-1">
@@ -709,7 +733,9 @@ export function LeadForm({
               value={num}
               onChange={(e) => {
                 const val = e.target.value;
-                setExtraNumbers((prev) => prev.map((n, i) => (i === index ? formatPhoneInput(val) : n)));
+                setExtraNumbers((prev) =>
+                  prev.map((n, i) => (i === index ? formatPhoneInput(val) : n)),
+                );
               }}
               maxLength={40}
               placeholder={`Additional number ${index + 1}`}
@@ -723,6 +749,7 @@ export function LeadForm({
               onClick={() => {
                 setExtraNumbers((prev) => prev.filter((_, i) => i !== index));
               }}
+              aria-label="Remove additional number"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -863,7 +890,7 @@ export function LeadForm({
                     key={`existing-${idx}`}
                     className={cn(
                       "relative rounded-md overflow-hidden border border-border bg-muted",
-                      isVideo ? "h-32 w-48" : "h-20 w-20"
+                      isVideo ? "h-32 w-48" : "h-20 w-20",
                     )}
                   >
                     {isVideo ? (
@@ -875,23 +902,20 @@ export function LeadForm({
                         preload="metadata"
                       />
                     ) : (
-                      <img
-                        src={url}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
+                      <img src={url} alt="" className="h-full w-full object-cover" />
                     )}
                     <button
                       type="button"
                       onClick={() => setExistingImages((prev) => prev.filter((_, i) => i !== idx))}
                       className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
+                      aria-label="Remove existing image"
                     >
                       <X className="h-3 w-3" />
                     </button>
                   </div>
                 );
               })}
-              
+
               {/* Newly added files */}
               {files.map((file, index) => {
                 const isVideo = file.type.startsWith("video/");
@@ -900,7 +924,7 @@ export function LeadForm({
                     key={`${file.name}-${index}`}
                     className={cn(
                       "relative rounded-md overflow-hidden border border-border bg-muted",
-                      isVideo ? "h-32 w-48" : "h-20 w-20"
+                      isVideo ? "h-32 w-48" : "h-20 w-20",
                     )}
                   >
                     {isVideo ? (
@@ -922,13 +946,14 @@ export function LeadForm({
                       type="button"
                       onClick={() => removeFile(index)}
                       className="absolute top-0.5 right-0.5 h-5 w-5 grid place-items-center rounded-full bg-background/90 hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
+                      aria-label="Remove file"
                     >
                       <X className="h-3 w-3" />
                     </button>
                   </div>
                 );
               })}
-              {(files.length + existingImages.length) < MAX_IMAGES && (
+              {files.length + existingImages.length < MAX_IMAGES && (
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -1011,63 +1036,65 @@ export function LeadForm({
           ) : null}
         </div>
         <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-            if (abortControllerRef.current) abortControllerRef.current.abort();
-            if (toastIdRef.current) toast.dismiss(toastIdRef.current);
-            setIsCompressing(false);
-            setCompressionProgress(0);
-            onCancel();
-          }}
-          disabled={submitting || savingDraft}
-        >
-          Cancel
-        </Button>
-        {onSaveDraft ? (
           <Button
             type="button"
-            variant="secondary"
-            onClick={() => void handleSaveDraft()}
-            disabled={submitting || savingDraft || isCompressing}
+            variant="outline"
+            onClick={() => {
+              if (
+                isDirty &&
+                !window.confirm("You have unsaved changes. Are you sure you want to close?")
+              )
+                return;
+              if (abortControllerRef.current) abortControllerRef.current.abort();
+              if (toastIdRef.current) toast.dismiss(toastIdRef.current);
+              setIsCompressing(false);
+              setCompressionProgress(0);
+              onCancel();
+            }}
+            disabled={submitting || savingDraft}
           >
-            {savingDraft ? (
+            Cancel
+          </Button>
+          {onSaveDraft ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void handleSaveDraft()}
+              disabled={submitting || savingDraft || isCompressing}
+            >
+              {savingDraft ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Saving draft...
+                </>
+              ) : (
+                "Draft"
+              )}
+            </Button>
+          ) : null}
+          <Button
+            type="submit"
+            disabled={submitting || savingDraft || isCompressing || isDuplicateCheckPending}
+          >
+            {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Saving draft...
+                Saving...
+              </>
+            ) : isDuplicateCheckPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Checking duplicate...
               </>
             ) : (
-              "Draft"
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                {submitLabel}
+              </>
             )}
           </Button>
-        ) : null}
-        <Button
-          type="submit"
-          disabled={submitting || savingDraft || isCompressing || isDuplicateCheckPending}
-        >
-          {submitting ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Saving...
-            </>
-          ) : isDuplicateCheckPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Checking duplicate...
-            </>
-          ) : (
-            <>
-              <Upload className="h-4 w-4 mr-2" />
-              {submitLabel}
-            </>
-          )}
-        </Button>
         </div>
       </div>
-
-
 
       <DuplicateLeadDialog
         open={showDupConfirm}

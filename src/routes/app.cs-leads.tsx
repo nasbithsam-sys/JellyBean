@@ -97,7 +97,14 @@ import { confirmDiscardUnsaved } from "@/components/confirm-dialog";
 // service/pass_it_to and lead text fields. Avoids bare "garage" which
 // would incorrectly include garage remodeling/cleaning/flooring leads.
 const GARAGE_DOOR_PATTERNS = ["%garage door%", "%garage opener%", "%overhead door%"];
-const GARAGE_DOOR_FIELDS = ["service", "pass_it_to", "context", "post_text", "requirement_1", "requirement_2"];
+const GARAGE_DOOR_FIELDS = [
+  "service",
+  "pass_it_to",
+  "context",
+  "post_text",
+  "requirement_1",
+  "requirement_2",
+];
 const GARAGE_DOOR_OR_CLAUSE = GARAGE_DOOR_FIELDS.flatMap((f) =>
   GARAGE_DOOR_PATTERNS.map((p) => `${f}.ilike.${p}`),
 ).join(",");
@@ -254,8 +261,6 @@ const PIPELINE_STATUSES = [
   "converted",
   "need_follow_up",
 ] as const satisfies readonly CsStatus[];
-
-
 
 type ComposeTemplateItem = {
   id: string;
@@ -483,8 +488,7 @@ function Inner() {
     if (selectedIds.size === 0) return;
     const selectedLeads = (list.data ?? []).filter((l) => selectedIds.has(l.id));
     const targets = selectedLeads.filter(
-      (lead) =>
-        lead.context?.trim() && (lead.requirement_1?.trim() || lead.requirement_2?.trim()),
+      (lead) => lead.context?.trim() && (lead.requirement_1?.trim() || lead.requirement_2?.trim()),
     );
 
     if (targets.length === 0) {
@@ -613,7 +617,9 @@ function Inner() {
   // ── Status filter for DB (cs_status indexed via idx_qualified_leads_status_created) ──
   const dbStatus = useMemo(
     () =>
-      activeStatus === "__all__" || activeStatus === "templates" ? null : (activeStatus as CsStatus),
+      activeStatus === "__all__" || activeStatus === "templates"
+        ? null
+        : (activeStatus as CsStatus),
     [activeStatus],
   );
 
@@ -722,10 +728,6 @@ function Inner() {
     // Kept for call-site compatibility.
   };
 
-
-
-
-
   // ── Lightweight count query — runs only when indexed filter params change ──
   // Uses { count: "planned", head: true } — returns Postgres' planner estimate
   // instead of scanning the full filtered set. The exact count for a filtered
@@ -733,7 +735,10 @@ function Inner() {
   // calls). Pagination UI tolerates a slightly approximate total; per-status
   // badges still come from the exact `cs_leads_status_counts` RPC below.
   const totalCount = useQuery({
-    queryKey: ["cs_leads_count", { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, garageDoorOnly }],
+    queryKey: [
+      "cs_leads_count",
+      { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, garageDoorOnly },
+    ],
     queryFn: async () => {
       // Use exact count whenever a narrow filter (date range, owner, status,
       // search, or garage-door) is applied — the assigned_at index keeps this
@@ -745,10 +750,7 @@ function Inner() {
         dbDateFrom || dbDateTo || dbOwner || dbStatus || dbSearch || garageDoorOnly,
       );
       const countMode: "exact" | "planned" = hasNarrowFilter ? "exact" : "planned";
-      let q = supabase
-        .from("qualified_leads")
-        .select("id", { count: countMode, head: true });
-
+      let q = supabase.from("qualified_leads").select("id", { count: countMode, head: true });
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
       if (dbDateTo) q = q.lt("assigned_at", dbDateTo);
@@ -772,7 +774,6 @@ function Inner() {
         q = q.or(GARAGE_DOOR_OR_CLAUSE);
       }
 
-
       const { count, error } = await q;
       if (error) throw error;
       return count ?? 0;
@@ -781,8 +782,6 @@ function Inner() {
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
-
-
 
   const allTimeStatusCounts = useQuery({
     queryKey: ["cs_leads", "status_counts_all_time"],
@@ -808,7 +807,6 @@ function Inner() {
     placeholderData: keepPreviousData,
   });
 
-
   // Exact database count of Garage Door leads matching current filters.
   // Used for the toolbar badge and (when garageDoorOnly is active) pagination.
   const garageDoorCount = useQuery({
@@ -818,9 +816,7 @@ function Inner() {
       { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, areaFilter },
     ],
     queryFn: async () => {
-      let q = supabase
-        .from("qualified_leads")
-        .select("id", { count: "exact", head: true });
+      let q = supabase.from("qualified_leads").select("id", { count: "exact", head: true });
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
       if (dbDateTo) q = q.lt("assigned_at", dbDateTo);
@@ -851,9 +847,7 @@ function Inner() {
     placeholderData: keepPreviousData,
   });
 
-  const effectiveTotalCount = garageDoorOnly
-    ? (garageDoorCount.data ?? 0)
-    : (totalCount.data ?? 0);
+  const effectiveTotalCount = garageDoorOnly ? (garageDoorCount.data ?? 0) : (totalCount.data ?? 0);
   const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / PAGE_SIZE));
 
   // ── Eastern-Time date rollover ─────────────────────────────────────────
@@ -927,7 +921,9 @@ function Inner() {
       if (res.count === 0) {
         toast.info("No important leads available to assign.");
       } else {
-        toast.success(`${res.count} important lead${res.count === 1 ? "" : "s"} assigned to ${name}.`);
+        toast.success(
+          `${res.count} important lead${res.count === 1 ? "" : "s"} assigned to ${name}.`,
+        );
       }
       setImportantConfirmOpen(false);
       setImportantAssignee("");
@@ -950,16 +946,13 @@ function Inner() {
     queryKey: ["all_profiles"],
     enabled: isAdmin,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email");
+      const { data, error } = await supabase.from("profiles").select("user_id, full_name, email");
       if (error) throw error;
       return data ?? [];
     },
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
-
 
   const profilesById = useMemo(() => {
     const map = new Map<string, { full_name: string | null; email: string }>();
@@ -1123,7 +1116,6 @@ function Inner() {
   // shownLeads = all leads on current page (no slicing needed — DB paginates).
   const shownLeads = visibleLeads;
 
-
   function exportLeads() {
     downloadCsv(
       "cs-leads.csv",
@@ -1181,221 +1173,226 @@ function Inner() {
       )}
       <div className="crm-toolbar-panel">
         <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search customer, area, phone…"
-            className="w-full h-9 pl-9 pr-3 rounded-md bg-surface border border-border text-[13px] placeholder:text-muted-foreground/70 focus:outline-none"
-          />
-        </div>
-        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-          <SelectTrigger className="h-9 w-[150px] text-[12px]">
-            <SelectValue placeholder="Owner" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All owners</SelectItem>
-            <SelectItem value="mine">My leads</SelectItem>
-            <SelectItem value="unassigned">Unassigned</SelectItem>
-            {team.data?.map((member) => (
-              <SelectItem key={member.user_id} value={member.user_id}>
-                {member.full_name || member.email}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={areaFilter} onValueChange={setAreaFilter}>
-          <SelectTrigger className="h-9 w-[150px] text-[12px]">
-            <SelectValue placeholder="Area" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All areas</SelectItem>
-            {areaOptions.map((area) => (
-              <SelectItem key={area} value={area}>
-                {area}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          type="button"
-          size="sm"
-          variant={garageDoorOnly ? "default" : "outline"}
-          className="h-9 text-[12px]"
-          onClick={() => setGarageDoorOnly((v) => !v)}
-          title={garageDoorOnly ? "Showing garage door leads only — click to clear" : "Show only garage door leads"}
-        >
-          <Warehouse className="h-3.5 w-3.5 mr-1.5" />
-          Garage Door
-          <span className="ml-1.5 tabular-nums opacity-90">
-            ({garageDoorCount.data ?? (garageDoorCount.isLoading ? "—" : 0)})
-          </span>
-        </Button>
-        {(isAdmin || isCs) && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 text-[12px]">
-                <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-                {dateRange?.from
-                  ? dateRange.to
-                    ? `${formatCsPipelineCalendarShortDate(dateRange.from)} – ${formatCsPipelineCalendarShortDate(dateRange.to)}`
-                    : formatCsPipelineCalendarDateWithYear(dateRange.from)
-                  : "Date range"}
-                {dateRange?.from && (
-                  <span
-                    role="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
+          <div className="relative flex-1 min-w-[240px] max-w-md">
+            <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search customer, area, phone…"
+              className="w-full h-9 pl-9 pr-3 rounded-md bg-surface border border-border text-[13px] placeholder:text-muted-foreground/70 focus:outline-none"
+            />
+          </div>
+          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+            <SelectTrigger className="h-9 w-[150px] text-[12px]">
+              <SelectValue placeholder="Owner" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All owners</SelectItem>
+              <SelectItem value="mine">My leads</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
+              {team.data?.map((member) => (
+                <SelectItem key={member.user_id} value={member.user_id}>
+                  {member.full_name || member.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={areaFilter} onValueChange={setAreaFilter}>
+            <SelectTrigger className="h-9 w-[150px] text-[12px]">
+              <SelectValue placeholder="Area" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All areas</SelectItem>
+              {areaOptions.map((area) => (
+                <SelectItem key={area} value={area}>
+                  {area}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            size="sm"
+            variant={garageDoorOnly ? "default" : "outline"}
+            className="h-9 text-[12px]"
+            onClick={() => setGarageDoorOnly((v) => !v)}
+            title={
+              garageDoorOnly
+                ? "Showing garage door leads only — click to clear"
+                : "Show only garage door leads"
+            }
+          >
+            <Warehouse className="h-3.5 w-3.5 mr-1.5" />
+            Garage Door
+            <span className="ml-1.5 tabular-nums opacity-90">
+              ({garageDoorCount.data ?? (garageDoorCount.isLoading ? "—" : 0)})
+            </span>
+          </Button>
+          {(isAdmin || isCs) && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 text-[12px]">
+                  <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
+                  {dateRange?.from
+                    ? dateRange.to
+                      ? `${formatCsPipelineCalendarShortDate(dateRange.from)} – ${formatCsPipelineCalendarShortDate(dateRange.to)}`
+                      : formatCsPipelineCalendarDateWithYear(dateRange.from)
+                    : "Date range"}
+                  {dateRange?.from && (
+                    <span
+                      role="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveDatePreset(null);
+                        setDateRange(undefined);
+                      }}
+                      className="ml-1.5 -mr-1 h-4 w-4 grid place-items-center rounded-full hover:bg-destructive/20"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <div className="flex items-center justify-end p-2 border-b border-border">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-[11px]"
+                    onClick={() => {
                       setActiveDatePreset(null);
                       setDateRange(undefined);
                     }}
-                    className="ml-1.5 -mr-1 h-4 w-4 grid place-items-center rounded-full hover:bg-destructive/20"
                   >
-                    <Trash2 className="h-3 w-3" />
-                  </span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <div className="flex items-center justify-end p-2 border-b border-border">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-[11px]"
-                  onClick={() => {
+                    Clear
+                  </Button>
+                </div>
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={(range) => {
                     setActiveDatePreset(null);
-                    setDateRange(undefined);
+                    setDateRange(range);
+                  }}
+                  numberOfMonths={2}
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+          {(isAdmin || isCs) &&
+            (() => {
+              return (
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant={activeDatePreset === "today" ? "default" : "outline"}
+                    className="h-9 text-[12px] px-2.5"
+                    onClick={() => applyDatePreset("today")}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={activeDatePreset === "last7" ? "default" : "outline"}
+                    className="h-9 text-[12px] px-2.5"
+                    onClick={() => applyDatePreset("last7")}
+                  >
+                    7d
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={activeDatePreset === "last30" ? "default" : "outline"}
+                    className="h-9 text-[12px] px-2.5"
+                    onClick={() => applyDatePreset("last30")}
+                  >
+                    30d
+                  </Button>
+                </div>
+              );
+            })()}
+          <div className="ml-auto flex items-center gap-2">
+            <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px] shadow-sm">
+              <span className="text-muted-foreground">Sent today</span>
+              <span className="font-semibold tabular-nums">{sentToday.data ?? "—"}</span>
+            </div>
+            <Button
+              variant={notifPermission === "granted" ? "outline" : "default"}
+              size="sm"
+              className="h-9"
+              onClick={enableAlerts}
+              title={
+                notifPermission === "granted"
+                  ? "Alerts on — click to test"
+                  : notifPermission === "denied"
+                    ? "Notifications blocked in browser settings — click to enable sound"
+                    : "Enable sound + pop-up alerts for new leads"
+              }
+            >
+              {notifPermission === "granted" ? (
+                <Bell className="h-3.5 w-3.5 mr-1.5" />
+              ) : (
+                <BellOff className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {notifPermission === "granted" ? "Alerts on" : "Enable alerts"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => qc.invalidateQueries({ queryKey: ["cs_leads"] })}
+              disabled={list.isFetching}
+            >
+              {list.isFetching ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Refresh
+            </Button>
+            {isAdmin && (
+              <div className="inline-flex items-center gap-1.5 h-9 pl-2 pr-1 rounded-md bg-surface border border-border shadow-sm">
+                <Sparkles className="h-3.5 w-3.5 text-warning" />
+                <Select
+                  value={importantAssignee}
+                  onValueChange={(v) => {
+                    setImportantAssignee(v);
+                    setImportantConfirmOpen(true);
                   }}
                 >
-                  Clear
-                </Button>
+                  <SelectTrigger className="h-7 border-0 bg-transparent px-1.5 text-[12px] focus:ring-0 focus:ring-offset-0 shadow-none min-w-[190px]">
+                    <SelectValue placeholder="Assign Important Leads" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(team.data ?? []).length === 0 ? (
+                      <div className="px-3 py-2 text-[12px] text-muted-foreground">
+                        No active CS users
+                      </div>
+                    ) : (
+                      (team.data ?? []).map((m) => (
+                        <SelectItem key={m.user_id} value={m.user_id}>
+                          <div className="flex flex-col">
+                            <span className="text-[12px] font-medium">
+                              {m.full_name || m.email}
+                            </span>
+                            {m.full_name && (
+                              <span className="text-[10px] text-muted-foreground">{m.email}</span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
-              <Calendar
-                mode="range"
-                selected={dateRange}
-                onSelect={(range) => {
-                  setActiveDatePreset(null);
-                  setDateRange(range);
-                }}
-                numberOfMonths={2}
-                className={cn("p-3 pointer-events-auto")}
-              />
-            </PopoverContent>
-          </Popover>
-        )}
-        {(isAdmin || isCs) && (() => {
-          return (
-            <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant={activeDatePreset === "today" ? "default" : "outline"}
-                className="h-9 text-[12px] px-2.5"
-                onClick={() => applyDatePreset("today")}
-              >
-                Today
+            )}
+            {auth.primaryRole === "admin" && (
+              <Button variant="outline" size="sm" className="h-9" onClick={exportLeads}>
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Export
               </Button>
-              <Button
-                size="sm"
-                variant={activeDatePreset === "last7" ? "default" : "outline"}
-                className="h-9 text-[12px] px-2.5"
-                onClick={() => applyDatePreset("last7")}
-              >
-                7d
-              </Button>
-              <Button
-                size="sm"
-                variant={activeDatePreset === "last30" ? "default" : "outline"}
-                className="h-9 text-[12px] px-2.5"
-                onClick={() => applyDatePreset("last30")}
-              >
-                30d
-              </Button>
-            </div>
-          );
-        })()}
-        <div className="ml-auto flex items-center gap-2">
-          <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px] shadow-sm">
-            <span className="text-muted-foreground">Sent today</span>
-            <span className="font-semibold tabular-nums">{sentToday.data ?? "—"}</span>
+            )}
           </div>
-          <Button
-            variant={notifPermission === "granted" ? "outline" : "default"}
-            size="sm"
-            className="h-9"
-            onClick={enableAlerts}
-            title={
-              notifPermission === "granted"
-                ? "Alerts on — click to test"
-                : notifPermission === "denied"
-                  ? "Notifications blocked in browser settings — click to enable sound"
-                  : "Enable sound + pop-up alerts for new leads"
-            }
-          >
-            {notifPermission === "granted" ? (
-              <Bell className="h-3.5 w-3.5 mr-1.5" />
-            ) : (
-              <BellOff className="h-3.5 w-3.5 mr-1.5" />
-            )}
-            {notifPermission === "granted" ? "Alerts on" : "Enable alerts"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9"
-            onClick={() => qc.invalidateQueries({ queryKey: ["cs_leads"] })}
-            disabled={list.isFetching}
-          >
-            {list.isFetching ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-            )}
-            Refresh
-          </Button>
-          {isAdmin && (
-            <div className="inline-flex items-center gap-1.5 h-9 pl-2 pr-1 rounded-md bg-surface border border-border shadow-sm">
-              <Sparkles className="h-3.5 w-3.5 text-warning" />
-              <Select
-                value={importantAssignee}
-                onValueChange={(v) => {
-                  setImportantAssignee(v);
-                  setImportantConfirmOpen(true);
-                }}
-              >
-                <SelectTrigger className="h-7 border-0 bg-transparent px-1.5 text-[12px] focus:ring-0 focus:ring-offset-0 shadow-none min-w-[190px]">
-                  <SelectValue placeholder="Assign Important Leads" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(team.data ?? []).length === 0 ? (
-                    <div className="px-3 py-2 text-[12px] text-muted-foreground">
-                      No active CS users
-                    </div>
-                  ) : (
-                    (team.data ?? []).map((m) => (
-                      <SelectItem key={m.user_id} value={m.user_id}>
-                        <div className="flex flex-col">
-                          <span className="text-[12px] font-medium">
-                            {m.full_name || m.email}
-                          </span>
-                          {m.full_name && (
-                            <span className="text-[10px] text-muted-foreground">{m.email}</span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          {auth.primaryRole === "admin" && (
-            <Button variant="outline" size="sm" className="h-9" onClick={exportLeads}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Export
-            </Button>
-          )}
-        </div>
         </div>
       </div>
 
@@ -1434,7 +1431,6 @@ function Inner() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
 
       {canManagePrompt && (
         <div className="crm-section-panel">
@@ -1545,86 +1541,104 @@ function Inner() {
       {/* Status tabs */}
       <div className="crm-toolbar-panel">
         <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1 ">
-          <button
-            type="button"
-            onClick={() => setActiveStatus("__all__")}
-            className={cn(
-              "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
-              activeStatus === "__all__"
-                ? "bg-primary text-primary-foreground shadow-md"
-                : "text-muted-foreground hover:bg-surface hover:text-foreground",
-            )}
-          >
-            <span className={cn("h-1.5 w-1.5 rounded-full", activeStatus === "__all__" ? "bg-card" : "bg-foreground")} />
-            All Leads
-            <span className={cn("text-[10.5px] tabular-nums", activeStatus === "__all__" ? "text-primary-foreground/90" : "text-muted-foreground")}>
-              {allLeadsCount}
-            </span>
-          </button>
-          {PIPELINE_STATUSES.map((s) => (
+          <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1 ">
             <button
-              key={s}
               type="button"
-              onClick={() => setActiveStatus(s)}
+              onClick={() => setActiveStatus("__all__")}
               className={cn(
                 "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
-                activeStatus === s
-                  ? cn("shadow-sm ring-1", STATUS_TONE[s] ?? "bg-surface-hover text-foreground border-border")
+                activeStatus === "__all__"
+                  ? "bg-primary text-primary-foreground shadow-md"
                   : "text-muted-foreground hover:bg-surface hover:text-foreground",
               )}
             >
               <span
-                className={cn("h-1.5 w-1.5 rounded-full", statusDotTone(s))}
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  activeStatus === "__all__" ? "bg-card" : "bg-foreground",
+                )}
               />
-              {STATUS_LABEL[s] ?? s}
-              <span className={cn("text-[10.5px] tabular-nums", activeStatus === s ? "text-current/80" : "text-muted-foreground")}>
-                {counts[s] ?? 0}
+              All Leads
+              <span
+                className={cn(
+                  "text-[10.5px] tabular-nums",
+                  activeStatus === "__all__"
+                    ? "text-primary-foreground/90"
+                    : "text-muted-foreground",
+                )}
+              >
+                {allLeadsCount}
               </span>
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setActiveStatus("templates")}
-            className={cn(
-              "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
-              activeStatus === "templates"
-                ? "bg-primary text-primary-foreground shadow-md"
-                : "text-muted-foreground hover:bg-surface hover:text-foreground",
-            )}
-          >
-            <MessageSquarePlus className="h-3.5 w-3.5" />
-            Templates
-          </button>
-        </div>
-        <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1 ">
-          <button
-            type="button"
-            onClick={() => setViewMode("cards")}
-            className={cn(
-              "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
-              viewMode === "cards"
-                ? "bg-surface-hover text-foreground ring-1 ring-border shadow-sm"
-                : "text-muted-foreground hover:bg-surface hover:text-foreground",
-            )}
-          >
-            <LayoutGrid className="h-3.5 w-3.5" />
-            Cards
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("table")}
-            className={cn(
-              "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
-              viewMode === "table"
-                ? "bg-surface-hover text-foreground ring-1 ring-border shadow-sm"
-                : "text-muted-foreground hover:bg-surface hover:text-foreground",
-            )}
-          >
-            <Table2 className="h-3.5 w-3.5" />
-            Table
-          </button>
-        </div>
+            {PIPELINE_STATUSES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setActiveStatus(s)}
+                className={cn(
+                  "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
+                  activeStatus === s
+                    ? cn(
+                        "shadow-sm ring-1",
+                        STATUS_TONE[s] ?? "bg-surface-hover text-foreground border-border",
+                      )
+                    : "text-muted-foreground hover:bg-surface hover:text-foreground",
+                )}
+              >
+                <span className={cn("h-1.5 w-1.5 rounded-full", statusDotTone(s))} />
+                {STATUS_LABEL[s] ?? s}
+                <span
+                  className={cn(
+                    "text-[10.5px] tabular-nums",
+                    activeStatus === s ? "text-current/80" : "text-muted-foreground",
+                  )}
+                >
+                  {counts[s] ?? 0}
+                </span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setActiveStatus("templates")}
+              className={cn(
+                "crm-motion px-3 h-8 text-[12px] font-medium rounded-lg inline-flex items-center gap-1.5",
+                activeStatus === "templates"
+                  ? "bg-primary text-primary-foreground shadow-md"
+                  : "text-muted-foreground hover:bg-surface hover:text-foreground",
+              )}
+            >
+              <MessageSquarePlus className="h-3.5 w-3.5" />
+              Templates
+            </button>
+          </div>
+          <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-surface p-1 ">
+            <button
+              type="button"
+              onClick={() => setViewMode("cards")}
+              className={cn(
+                "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
+                viewMode === "cards"
+                  ? "bg-surface-hover text-foreground ring-1 ring-border shadow-sm"
+                  : "text-muted-foreground hover:bg-surface hover:text-foreground",
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={cn(
+                "crm-motion h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5",
+                viewMode === "table"
+                  ? "bg-surface-hover text-foreground ring-1 ring-border shadow-sm"
+                  : "text-muted-foreground hover:bg-surface hover:text-foreground",
+              )}
+            >
+              <Table2 className="h-3.5 w-3.5" />
+              Table
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1639,7 +1653,7 @@ function Inner() {
       ) : list.isLoading && !list.data ? (
         <div className="crm-section-panel">
           <div className="glass-card p-16 text-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
+            <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Loading pipeline…
           </div>
         </div>
       ) : visibleLeads.length === 0 ? (
@@ -1923,7 +1937,6 @@ function Inner() {
   );
 }
 
-
 function CsLeadsTable({
   leads,
   teamById,
@@ -1961,13 +1974,18 @@ function CsLeadsTable({
               >
                 <td className="px-3 py-2 font-medium">
                   <div className="flex items-center gap-1.5">
-                    {lead.is_important && (
-                      lead.pinned_important && lead.cs_status === "new" ? (
-                        <Pin aria-label="Pinned Important" className="h-3.5 w-3.5 text-warning fill-warning/20 rotate-45 shrink-0" />
+                    {lead.is_important &&
+                      (lead.pinned_important && lead.cs_status === "new" ? (
+                        <Pin
+                          aria-label="Pinned Important"
+                          className="h-3.5 w-3.5 text-warning fill-warning/20 rotate-45 shrink-0"
+                        />
                       ) : (
-                        <Sparkles aria-label="Important" className="h-3.5 w-3.5 text-warning fill-warning/20 shrink-0" />
-                      )
-                    )}
+                        <Sparkles
+                          aria-label="Important"
+                          className="h-3.5 w-3.5 text-warning fill-warning/20 shrink-0"
+                        />
+                      ))}
                     <span>{lead.customer_name}</span>
                   </div>
                 </td>
@@ -2055,7 +2073,7 @@ function LeadCard({
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
   const creator = lead.created_by ? profilesById?.get(lead.created_by) : null;
   const forwardedByText = creator
-    ? (creator.full_name || creator.email)
+    ? creator.full_name || creator.email
     : lead.created_by
       ? "Unknown user"
       : null;
@@ -2152,7 +2170,11 @@ function LeadCard({
         .from("qualified_leads")
         .update({
           assigned_to: next,
-          assigned_by: next ? (lead.assigned_to === next ? lead.assigned_by : (auth.user?.id || null)) : null,
+          assigned_by: next
+            ? lead.assigned_to === next
+              ? lead.assigned_by
+              : auth.user?.id || null
+            : null,
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
@@ -2241,12 +2263,10 @@ function LeadCard({
     setShowDeleteConfirm(true);
   }
 
-
-
   const imagesList = Array.isArray(lead.images) ? (lead.images as string[]) : [];
   let videoCount = 0;
   let imageCount = 0;
-  imagesList.forEach(url => {
+  imagesList.forEach((url) => {
     if (/\.(mp4|webm|mov)(\?.*)?$/i.test(url)) {
       videoCount++;
     } else {
@@ -2268,11 +2288,12 @@ function LeadCard({
       id={`lead-${lead.id}`}
       className={cn(
         "crm-lead-card crm-motion-lift crm-enter relative overflow-hidden p-4.5 group hover:border-border-strong hover:-translate-y-0.5 cursor-pointer bg-card",
-        selected && "ring-2 ring-primary border-primary"
+        selected && "ring-2 ring-primary border-primary",
       )}
       onClick={onOpen}
     >
-      {(important || (canViewAttachments && Array.isArray(lead.images) && lead.images.length > 0)) && (
+      {(important ||
+        (canViewAttachments && Array.isArray(lead.images) && lead.images.length > 0)) && (
         <div className="flex flex-wrap gap-2 mb-3.5">
           {important && (
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning/10 text-warning border border-warning/40 crm-pill-text shadow-sm">
@@ -2281,7 +2302,9 @@ function LeadCard({
               ) : (
                 <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
               )}
-              {lead.pinned_important && lead.cs_status === "new" ? "Pinned Important" : "Important job"}
+              {lead.pinned_important && lead.cs_status === "new"
+                ? "Pinned Important"
+                : "Important job"}
             </div>
           )}
           {canViewAttachments && Array.isArray(lead.images) && lead.images.length > 0 && (
@@ -2311,8 +2334,12 @@ function LeadCard({
               <button
                 type="button"
                 title="Copy name"
-                onClick={(e) => { e.stopPropagation(); copyToClipboard(lead.customer_name, "Name copied"); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyToClipboard(lead.customer_name, "Name copied");
+                }}
                 className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100"
+                aria-label="Copy name"
               >
                 <Copy className="h-3 w-3" />
               </button>
@@ -2346,8 +2373,12 @@ function LeadCard({
           <button
             type="button"
             title="Copy area"
-            onClick={(e) => { e.stopPropagation(); copyToClipboard(lead.sub_area!, "Area copied"); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              copyToClipboard(lead.sub_area!, "Area copied");
+            }}
             className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100"
+            aria-label="Copy area"
           >
             <Copy className="h-3 w-3" />
           </button>
@@ -2363,7 +2394,6 @@ function LeadCard({
         </div>
       )}
 
-
       <div className="mt-2.5 flex items-start gap-1.5 crm-lead-meta">
         <div className="min-w-0">
           <span className="crm-muted-text">Reference:</span>{" "}
@@ -2373,9 +2403,7 @@ function LeadCard({
 
       {lead.context && (
         <div className="mt-4 rounded-2xl border border-border/70 bg-surface/72 px-3.5 py-3 ">
-          <div className="crm-lead-label mb-1.5">
-            Context
-          </div>
+          <div className="crm-lead-label mb-1.5">Context</div>
           <p className="crm-lead-body line-clamp-3 whitespace-pre-wrap text-muted-foreground">
             {lead.context}
           </p>
@@ -2384,16 +2412,13 @@ function LeadCard({
 
       {lead.post_text && (
         <div className="mt-3 rounded-2xl border border-border/70 bg-surface/68 px-3.5 py-3 ">
-          <div className="crm-lead-label mb-1.5">
-            Exact customer requirement
-          </div>
-          <p className="crm-lead-body line-clamp-3 whitespace-pre-wrap">
-            {lead.post_text}
-          </p>
+          <div className="crm-lead-label mb-1.5">Exact customer requirement</div>
+          <p className="crm-lead-body line-clamp-3 whitespace-pre-wrap">{lead.post_text}</p>
         </div>
       )}
 
-      {((canViewForwardMeta && lead.submitted_by_role) || (canViewAttachments && attachmentText)) && (
+      {((canViewForwardMeta && lead.submitted_by_role) ||
+        (canViewAttachments && attachmentText)) && (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {canViewForwardMeta && lead.submitted_by_role && (
             <span className="px-2.5 py-1 rounded-full bg-accent/45 text-accent-foreground border border-border crm-pill-text uppercase tracking-[0.08em]">
@@ -2410,7 +2435,9 @@ function LeadCard({
 
       {canViewForwardMeta && forwardedByText && (
         <div className="mt-3.5 flex items-center gap-1.5 text-[11.5px] crm-muted-text">
-          <span className="crm-lead-label !text-[10px] !tracking-[0.08em] !font-bold !text-muted-foreground">Forwarded by</span>
+          <span className="crm-lead-label !text-[10px] !tracking-[0.08em] !font-bold !text-muted-foreground">
+            Forwarded by
+          </span>
           <span className="font-semibold text-foreground">{forwardedByText}</span>
         </div>
       )}
@@ -2425,10 +2452,11 @@ function LeadCard({
       </div>
 
       {/* Manual field filled by CS */}
-      <div className="mt-4 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
-        <Label className="crm-lead-label">
-          Number Name
-        </Label>
+      <div
+        className="mt-4 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Label className="crm-lead-label">Number Name</Label>
         <NumberNameSelect
           value={numberName}
           size="sm"
@@ -2443,10 +2471,11 @@ function LeadCard({
           }}
         />
       </div>
-      <div className="mt-3 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
-        <Label className="crm-lead-label">
-          Requirement 1
-        </Label>
+      <div
+        className="mt-3 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Label className="crm-lead-label">Requirement 1</Label>
         <Textarea
           value={requirement1}
           rows={1}
@@ -2462,10 +2491,11 @@ function LeadCard({
           placeholder="Requirement 1"
         />
       </div>
-      <div className="mt-3 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
-        <Label className="crm-lead-label">
-          Requirement 2
-        </Label>
+      <div
+        className="mt-3 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Label className="crm-lead-label">Requirement 2</Label>
         <Textarea
           value={requirement2}
           rows={1}
@@ -2481,11 +2511,12 @@ function LeadCard({
           placeholder="Requirement 2"
         />
       </div>
-      <div className="mt-3 rounded-2xl border border-border/70 bg-surface/72 px-3.5 py-3.5" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="mt-3 rounded-2xl border border-border/70 bg-surface/72 px-3.5 py-3.5"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-between items-center mb-1">
-          <Label className="crm-lead-label">
-            Compose
-          </Label>
+          <Label className="crm-lead-label">Compose</Label>
           <div className="flex items-center gap-1.5">
             <Select
               onValueChange={async (val) => {
@@ -2557,7 +2588,10 @@ function LeadCard({
       </div>
 
       {/* Assignment row */}
-      <div className="mt-3 rounded-2xl border border-border/65 bg-surface/68 px-3.5 py-3" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="mt-3 rounded-2xl border border-border/65 bg-surface/68 px-3.5 py-3"
+        onClick={(e) => e.stopPropagation()}
+      >
         {isAdmin ? (
           <Select
             value={assignedTo ?? UNASSIGNED_VALUE}
@@ -2612,7 +2646,10 @@ function LeadCard({
       </div>
 
       <div className="mt-4 pt-3.5 border-t border-border/60 flex items-center justify-between text-[11.5px] crm-muted-text">
-        <span className="tabular-nums flex items-center gap-1.5" title={`Forwarded ${formatCsPipelineDateTime(lead.assigned_at)} ET`}>
+        <span
+          className="tabular-nums flex items-center gap-1.5"
+          title={`Forwarded ${formatCsPipelineDateTime(lead.assigned_at)} ET`}
+        >
           <span>{formatDistanceToNow(new Date(lead.assigned_at), { addSuffix: true })}</span>
           <span className="opacity-60">·</span>
           <span className="tabular-nums">{formatCsPipelineDateTime(lead.assigned_at)} ET</span>
@@ -2689,7 +2726,11 @@ function LeadCard({
             ) : (
               <Sparkles className={cn("h-3.5 w-3.5", important && "fill-warning/20")} />
             )}
-            {lead.pinned_important ? "Pinned important" : important ? "Important" : "Mark important"}
+            {lead.pinned_important
+              ? "Pinned important"
+              : important
+                ? "Important"
+                : "Mark important"}
           </button>
         )}
         <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-primary" />
@@ -2714,7 +2755,12 @@ function StatusBadge({ status }: { status: string }) {
 
 function statusDotTone(status: string) {
   if (status === "converted" || status === "closed_won") return "bg-success";
-  if (status === "need_follow_up" || status === "follow_up" || status === "called" || status === "messaged") {
+  if (
+    status === "need_follow_up" ||
+    status === "follow_up" ||
+    status === "called" ||
+    status === "messaged"
+  ) {
     return "bg-primary";
   }
   if (
@@ -2851,7 +2897,9 @@ function LeadDrawer({
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.stopPropagation();
-        void confirmDiscardUnsaved(isDirtyRef.current).then((ok) => { if (ok) onClose(); });
+        void confirmDiscardUnsaved(isDirtyRef.current).then((ok) => {
+          if (ok) onClose();
+        });
       }
     }
     window.addEventListener("keydown", onKey);
@@ -2866,7 +2914,10 @@ function LeadDrawer({
   const [compose, setCompose] = useState(lead.marketing_notes ?? "");
   const [requirement1, setRequirement1] = useState(lead.requirement_1 ?? "");
   const [requirement2, setRequirement2] = useState(lead.requirement_2 ?? "");
-  const initialFollowup = useMemo(() => utcIsoToCsPipelineInputValue(lead.followup_at), [lead.followup_at]);
+  const initialFollowup = useMemo(
+    () => utcIsoToCsPipelineInputValue(lead.followup_at),
+    [lead.followup_at],
+  );
   const [followup, setFollowup] = useState(initialFollowup);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -2875,12 +2926,13 @@ function LeadDrawer({
   const isCs = auth.primaryRole === "cs";
   const canViewForwardMeta = auth.primaryRole === "admin";
   const canViewAttachments = auth.primaryRole === "admin" || auth.primaryRole === "cs_admin";
-  
+
   const [isImportant, setIsImportant] = useState(lead.is_important);
   const assignee = assignedTo ? teamById.get(assignedTo) : null;
   const assignedToMe = !!assignedTo && assignedTo === auth.user?.id;
 
-  const isDirty = status !== lead.cs_status ||
+  const isDirty =
+    status !== lead.cs_status ||
     assignedTo !== lead.assigned_to ||
     note !== "" ||
     requirement1 !== (lead.requirement_1 ?? "") ||
@@ -2888,10 +2940,14 @@ function LeadDrawer({
     followup !== initialFollowup ||
     isImportant !== lead.is_important;
   const isDirtyRef = useRef(isDirty);
-  useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
 
   function handleClose() {
-    void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
+    void confirmDiscardUnsaved(isDirty).then((ok) => {
+      if (ok) onClose();
+    });
   }
 
   // Lock background body scroll when drawer is open
@@ -2905,7 +2961,7 @@ function LeadDrawer({
 
   const creator = lead.created_by ? profilesById?.get(lead.created_by) : null;
   const forwardedByText = creator
-    ? (creator.full_name || creator.email)
+    ? creator.full_name || creator.email
     : lead.created_by
       ? "Unknown user"
       : null;
@@ -2967,7 +3023,11 @@ function LeadDrawer({
           cs_notes: newNotes as Json,
           followup_at: csPipelineInputValueToUtcIso(followup),
           assigned_to: assignedTo,
-          assigned_by: assignedTo ? (lead.assigned_to === assignedTo ? lead.assigned_by : (auth.user?.id || null)) : null,
+          assigned_by: assignedTo
+            ? lead.assigned_to === assignedTo
+              ? lead.assigned_by
+              : auth.user?.id || null
+            : null,
           number_name: numberName.trim() || null,
           marketing_notes: compose.trim() || null,
           requirement_1: requirement1.trim() || null,
@@ -3026,9 +3086,7 @@ function LeadDrawer({
                   Landline
                 </span>
               )}
-              {lead.customer_number_2 && (
-                <PhoneCopyLink phone={lead.customer_number_2} />
-              )}
+              {lead.customer_number_2 && <PhoneCopyLink phone={lead.customer_number_2} />}
             </div>
             {canViewForwardMeta && forwardedByText && (
               <div className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1.5">
@@ -3037,14 +3095,19 @@ function LeadDrawer({
               </div>
             )}
           </div>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={handleClose}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={handleClose}
+            aria-label="Close lead details"
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
 
         {/* 2-Column Body */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:flex-1 md:min-h-0 mt-4 overflow-visible md:overflow-hidden">
-          
           {/* Left Column: Lead Details */}
           <div className="col-span-1 md:col-span-5 space-y-4 overflow-visible md:overflow-y-auto md:pr-4 md:min-h-0">
             <div className="grid grid-cols-2 gap-3">
@@ -3059,12 +3122,18 @@ function LeadDrawer({
             {lead.post_text && (
               <Info label="Customer exact requirement" value={lead.post_text} multiline />
             )}
-            {lead.requirement_1 && <Info label="Requirement 1" value={lead.requirement_1} multiline />}
-            {lead.requirement_2 && <Info label="Requirement 2" value={lead.requirement_2} multiline />}
+            {lead.requirement_1 && (
+              <Info label="Requirement 1" value={lead.requirement_1} multiline />
+            )}
+            {lead.requirement_2 && (
+              <Info label="Requirement 2" value={lead.requirement_2} multiline />
+            )}
             {lead.context && <Info label="Context" value={lead.context} multiline />}
             {lead.original_lead_link && (
               <div>
-                <p className="text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Original Post</p>
+                <p className="text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium mb-1">
+                  Original Post
+                </p>
                 <a
                   href={lead.original_lead_link}
                   target="_blank"
@@ -3083,7 +3152,6 @@ function LeadDrawer({
 
           {/* Right Column: Edit Form & History */}
           <div className="col-span-1 md:col-span-7 flex flex-col gap-5 overflow-visible md:overflow-y-auto md:pl-4 md:border-l md:border-border pr-2 md:min-h-0">
-            
             {/* Form Fields */}
             <div className="space-y-4">
               <div>
@@ -3229,7 +3297,9 @@ function LeadDrawer({
                     <span className="inline-flex items-center gap-2 truncate">
                       <UserCheck className="h-3.5 w-3.5 text-muted-foreground" />
                       {assignee ? (
-                        <span className={cn("truncate", assignedToMe && "text-primary font-medium")}>
+                        <span
+                          className={cn("truncate", assignedToMe && "text-primary font-medium")}
+                        >
                           {assignedToMe ? "You" : assignee.full_name || assignee.email}
                         </span>
                       ) : (
@@ -3296,9 +3366,7 @@ function LeadDrawer({
                 </div>
               </div>
             )}
-
           </div>
-
         </div>
 
         {/* Footer: Save / Close / Delete Buttons */}
@@ -3373,10 +3441,9 @@ function LeadDrawer({
             </Button>
           </div>
         </div>
-
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }
 
@@ -3708,7 +3775,12 @@ function LeadAttachmentsGrid({ refs }: { refs: string[] }) {
               rel="noreferrer"
               className="block aspect-square rounded-md overflow-hidden border border-border bg-muted hover:opacity-80 transition-opacity"
             >
-              <img src={url} alt="Lead attachment" className="h-full w-full object-cover" loading="lazy" />
+              <img
+                src={url}
+                alt="Lead attachment"
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
             </a>
           );
         })}
