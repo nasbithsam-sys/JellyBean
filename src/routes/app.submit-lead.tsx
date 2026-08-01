@@ -8,6 +8,7 @@ import {
   startOfDay,
   endOfDay,
   subDays,
+  addDays,
   startOfWeek,
   startOfMonth,
 } from "date-fns";
@@ -42,6 +43,7 @@ import {
 import { SignedLeadImage } from "@/lib/lead-attachments";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { toPktWallClockDate } from "@/lib/timezone";
 import type { DateRange } from "react-day-picker";
 import { formatPhone } from "@/lib/crm-lite";
 const DraftsDialog = lazy(() =>
@@ -84,9 +86,12 @@ function Dashboard() {
   const [isDirty, setIsDirty] = useState(false);
   const [draftsOpen, setDraftsOpen] = useState(false);
   const [activeDraft, setActiveDraft] = useState<LeadDraft | null>(null);
-  const [range, setRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 29),
-    to: new Date(),
+  const [range, setRange] = useState<DateRange | undefined>(() => {
+    const today = toPktWallClockDate(new Date());
+    return {
+      from: subDays(today, 29),
+      to: today,
+    };
   });
 
   const draftCountQuery = useQuery({
@@ -120,7 +125,7 @@ function Dashboard() {
   const leads = useMemo(() => all.data ?? [], [all.data]);
 
   const stats = useMemo(() => {
-    const now = new Date();
+    const now = toPktWallClockDate(new Date());
     const todayStart = startOfDay(now);
     const weekStart = startOfWeek(now, { weekStartsOn: 1 });
     const monthStart = startOfMonth(now);
@@ -136,7 +141,7 @@ function Dashboard() {
     const rTo = range?.to ? endOfDay(range.to) : range?.from ? endOfDay(range.from) : null;
 
     for (const lead of leads) {
-      const d = new Date(lead.created_at);
+      const d = toPktWallClockDate(lead.created_at);
       if (d >= todayStart) today++;
       if (d >= weekStart) week++;
       if (d >= monthStart) month++;
@@ -155,7 +160,7 @@ function Dashboard() {
         Math.floor((rTo.getTime() - rFrom.getTime()) / (1000 * 60 * 60 * 24)) + 1,
       );
       for (let i = 0; i < days; i++) {
-        const d = new Date(rFrom.getTime() + i * 86400000);
+        const d = addDays(rFrom, i);
         const key = format(d, "yyyy-MM-dd");
         series.push({ date: key, label: format(d, "MMM d"), count: byDay[key] ?? 0 });
       }
@@ -250,15 +255,24 @@ function Dashboard() {
             <div className="flex items-center gap-2">
               <QuickRange
                 label="7d"
-                onClick={() => setRange({ from: subDays(new Date(), 6), to: new Date() })}
+                onClick={() => {
+                  const today = toPktWallClockDate(new Date());
+                  setRange({ from: subDays(today, 6), to: today });
+                }}
               />
               <QuickRange
                 label="30d"
-                onClick={() => setRange({ from: subDays(new Date(), 29), to: new Date() })}
+                onClick={() => {
+                  const today = toPktWallClockDate(new Date());
+                  setRange({ from: subDays(today, 29), to: today });
+                }}
               />
               <QuickRange
                 label="90d"
-                onClick={() => setRange({ from: subDays(new Date(), 89), to: new Date() })}
+                onClick={() => {
+                  const today = toPktWallClockDate(new Date());
+                  setRange({ from: subDays(today, 89), to: today });
+                }}
               />
               <Popover>
                 <PopoverTrigger asChild>
@@ -272,6 +286,7 @@ function Dashboard() {
                     mode="range"
                     selected={range}
                     onSelect={setRange}
+                    today={toPktWallClockDate(new Date())}
                     numberOfMonths={2}
                     className={cn("p-3 pointer-events-auto")}
                   />
