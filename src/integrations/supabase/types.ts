@@ -792,7 +792,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      mv_qualified_leads_status_counts: {
+        Row: {
+          assigned_to: string | null
+          created_by: string | null
+          cs_status: Database["public"]["Enums"]["cs_status"] | null
+          total: number | null
+        }
+        Relationships: []
+      }
+      mv_raw_lead_cache_counts: {
+        Row: {
+          assigned_to: string | null
+          category: string | null
+          is_assigned_myself: boolean | null
+          total: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       admin_ensure_access_code: { Args: { _user_id: string }; Returns: string }
@@ -892,6 +909,67 @@ export type Database = {
       }
       normalize_lead_service: { Args: { _input: string }; Returns: string }
       normalize_us_state: { Args: { _input: string }; Returns: string }
+      qualified_leads_cursor_page: {
+        Args: {
+          _assigned_to?: string
+          _cs_status?: Database["public"]["Enums"]["cs_status"]
+          _cursor_id?: string
+          _cursor_updated_at?: string
+          _limit?: number
+        }
+        Returns: {
+          assigned_at: string
+          assigned_by: string | null
+          assigned_to: string | null
+          canonical_lead_link: string | null
+          canonical_post_id: string | null
+          context: string | null
+          created_at: string
+          created_by: string | null
+          cs_notes: Json
+          cs_outcome: string | null
+          cs_status: Database["public"]["Enums"]["cs_status"]
+          customer_name: string
+          customer_number: string
+          customer_number_2: string | null
+          extra_numbers: string[]
+          followup_at: string | null
+          id: string
+          images: Json
+          is_important: boolean
+          is_important_by_cs: boolean
+          is_landline: boolean
+          main_area: string | null
+          marketing_notes: string | null
+          number_name: string | null
+          original_lead_link: string | null
+          pass_it_to: string | null
+          pinned_important: boolean
+          post_text: string | null
+          raw_lead_id: string | null
+          reference: string | null
+          requirement_1: string | null
+          requirement_2: string | null
+          service: string | null
+          state_code: string | null
+          sub_area: string | null
+          submitted_by_role: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "qualified_leads"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      qualified_leads_status_counts_fast: {
+        Args: { _is_admin?: boolean; _user_id: string }
+        Returns: {
+          cs_status: Database["public"]["Enums"]["cs_status"]
+          total: number
+        }[]
+      }
       raw_lead_cache_category_counts: {
         Args: { _is_admin?: boolean; _user_id: string }
         Returns: {
@@ -903,6 +981,68 @@ export type Database = {
           wrong: number
         }[]
       }
+      raw_lead_cache_category_counts_fast: {
+        Args: { _is_admin?: boolean; _user_id: string }
+        Returns: {
+          assigned_myself: number
+          duplicate: number
+          forwarded: number
+          new: number
+          not_found: number
+          wrong: number
+        }[]
+      }
+      raw_lead_cache_cursor_page: {
+        Args: {
+          _assigned_to?: string
+          _category?: string
+          _cursor_captured_at?: string
+          _cursor_id?: string
+          _limit?: number
+          _only_unassigned_myself?: boolean
+        }
+        Returns: {
+          assigned_myself_at: string | null
+          assigned_to: string | null
+          canonical_lead_link: string | null
+          canonical_post_id: string | null
+          captured_at: string | null
+          categorized_at: string | null
+          categorized_by: string | null
+          category: string | null
+          created_at: string
+          data: Json
+          duplicate_detected: boolean | null
+          duplicate_key: string | null
+          duplicate_match_type: string | null
+          duplicate_of_qualified_lead_id: string | null
+          duplicate_of_raw_lead_id: string | null
+          duplicate_reason: string | null
+          duplicate_snapshot: Json | null
+          id: string
+          lead: string | null
+          lead_link: string | null
+          phone: string | null
+          row_key: string
+          sheet_row: number | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "raw_lead_cache"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      refresh_lead_counter_materialized_views: {
+        Args: never
+        Returns: undefined
+      }
+      refresh_mv_qualified_leads_status_counts: {
+        Args: never
+        Returns: undefined
+      }
+      refresh_mv_raw_lead_cache_counts: { Args: never; Returns: undefined }
       report_leads_by_account:
         | {
             Args: never
