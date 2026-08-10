@@ -42,11 +42,14 @@ function Inner() {
             .select("value, updated_at")
             .eq("key", "raw_leads.start_row")
             .maybeSingle(),
+          // Planner estimates — a health page does not need exact counts, and
+          // exact counts on these big tables were a top source of DB load.
           supabase.from("profiles").select("id", { count: "exact", head: true }),
-          supabase.from("raw_lead_cache").select("row_key", { count: "exact", head: true }),
-          supabase.from("qualified_leads").select("id", { count: "exact", head: true }),
+          supabase.from("raw_lead_cache").select("row_key", { count: "planned", head: true }),
+          supabase.from("qualified_leads").select("id", { count: "planned", head: true }),
           supabase.from("incogniton_profiles").select("id", { count: "exact", head: true }),
-          supabase.from("activity_logs").select("id", { count: "exact", head: true }),
+          supabase.from("activity_logs").select("id", { count: "planned", head: true }),
+
           checkOpenAi(),
         ]);
 
