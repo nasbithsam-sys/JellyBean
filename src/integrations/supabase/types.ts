@@ -992,6 +992,10 @@ export type Database = {
           wrong: number
         }[]
       }
+      raw_lead_cache_category_counts_json: {
+        Args: { _is_admin?: boolean; _user_id?: string }
+        Returns: Json
+      }
       raw_lead_cache_cursor_page: {
         Args: {
           _assigned_to?: string
@@ -1000,6 +1004,46 @@ export type Database = {
           _cursor_id?: string
           _limit?: number
           _only_unassigned_myself?: boolean
+        }
+        Returns: {
+          assigned_myself_at: string | null
+          assigned_to: string | null
+          canonical_lead_link: string | null
+          canonical_post_id: string | null
+          captured_at: string | null
+          categorized_at: string | null
+          categorized_by: string | null
+          category: string | null
+          created_at: string
+          data: Json
+          duplicate_detected: boolean | null
+          duplicate_key: string | null
+          duplicate_match_type: string | null
+          duplicate_of_qualified_lead_id: string | null
+          duplicate_of_raw_lead_id: string | null
+          duplicate_reason: string | null
+          duplicate_snapshot: Json | null
+          id: string
+          lead: string | null
+          lead_link: string | null
+          phone: string | null
+          row_key: string
+          sheet_row: number | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "raw_lead_cache"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      raw_lead_cache_new_cursor_page: {
+        Args: {
+          p_after_captured_at?: string
+          p_after_id?: string
+          p_assigned_to?: string
+          p_limit?: number
         }
         Returns: {
           assigned_myself_at: string | null
