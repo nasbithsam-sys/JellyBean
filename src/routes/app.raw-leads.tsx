@@ -68,7 +68,6 @@ import {
   checkDuplicatePhone,
   fetchRawLeadCache,
   fetchRawLeadKeyset,
-  fetchRawLeadKeysetCount,
   fetchRawLeadCounts,
 } from "@/lib/raw-leads.functions";
 import { calculateTotalPages, calculateLastPageSize } from "@/lib/raw-leads-keyset";
@@ -565,7 +564,6 @@ function Inner() {
   const qc = useQueryClient();
   const analyzeWithAi = useServerFn(analyzeRawLeadsWithAi);
   const fetchRawLeads = useServerFn(fetchRawLeadKeyset);
-  const fetchExactCount = useServerFn(fetchRawLeadKeysetCount);
   const fetchCounts = useServerFn(fetchRawLeadCounts);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -729,17 +727,31 @@ function Inner() {
   // ── Persistent cache from Supabase ─────────────────────────────────────────
   const isUnfiltered = query === "" && leadFilter === "all" && areaFilter === "all" && duplicateFilter === "all";
 
-  const exactCountQuery = useQuery({
-    queryKey: ["raw-lead-exact-count", tab],
-    queryFn: async () => await fetchExactCount({ data: { category: tab } }),
-    enabled: isUnfiltered,
+  // Tab badge counts — served from a pre-aggregated materialized view via one
+  // scalar RPC. These same numbers drive pagination, so we no longer fire a
+  // second exact COUNT(*) over raw_lead_cache (previously ~100K calls/day).
+  const countsQuery = useQuery({
+    queryKey: ["raw-lead-counts"],
+    queryFn: async () =>
+      (await fetchCounts({ data: {} })) as {
+        new: number;
+        review: number;
+        forwarded: number;
+        not_found: number;
+        wrong: number;
+        duplicate: number;
+        assigned_myself: number;
+      },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
   });
 
-  const exactCount = exactCountQuery.data;
+  const exactCountQuery = countsQuery;
+  const exactCount = isUnfiltered ? countsQuery.data?.[tab] : undefined;
   const totalPages = typeof exactCount === "number" ? calculateTotalPages(exactCount, pageSize) : undefined;
   const lastPageSize = typeof exactCount === "number" ? calculateLastPageSize(exactCount, pageSize) : undefined;
+
 
   const cacheKey = useMemo(
     () =>
@@ -825,22 +837,8 @@ function Inner() {
     setCurrentPage(1);
   }, []);
 
-  const countsQuery = useQuery({
-    queryKey: ["raw-lead-counts"],
-    queryFn: async () =>
-      (await fetchCounts({ data: {} })) as {
-        new: number;
-        review: number;
-        forwarded: number;
-        not_found: number;
-        wrong: number;
-        duplicate: number;
-        assigned_myself: number;
-      },
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-    placeholderData: keepPreviousData,
-  });
+
+
 
   const draftCountQuery = useQuery({
     queryKey: ["lead-drafts-count", auth.user?.id, "raw_lead"],

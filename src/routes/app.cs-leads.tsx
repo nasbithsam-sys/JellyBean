@@ -728,29 +728,29 @@ function Inner() {
     // Kept for call-site compatibility.
   };
 
-  // ── Lightweight count query — runs only when indexed filter params change ──
-  // Uses { count: "planned", head: true } — returns Postgres' planner estimate
-  // instead of scanning the full filtered set. The exact count for a filtered
-  // qualified_leads scan was the #1 slow query in the DB (mean ~3s over 28K
-  // calls). Pagination UI tolerates a slightly approximate total; per-status
-  // badges still come from the exact `cs_leads_status_counts` RPC below.
+  // ── Lightweight count query ───────────────────────────────────────────────
+  // Counting qualified_leads was historically the #1 DB load. We now avoid the
+  // query entirely for the two most common views:
+  //   • no filters at all      → reuse the cached `cs_leads_status_counts` RPC
+  //   • only a status selected → reuse the same cached RPC's per-status counts
+  // A real count query only runs when a date/owner/search/garage filter is on.
+  const needsCountQuery = Boolean(
+    dbDateFrom || dbDateTo || dbOwner || dbSearch || garageDoorOnly,
+  );
+
   const totalCount = useQuery({
     queryKey: [
       "cs_leads_count",
       { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, garageDoorOnly },
     ],
+    enabled: needsCountQuery,
     queryFn: async () => {
-      // Use exact count whenever a narrow filter (date range, owner, status,
-      // search, or garage-door) is applied — the assigned_at index keeps this
-      // fast, and the planner estimate is wildly inaccurate for narrow ranges
-      // (e.g. estimated 27 vs actual 141 for Today). Fall back to the planner
-      // estimate only for the unfiltered "all leads" view, which is the case
-      // that made exact counting the #1 slow query historically.
-      const hasNarrowFilter = Boolean(
-        dbDateFrom || dbDateTo || dbOwner || dbStatus || dbSearch || garageDoorOnly,
-      );
-      const countMode: "exact" | "planned" = hasNarrowFilter ? "exact" : "planned";
-      let q = supabase.from("qualified_leads").select("id", { count: countMode, head: true });
+
+      // This only runs when a narrow filter is active (see `needsCountQuery`),
+      // so an exact count is affordable and accurate — indexed on assigned_at /
+      // assigned_to. Unfiltered + status-only totals never reach this query.
+      let q = supabase.from("qualified_leads").select("id", { count: "exact", head: true });
+
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
       if (dbDateTo) q = q.lt("assigned_at", dbDateTo);
@@ -808,14 +808,18 @@ function Inner() {
   });
 
   // Exact database count of Garage Door leads matching current filters.
-  // Used for the toolbar badge and (when garageDoorOnly is active) pagination.
+  // This is an 18-way ILIKE scan, so it only runs while the Garage Door filter
+  // is actually switched on (it powers pagination there); the toolbar badge
+  // shows no number when the filter is off.
   const garageDoorCount = useQuery({
     queryKey: [
       "cs_leads",
       "cs_garage_door_count",
       { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, areaFilter },
     ],
+    enabled: garageDoorOnly,
     queryFn: async () => {
+
       let q = supabase.from("qualified_leads").select("id", { count: "exact", head: true });
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
@@ -847,7 +851,17 @@ function Inner() {
     placeholderData: keepPreviousData,
   });
 
-  const effectiveTotalCount = garageDoorOnly ? (garageDoorCount.data ?? 0) : (totalCount.data ?? 0);
+  // Total used for pagination. When no narrow filter is active we reuse the
+  // cached status-count RPC instead of firing another count query.
+  const cachedStatusTotal = dbStatus
+    ? (allTimeStatusCounts.data?.statuses?.[dbStatus] ?? 0)
+    : (allTimeStatusCounts.data?.all ?? 0);
+  const effectiveTotalCount = garageDoorOnly
+    ? (garageDoorCount.data ?? 0)
+    : needsCountQuery
+      ? (totalCount.data ?? 0)
+      : cachedStatusTotal;
+
   const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / PAGE_SIZE));
 
   // ── Eastern-Time date rollover ─────────────────────────────────────────
@@ -1224,9 +1238,12 @@ function Inner() {
           >
             <Warehouse className="h-3.5 w-3.5 mr-1.5" />
             Garage Door
-            <span className="ml-1.5 tabular-nums opacity-90">
-              ({garageDoorCount.data ?? (garageDoorCount.isLoading ? "—" : 0)})
-            </span>
+            {garageDoorOnly && (
+              <span className="ml-1.5 tabular-nums opacity-90">
+                ({garageDoorCount.isLoading ? "—" : (garageDoorCount.data ?? 0)})
+              </span>
+            )}
+
           </Button>
           {(isAdmin || isCs) && (
             <Popover>
