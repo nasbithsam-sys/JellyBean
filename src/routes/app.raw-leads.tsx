@@ -68,7 +68,6 @@ import {
   checkDuplicatePhone,
   fetchRawLeadCache,
   fetchRawLeadKeyset,
-  fetchRawLeadKeysetCount,
   fetchRawLeadCounts,
 } from "@/lib/raw-leads.functions";
 import { calculateTotalPages, calculateLastPageSize } from "@/lib/raw-leads-keyset";
@@ -565,7 +564,6 @@ function Inner() {
   const qc = useQueryClient();
   const analyzeWithAi = useServerFn(analyzeRawLeadsWithAi);
   const fetchRawLeads = useServerFn(fetchRawLeadKeyset);
-  const fetchExactCount = useServerFn(fetchRawLeadKeysetCount);
   const fetchCounts = useServerFn(fetchRawLeadCounts);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
