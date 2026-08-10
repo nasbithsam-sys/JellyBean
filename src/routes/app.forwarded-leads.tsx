@@ -249,10 +249,18 @@ function Inner() {
   const totalCount = useQuery({
     queryKey: ["forwarded-leads-count", auth.user?.id, isAdmin, { dbDateFrom, dbDateTo, forwardedByFilter, outcomeFilter, dbSearch }],
     enabled: !!auth.user?.id,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
+      // Exact counting the whole table is expensive; fall back to the planner
+      // estimate for the unfiltered view and keep exact counts for filters.
+      const hasFilter = Boolean(
+        dbDateFrom || dbDateTo || dbSearch || outcomeFilter !== "all" || forwardedByFilter !== "all",
+      );
       let q = supabase
         .from("qualified_leads")
-        .select("id", { count: "exact", head: true });
+        .select("id", { count: hasFilter ? "exact" : "planned", head: true });
+
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
       if (dbDateTo) q = q.lte("assigned_at", dbDateTo);
