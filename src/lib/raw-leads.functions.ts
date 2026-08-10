@@ -608,36 +608,18 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
 
     const isAdmin = roles.includes("admin") || roles.includes("sub_admin");
 
-    const { data: countRows, error: countError } = await context.supabase.rpc(
-      "raw_lead_cache_category_counts" as never,
+    // Single scalar RPC (jsonb) served from the pre-aggregated materialized
+    // view. Returns a scalar, so PostgREST does not wrap it in the
+    // LIMIT/OFFSET set-returning query that was hitting statement timeouts.
+    const { data: countsJson, error: countError } = await context.supabase.rpc(
+      "raw_lead_cache_category_counts_json" as never,
       { _user_id: context.userId, _is_admin: isAdmin } as never,
     );
     if (countError) throw new Error(countError.message);
 
-    const baseCounts = (
-      countRows as unknown as Array<{
-        new: number | null;
-        forwarded: number | null;
-        not_found: number | null;
-        wrong: number | null;
-        duplicate: number | null;
-      }> | null
-    )?.[0] ?? {
-      new: 0,
-      forwarded: 0,
-      not_found: 0,
-      wrong: 0,
-      duplicate: 0,
-    };
+    const raw = (countsJson ?? {}) as Record<string, number | string | null>;
+    const num = (key: string) => Number(raw[key] ?? 0) || 0;
 
-    // Count matches the list query: every uncategorized lead is "New",
-    // regardless of who has self-assigned it. Keeps the tab badge in sync
-    // with what the user actually sees in the list.
-    const newAdjustedQuery = context.supabase
-      .from("raw_lead_cache")
-      .select("row_key", { count: "exact", head: true })
-      .is("category", null)
-      .is("assigned_myself_at", null);
     // Draft raw leads (parked by the current user) are hidden from the
     // Assigned Myself tab, so the badge must exclude them too.
     const { data: draftRowsForCounts } = await context.supabase
@@ -649,39 +631,31 @@ export const fetchRawLeadCounts = createServerFn({ method: "GET" })
     const draftedIdsForCounts = ((draftRowsForCounts ?? []) as Array<{ source_lead_id: string | null }>)
       .map((r) => r.source_lead_id)
       .filter((v): v is string => !!v);
-    let assignedMyselfQuery = context.supabase
-      .from("raw_lead_cache")
-      .select("row_key", { count: "exact", head: true })
-      .eq("assigned_to", context.userId)
-      .not("assigned_myself_at", "is", null)
-      .is("category", null);
+
+    let draftedAssignedMyself = 0;
     if (draftedIdsForCounts.length) {
-      assignedMyselfQuery = assignedMyselfQuery.not(
-        "id" as never,
-        "in" as never,
-        `(${draftedIdsForCounts.join(",")})` as never,
-      ) as typeof assignedMyselfQuery;
+      // Bounded lookup by primary key — no full-table scan.
+      const { count } = await context.supabase
+        .from("raw_lead_cache")
+        .select("row_key", { count: "exact", head: true })
+        .in("id" as never, draftedIdsForCounts as never)
+        .eq("assigned_to", context.userId)
+        .not("assigned_myself_at", "is", null)
+        .is("category", null);
+      draftedAssignedMyself = count ?? 0;
     }
-    void isAdmin;
-
-    const [
-      { count: adjustedNewCount, error: adjustedNewCountError },
-      { count: assignedMyselfCount, error: assignedMyselfCountError },
-    ] = await Promise.all([newAdjustedQuery, assignedMyselfQuery]);
-
-    if (adjustedNewCountError) throw new Error(adjustedNewCountError.message);
-    if (assignedMyselfCountError) throw new Error(assignedMyselfCountError.message);
 
     return {
-      new: adjustedNewCount ?? 0,
+      new: num("new"),
       review: 0,
-      forwarded: baseCounts.forwarded ?? 0,
-      not_found: baseCounts.not_found ?? 0,
-      wrong: baseCounts.wrong ?? 0,
-      duplicate: baseCounts.duplicate ?? 0,
-      assigned_myself: assignedMyselfCount ?? 0,
+      forwarded: num("forwarded"),
+      not_found: num("not_found"),
+      wrong: num("wrong"),
+      duplicate: num("duplicate"),
+      assigned_myself: Math.max(0, num("assigned_myself") - draftedAssignedMyself),
     };
   });
+
 
 export const checkDuplicatePhone = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
