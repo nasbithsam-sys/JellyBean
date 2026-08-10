@@ -148,9 +148,9 @@ export const Route = createFileRoute("/app/cs-leads")({
   component: Page,
   pendingComponent: () => <RouteSkeleton />,
   pendingMs: 200,
-  validateSearch: (search: Record<string, unknown>) => ({
-    leadId: typeof search.leadId === "string" ? search.leadId : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { leadId?: string } =>
+    typeof search.leadId === "string" ? { leadId: search.leadId } : {},
+
 });
 
 const UNASSIGNED_VALUE = "__unassigned__";
