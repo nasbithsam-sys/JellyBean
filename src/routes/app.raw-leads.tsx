@@ -825,22 +825,8 @@ function Inner() {
     setCurrentPage(1);
   }, []);
 
-  const countsQuery = useQuery({
-    queryKey: ["raw-lead-counts"],
-    queryFn: async () =>
-      (await fetchCounts({ data: {} })) as {
-        new: number;
-        review: number;
-        forwarded: number;
-        not_found: number;
-        wrong: number;
-        duplicate: number;
-        assigned_myself: number;
-      },
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-    placeholderData: keepPreviousData,
-  });
+
+
 
   const draftCountQuery = useQuery({
     queryKey: ["lead-drafts-count", auth.user?.id, "raw_lead"],
