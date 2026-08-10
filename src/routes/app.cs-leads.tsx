@@ -746,17 +746,11 @@ function Inner() {
     enabled: needsCountQuery,
     queryFn: async () => {
 
-      // Use exact count whenever a narrow filter (date range, owner, status,
-      // search, or garage-door) is applied — the assigned_at index keeps this
-      // fast, and the planner estimate is wildly inaccurate for narrow ranges
-      // (e.g. estimated 27 vs actual 141 for Today). Fall back to the planner
-      // estimate only for the unfiltered "all leads" view, which is the case
-      // that made exact counting the #1 slow query historically.
-      const hasNarrowFilter = Boolean(
-        dbDateFrom || dbDateTo || dbOwner || dbStatus || dbSearch || garageDoorOnly,
-      );
-      const countMode: "exact" | "planned" = hasNarrowFilter ? "exact" : "planned";
-      let q = supabase.from("qualified_leads").select("id", { count: countMode, head: true });
+      // This only runs when a narrow filter is active (see `needsCountQuery`),
+      // so an exact count is affordable and accurate — indexed on assigned_at /
+      // assigned_to. Unfiltered + status-only totals never reach this query.
+      let q = supabase.from("qualified_leads").select("id", { count: "exact", head: true });
+
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
       if (dbDateTo) q = q.lt("assigned_at", dbDateTo);
