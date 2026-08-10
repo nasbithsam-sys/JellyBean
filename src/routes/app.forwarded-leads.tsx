@@ -141,6 +141,8 @@ function Inner() {
   const sentToday = useQuery({
     queryKey: ["forwarded-sent-today", auth.user?.id],
     enabled: !!auth.user?.id,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       let q = supabase
         .from("qualified_leads")
@@ -156,10 +158,12 @@ function Inner() {
   const notFoundCount = useQuery({
     queryKey: ["forwarded-not-found", auth.user?.id, isAdmin],
     enabled: !!auth.user?.id,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       let q = supabase
         .from("raw_lead_cache")
-        .select("row_key", { count: "exact", head: true })
+        .select("row_key", { count: isAdmin ? "planned" : "exact", head: true })
         .eq("category", "not_found");
       if (!isAdmin) q = q.eq("categorized_by", auth.user!.id);
       const { count, error } = await q;
@@ -167,6 +171,7 @@ function Inner() {
       return count ?? 0;
     },
   });
+
 
   const allProfiles = useQuery({
     queryKey: ["all_profiles"],
