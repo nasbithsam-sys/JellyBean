@@ -851,7 +851,17 @@ function Inner() {
     placeholderData: keepPreviousData,
   });
 
-  const effectiveTotalCount = garageDoorOnly ? (garageDoorCount.data ?? 0) : (totalCount.data ?? 0);
+  // Total used for pagination. When no narrow filter is active we reuse the
+  // cached status-count RPC instead of firing another count query.
+  const cachedStatusTotal = dbStatus
+    ? (allTimeStatusCounts.data?.statuses?.[dbStatus] ?? 0)
+    : (allTimeStatusCounts.data?.all ?? 0);
+  const effectiveTotalCount = garageDoorOnly
+    ? (garageDoorCount.data ?? 0)
+    : needsCountQuery
+      ? (totalCount.data ?? 0)
+      : cachedStatusTotal;
+
   const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / PAGE_SIZE));
 
   // ── Eastern-Time date rollover ─────────────────────────────────────────
