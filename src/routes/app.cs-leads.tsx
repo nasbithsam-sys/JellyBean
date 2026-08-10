@@ -808,14 +808,18 @@ function Inner() {
   });
 
   // Exact database count of Garage Door leads matching current filters.
-  // Used for the toolbar badge and (when garageDoorOnly is active) pagination.
+  // This is an 18-way ILIKE scan, so it only runs while the Garage Door filter
+  // is actually switched on (it powers pagination there); the toolbar badge
+  // shows no number when the filter is off.
   const garageDoorCount = useQuery({
     queryKey: [
       "cs_leads",
       "cs_garage_door_count",
       { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, areaFilter },
     ],
+    enabled: garageDoorOnly,
     queryFn: async () => {
+
       let q = supabase.from("qualified_leads").select("id", { count: "exact", head: true });
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
