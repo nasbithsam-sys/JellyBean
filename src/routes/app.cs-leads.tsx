@@ -728,18 +728,24 @@ function Inner() {
     // Kept for call-site compatibility.
   };
 
-  // ── Lightweight count query — runs only when indexed filter params change ──
-  // Uses { count: "planned", head: true } — returns Postgres' planner estimate
-  // instead of scanning the full filtered set. The exact count for a filtered
-  // qualified_leads scan was the #1 slow query in the DB (mean ~3s over 28K
-  // calls). Pagination UI tolerates a slightly approximate total; per-status
-  // badges still come from the exact `cs_leads_status_counts` RPC below.
+  // ── Lightweight count query ───────────────────────────────────────────────
+  // Counting qualified_leads was historically the #1 DB load. We now avoid the
+  // query entirely for the two most common views:
+  //   • no filters at all      → reuse the cached `cs_leads_status_counts` RPC
+  //   • only a status selected → reuse the same cached RPC's per-status counts
+  // A real count query only runs when a date/owner/search/garage filter is on.
+  const needsCountQuery = Boolean(
+    dbDateFrom || dbDateTo || dbOwner || dbSearch || garageDoorOnly,
+  );
+
   const totalCount = useQuery({
     queryKey: [
       "cs_leads_count",
       { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, garageDoorOnly },
     ],
+    enabled: needsCountQuery,
     queryFn: async () => {
+
       // Use exact count whenever a narrow filter (date range, owner, status,
       // search, or garage-door) is applied — the assigned_at index keeps this
       // fast, and the planner estimate is wildly inaccurate for narrow ranges
