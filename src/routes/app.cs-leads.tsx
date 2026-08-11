@@ -740,6 +740,7 @@ function Inner() {
 
   const totalCount = useQuery({
     queryKey: [
+      "cs_leads",
       "cs_leads_count",
       { dbDateFrom, dbDateTo, dbOwner, dbStatus, dbSearch, garageDoorOnly },
     ],
@@ -802,7 +803,7 @@ function Inner() {
         statuses: countsByStatus,
       };
     },
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
