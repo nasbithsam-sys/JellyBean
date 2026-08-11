@@ -803,7 +803,7 @@ function Inner() {
         statuses: countsByStatus,
       };
     },
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
   });
