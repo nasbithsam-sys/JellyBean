@@ -245,6 +245,8 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     // cheap). Unfiltered tabs reuse the single grouped aggregate below, so no
     // extra full scan runs per page.
     const hasNarrowingFilters =
+      data.category === "all" ||
+      data.category === "review" ||
       !!data.query?.trim() ||
       (data.leadFilter && data.leadFilter !== "all") ||
       (data.areaFilter && data.areaFilter !== "all") ||
