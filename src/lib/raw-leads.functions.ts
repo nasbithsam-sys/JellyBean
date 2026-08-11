@@ -241,31 +241,51 @@ export const fetchRawLeadCache = createServerFn({ method: "GET" })
     const { data: rows, error } = await dataQuery;
     if (error) throw new Error(error.message);
 
-    // Planner-estimated count — was the top-ranked slow query when set to
-    // "exact" (mean 2.4s over 2.3K+ calls). Pagination uses this only to
-    // decide "has more"; tab badges still come from the RPC counts below.
-    let totalCountQuery = context.supabase
-      .from("raw_lead_cache")
-      .select("row_key", { count: "planned", head: true });
-    if (data.category === "assigned_myself") {
-      totalCountQuery = totalCountQuery
-        .eq("assigned_to" as never, context.userId as never)
-        .not("assigned_myself_at" as never, "is" as never, null as never)
-        .is("category" as never, null as never) as typeof totalCountQuery;
+    // Exact count only when a search/filter narrows the set (indexes keep it
+    // cheap). Unfiltered tabs reuse the single grouped aggregate below, so no
+    // extra full scan runs per page.
+    const hasNarrowingFilters =
+      !!data.query?.trim() ||
+      (data.leadFilter && data.leadFilter !== "all") ||
+      (data.areaFilter && data.areaFilter !== "all") ||
+      (data.duplicateFilter && data.duplicateFilter !== "all") ||
+      draftedIds.length > 0;
+
+    let totalForCategory = 0;
+    if (hasNarrowingFilters) {
+      let totalCountQuery = context.supabase
+        .from("raw_lead_cache")
+        .select("row_key", { count: "exact", head: true });
+      if (data.category === "assigned_myself") {
+        totalCountQuery = totalCountQuery
+          .eq("assigned_to" as never, context.userId as never)
+          .not("assigned_myself_at" as never, "is" as never, null as never)
+          .is("category" as never, null as never) as typeof totalCountQuery;
+      } else {
+        totalCountQuery = applyCategory(totalCountQuery as never, data.category) as typeof totalCountQuery;
+        totalCountQuery = applyAssignment(totalCountQuery as never, data.category) as typeof totalCountQuery;
+      }
+      totalCountQuery = excludeDrafts(totalCountQuery as never) as typeof totalCountQuery;
+      totalCountQuery = applySearchAndFilters(totalCountQuery as never, {
+        query: data.query,
+        leadFilter: data.leadFilter,
+        areaFilter: data.areaFilter,
+        duplicateFilter: data.duplicateFilter,
+      }) as typeof totalCountQuery;
+      const { count, error: totalForCategoryError } = await totalCountQuery;
+      if (totalForCategoryError) throw new Error(totalForCategoryError.message);
+      totalForCategory = count ?? 0;
     } else {
-      totalCountQuery = applyCategory(totalCountQuery as never, data.category) as typeof totalCountQuery;
-      totalCountQuery = applyAssignment(totalCountQuery as never, data.category) as typeof totalCountQuery;
+      // One grouped aggregate for every tab badge — reused as the page total.
+      const { data: countsJson, error: countsError } = await context.supabase.rpc(
+        "raw_lead_cache_category_counts_json" as never,
+        { _user_id: context.userId, _is_admin: isAdmin } as never,
+      );
+      if (countsError) throw new Error(countsError.message);
+      const rawCounts = (countsJson ?? {}) as Record<string, number | string | null>;
+      totalForCategory = Number(rawCounts[data.category] ?? 0) || 0;
     }
-    totalCountQuery = excludeDrafts(totalCountQuery as never) as typeof totalCountQuery;
-    totalCountQuery = applySearchAndFilters(totalCountQuery as never, {
-      query: data.query,
-      leadFilter: data.leadFilter,
-      areaFilter: data.areaFilter,
-      duplicateFilter: data.duplicateFilter,
-    }) as typeof totalCountQuery;
-    const { count: totalForCategoryRaw, error: totalForCategoryError } = await totalCountQuery;
-    if (totalForCategoryError) throw new Error(totalForCategoryError.message);
-    const totalForCategory = totalForCategoryRaw ?? 0;
+
 
     const entries: RawLeadCacheRow[] = (rows ?? []).map((entry) => ({
       row_key: entry.row_key,
