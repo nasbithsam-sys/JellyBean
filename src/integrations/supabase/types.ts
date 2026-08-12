@@ -607,6 +607,24 @@ export type Database = {
         }
         Relationships: []
       }
+      raw_lead_cache_counts: {
+        Row: {
+          assigned_to: string
+          category_key: string
+          total: number
+        }
+        Insert: {
+          assigned_to?: string
+          category_key: string
+          total?: number
+        }
+        Update: {
+          assigned_to?: string
+          category_key?: string
+          total?: number
+        }
+        Relationships: []
+      }
       raw_leads: {
         Row: {
           account_area: string | null
@@ -812,6 +830,10 @@ export type Database = {
       }
     }
     Functions: {
+      adjust_raw_lead_cache_count: {
+        Args: { _assigned_to: string; _category_key: string; _delta: number }
+        Returns: undefined
+      }
       admin_ensure_access_code: { Args: { _user_id: string }; Returns: string }
       admin_list_access_codes: {
         Args: never
@@ -1077,6 +1099,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      raw_lead_count_key: {
+        Args: { _assigned_myself_at: string; _category: string }
+        Returns: string
       }
       refresh_lead_counter_materialized_views: {
         Args: never
