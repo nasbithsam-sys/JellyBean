@@ -1,0 +1,1 @@
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) SELECT public.raw_lead_cache_category_counts_json(NULL, true);
