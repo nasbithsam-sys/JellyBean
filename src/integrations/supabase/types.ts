@@ -14,6 +14,137 @@ export type Database = {
   }
   public: {
     Tables: {
+      crisp_conversations: {
+        Row: {
+          id: string
+          crisp_session_id: string
+          crisp_website_id: string
+          customer_name: string | null
+          customer_email: string | null
+          customer_phone: string | null
+          customer_avatar: string | null
+          status: string | null
+          last_message: string | null
+          last_message_at: string | null
+          unread_count: number | null
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          crisp_session_id: string
+          crisp_website_id: string
+          customer_name?: string | null
+          customer_email?: string | null
+          customer_phone?: string | null
+          customer_avatar?: string | null
+          status?: string | null
+          last_message?: string | null
+          last_message_at?: string | null
+          unread_count?: number | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          crisp_session_id?: string
+          crisp_website_id?: string
+          customer_name?: string | null
+          customer_email?: string | null
+          customer_phone?: string | null
+          customer_avatar?: string | null
+          status?: string | null
+          last_message?: string | null
+          last_message_at?: string | null
+          unread_count?: number | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      crisp_messages: {
+        Row: {
+          id: string
+          conversation_id: string
+          crisp_session_id: string
+          crisp_message_id: string | null
+          sender_type: string
+          direction: string
+          content: string
+          message_type: string | null
+          sent_at: string
+          raw_payload: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          crisp_session_id: string
+          crisp_message_id?: string | null
+          sender_type: string
+          direction: string
+          content: string
+          message_type?: string | null
+          sent_at?: string
+          raw_payload?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          crisp_session_id?: string
+          crisp_message_id?: string | null
+          sender_type?: string
+          direction?: string
+          content?: string
+          message_type?: string | null
+          sent_at?: string
+          raw_payload?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crisp_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "crisp_conversations"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      crisp_webhook_events: {
+        Row: {
+          id: string
+          event_fingerprint: string
+          event_type: string
+          payload: Json
+          processed: boolean | null
+          error: string | null
+          received_at: string
+        }
+        Insert: {
+          id?: string
+          event_fingerprint: string
+          event_type: string
+          payload: Json
+          processed?: boolean | null
+          error?: string | null
+          received_at?: string
+        }
+        Update: {
+          id?: string
+          event_fingerprint?: string
+          event_type?: string
+          payload?: Json
+          processed?: boolean | null
+          error?: string | null
+          received_at?: string
+        }
+        Relationships: []
+      }
       accounts: {
         Row: {
           area: string | null

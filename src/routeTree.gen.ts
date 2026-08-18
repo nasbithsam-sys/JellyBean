@@ -27,6 +27,7 @@ import { Route as AppForwardedLeadsRouteImport } from './routes/app.forwarded-le
 import { Route as AppCsReportsRouteImport } from './routes/app.cs-reports'
 import { Route as AppCsLeadsRouteImport } from './routes/app.cs-leads'
 import { Route as AppCrmUpdatesRouteImport } from './routes/app.crm-updates'
+import { Route as AppCrispChatRouteImport } from './routes/app.crisp-chat'
 import { Route as AppBrowserProfilesRouteImport } from './routes/app.browser-profiles'
 import { Route as AppAnalyticsRouteImport } from './routes/app.analytics'
 import { Route as ApiPublicNextdoorLeadsRouteImport } from './routes/api.public.nextdoor-leads'
@@ -121,6 +122,11 @@ const AppCrmUpdatesRoute = AppCrmUpdatesRouteImport.update({
   path: '/crm-updates',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCrispChatRoute = AppCrispChatRouteImport.update({
+  id: '/crisp-chat',
+  path: '/crisp-chat',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBrowserProfilesRoute = AppBrowserProfilesRouteImport.update({
   id: '/browser-profiles',
   path: '/browser-profiles',
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/trust': typeof TrustRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
+  '/app/crisp-chat': typeof AppCrispChatRoute
   '/app/crm-updates': typeof AppCrmUpdatesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/cs-reports': typeof AppCsReportsRoute
@@ -167,6 +174,7 @@ export interface FileRoutesByTo {
   '/trust': typeof TrustRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
+  '/app/crisp-chat': typeof AppCrispChatRoute
   '/app/crm-updates': typeof AppCrmUpdatesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/cs-reports': typeof AppCsReportsRoute
@@ -191,6 +199,7 @@ export interface FileRoutesById {
   '/trust': typeof TrustRoute
   '/app/analytics': typeof AppAnalyticsRoute
   '/app/browser-profiles': typeof AppBrowserProfilesRoute
+  '/app/crisp-chat': typeof AppCrispChatRoute
   '/app/crm-updates': typeof AppCrmUpdatesRoute
   '/app/cs-leads': typeof AppCsLeadsRoute
   '/app/cs-reports': typeof AppCsReportsRoute
@@ -216,6 +225,7 @@ export interface FileRouteTypes {
     | '/trust'
     | '/app/analytics'
     | '/app/browser-profiles'
+    | '/app/crisp-chat'
     | '/app/crm-updates'
     | '/app/cs-leads'
     | '/app/cs-reports'
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/trust'
     | '/app/analytics'
     | '/app/browser-profiles'
+    | '/app/crisp-chat'
     | '/app/crm-updates'
     | '/app/cs-leads'
     | '/app/cs-reports'
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/trust'
     | '/app/analytics'
     | '/app/browser-profiles'
+    | '/app/crisp-chat'
     | '/app/crm-updates'
     | '/app/cs-leads'
     | '/app/cs-reports'
@@ -414,6 +426,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCrmUpdatesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/crisp-chat': {
+      id: '/app/crisp-chat'
+      path: '/crisp-chat'
+      fullPath: '/app/crisp-chat'
+      preLoaderRoute: typeof AppCrispChatRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/browser-profiles': {
       id: '/app/browser-profiles'
       path: '/browser-profiles'
@@ -441,6 +460,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAnalyticsRoute: typeof AppAnalyticsRoute
   AppBrowserProfilesRoute: typeof AppBrowserProfilesRoute
+  AppCrispChatRoute: typeof AppCrispChatRoute
   AppCrmUpdatesRoute: typeof AppCrmUpdatesRoute
   AppCsLeadsRoute: typeof AppCsLeadsRoute
   AppCsReportsRoute: typeof AppCsReportsRoute
@@ -459,6 +479,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAnalyticsRoute: AppAnalyticsRoute,
   AppBrowserProfilesRoute: AppBrowserProfilesRoute,
+  AppCrispChatRoute: AppCrispChatRoute,
   AppCrmUpdatesRoute: AppCrmUpdatesRoute,
   AppCsLeadsRoute: AppCsLeadsRoute,
   AppCsReportsRoute: AppCsReportsRoute,

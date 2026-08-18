@@ -15,6 +15,7 @@ import {
   PieChart,
   MoreHorizontal,
   KeyRound,
+  MessageSquare,
 } from "lucide-react";
 
 import { CrmUpdatesNotifier } from "@/components/crm-updates-notifier";
@@ -42,10 +43,18 @@ type Item = {
   shortcut?: string;
 };
 
+const CRISP_ITEM: Item = {
+  to: "/app/crisp-chat",
+  label: "Crisp Chat",
+  icon: MessageSquare,
+  shortcut: "C",
+};
+
 const ADMIN: Item[] = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, shortcut: "D" },
   { to: "/app/raw-leads", label: "Raw Leads", icon: Table2, shortcut: "L" },
   { to: "/app/cs-leads", label: "CS Pipeline", icon: Headphones, shortcut: "P" },
+  { to: "/app/crisp-chat", label: "Crisp Chat", icon: MessageSquare, shortcut: "C" },
   { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe, shortcut: "B" },
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/analytics", label: "Analytics", icon: LineChart, shortcut: "N" },
@@ -67,11 +76,17 @@ const MATURING: Item[] = [
   { to: "/app/submit-lead", label: "Manual Lead", icon: Send },
 ];
 
-const CS: Item[] = [{ to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard }];
+const CS: Item[] = [
+  { to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard },
+  CRISP_ITEM,
+];
+
 const CS_ADMIN_ITEMS: Item[] = [
   { to: "/app/cs-leads", label: "CS Pipeline", icon: Headphones },
+  CRISP_ITEM,
   { to: "/app/lead-assignment", label: "Lead Assignment", icon: PieChart },
 ];
+
 const ACC_HANDLER: Item[] = [
   { to: "/app/map", label: "Map", icon: Map, shortcut: "M" },
   { to: "/app/browser-profiles", label: "Browser Profiles", icon: Globe, shortcut: "B" },
@@ -93,7 +108,11 @@ const ADMIN_FULL: Item[] = [
 ];
 
 const SUB_ADMIN: Item[] = ADMIN_FULL.filter(
-  (item) => item.to !== "/app/cs-leads" && item.to !== "/app/logs" && item.to !== "/app/settings",
+  (item) =>
+    item.to !== "/app/cs-leads" &&
+    item.to !== "/app/logs" &&
+    item.to !== "/app/settings" &&
+    item.to !== "/app/crisp-chat",
 );
 
 function itemsForRole(role: AppRole | null): Item[] {
