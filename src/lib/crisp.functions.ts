@@ -80,6 +80,60 @@ export const sendCrispMessage = createServerFn({ method: "POST" })
     };
   });
 
+async function assertAdmin(supabase: any, userId: string) {
+  const { data: roleRows, error: roleErr } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  if (roleErr) throw new Error("Could not verify user roles");
+  const roles = (roleRows ?? []).map((r: { role: string }) => String(r.role));
+  if (!roles.includes("admin")) {
+    throw new Error("Forbidden: Workspace management is restricted to JellyBean admin users only.");
+  }
+}
+
+function newWebhookSecret() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function webhookUrlFor(secret: string) {
+  const url = process.env["SUPABASE_URL"] ?? "";
+  const ref = url.replace("https://", "").split(".")[0];
+  return `https://${ref}.supabase.co/functions/v1/crisp-webhook?key=${secret}`;
+}
+
+/** Validate credentials against the Crisp API, trying both auth tiers. */
+async function verifyCrispCredentials(websiteId: string, tokenId: string, tokenKey: string) {
+  const auth = btoa(`${tokenId}:${tokenKey}`);
+  let lastError = "Crisp rejected these credentials.";
+
+  for (const tier of ["plugin", "website"]) {
+    const res = await fetch(`https://api.crisp.chat/v1/website/${websiteId}`, {
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "X-Crisp-Tier": tier,
+        "Content-Type": "application/json",
+      },
+    });
+    if (res.ok) {
+      const json: any = await res.json().catch(() => ({}));
+      return { ok: true as const, tier, info: json?.data ?? {} };
+    }
+    const errJson: any = await res.json().catch(() => ({}));
+    const reason = errJson?.reason || errJson?.data?.message || `HTTP ${res.status}`;
+    lastError =
+      reason === "invalid_session" || res.status === 401
+        ? "Crisp rejected these credentials (invalid_session). Check the Website ID, Token Identifier and Token Key, and make sure the token has access to this website."
+        : `Crisp API error: ${reason}`;
+  }
+
+  return { ok: false as const, error: lastError };
+}
+
 export const addCrispWorkspace = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { websiteId: string; tokenId: string; tokenKey: string }) => {
@@ -91,38 +145,71 @@ export const addCrispWorkspace = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    await assertAdmin(supabase, userId);
 
-    const { data: roleRows, error: roleErr } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    if (roleErr) throw new Error("Could not verify user roles");
-    const roles = (roleRows ?? []).map((r) => String(r.role));
-    if (!roles.includes("admin")) {
-      throw new Error("Forbidden: Workspace management is restricted to JellyBean admin users only.");
+    const verified = await verifyCrispCredentials(data.websiteId, data.tokenId, data.tokenKey);
+    if (!verified.ok) return { ok: false as const, error: verified.error };
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: existingWs } = await supabaseAdmin
+      .from("crisp_workspaces")
+      .select("id, credential_secret_id")
+      .eq("crisp_website_id", data.websiteId)
+      .maybeSingle();
+
+    let secretId = existingWs?.credential_secret_id ?? null;
+    let webhookSecret = newWebhookSecret();
+
+    if (secretId) {
+      const { data: current } = await supabaseAdmin.rpc("crisp_get_workspace_secret", {
+        p_secret_id: secretId,
+      });
+      webhookSecret = (current as any)?.webhook_secret || webhookSecret;
+      const { error: updErr } = await supabaseAdmin.rpc("crisp_update_workspace_secret", {
+        p_secret_id: secretId,
+        p_token_id: data.tokenId,
+        p_token_key: data.tokenKey,
+        p_webhook_secret: webhookSecret,
+      });
+      if (updErr) return { ok: false as const, error: `Failed to update stored credentials: ${updErr.message}` };
+    } else {
+      const { data: newSecretId, error: vaultErr } = await supabaseAdmin.rpc("crisp_create_workspace_secret", {
+        p_website_id: data.websiteId,
+        p_token_id: data.tokenId,
+        p_token_key: data.tokenKey,
+        p_webhook_secret: webhookSecret,
+      });
+      if (vaultErr || !newSecretId) {
+        return { ok: false as const, error: `Failed to store credentials: ${vaultErr?.message ?? "unknown error"}` };
+      }
+      secretId = newSecretId as unknown as string;
     }
 
-    const { data: resData, error: fnErr } = await supabase.functions.invoke("crisp-workspace-admin", {
-      body: {
-        action: "add_workspace",
-        website_id: data.websiteId,
-        token_id: data.tokenId,
-        token_key: data.tokenKey,
+    const info: any = verified.info ?? {};
+    const workspaceName = info.name ?? null;
+
+    const { error: wsErr } = await supabaseAdmin.from("crisp_workspaces").upsert(
+      {
+        ...(existingWs?.id ? { id: existingWs.id } : {}),
+        crisp_website_id: data.websiteId,
+        workspace_name: workspaceName,
+        enabled: true,
+        credential_secret_id: secretId,
+        installed_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        metadata: { domain: info.domain ?? null, logo: info.logo ?? null, tier: verified.tier },
       },
-    });
+      { onConflict: "crisp_website_id" },
+    );
 
-    if (fnErr) {
-      return { ok: false as const, error: fnErr.message || "Failed to invoke workspace admin function" };
-    }
-
-    if (resData?.error) {
-      return { ok: false as const, error: resData.error };
-    }
+    if (wsErr) return { ok: false as const, error: `Failed to save workspace: ${wsErr.message}` };
 
     return {
       ok: true as const,
-      workspace_name: resData?.workspace_name,
-      webhook_url: resData?.webhook_url,
+      workspace_name: workspaceName ?? `Workspace • ${data.websiteId.slice(0, 5)}`,
+      webhook_url: webhookUrlFor(webhookSecret),
     };
   });
 
@@ -135,34 +222,16 @@ export const toggleCrispWorkspace = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    await assertAdmin(supabase, userId);
 
-    const { data: roleRows, error: roleErr } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    if (roleErr) throw new Error("Could not verify user roles");
-    const roles = (roleRows ?? []).map((r) => String(r.role));
-    if (!roles.includes("admin")) {
-      throw new Error("Forbidden: Workspace management is restricted to JellyBean admin users only.");
-    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("crisp_workspaces")
+      .update({ enabled: data.enabled, updated_at: new Date().toISOString() })
+      .eq("crisp_website_id", data.websiteId);
 
-    const { data: resData, error: fnErr } = await supabase.functions.invoke("crisp-workspace-admin", {
-      body: {
-        action: "toggle_workspace_enabled",
-        website_id: data.websiteId,
-        enabled: data.enabled,
-      },
-    });
-
-    if (fnErr) {
-      return { ok: false as const, error: fnErr.message };
-    }
-
-    if (resData?.error) {
-      return { ok: false as const, error: resData.error };
-    }
-
-    return { ok: true as const, enabled: resData?.enabled };
+    if (error) return { ok: false as const, error: error.message };
+    return { ok: true as const, enabled: data.enabled };
   });
 
 export const regenerateCrispWebhookSecret = createServerFn({ method: "POST" })
@@ -174,34 +243,34 @@ export const regenerateCrispWebhookSecret = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    await assertAdmin(supabase, userId);
 
-    const { data: roleRows, error: roleErr } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    if (roleErr) throw new Error("Could not verify user roles");
-    const roles = (roleRows ?? []).map((r) => String(r.role));
-    if (!roles.includes("admin")) {
-      throw new Error("Forbidden: Workspace management is restricted to JellyBean admin users only.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: ws, error: fetchErr } = await supabaseAdmin
+      .from("crisp_workspaces")
+      .select("credential_secret_id")
+      .eq("crisp_website_id", data.websiteId)
+      .maybeSingle();
+
+    if (fetchErr || !ws?.credential_secret_id) {
+      return { ok: false as const, error: "Workspace credentials not found. Re-connect the workspace first." };
     }
 
-    const { data: resData, error: fnErr } = await supabase.functions.invoke("crisp-workspace-admin", {
-      body: {
-        action: "regenerate_webhook_secret",
-        website_id: data.websiteId,
-      },
+    const { data: current } = await supabaseAdmin.rpc("crisp_get_workspace_secret", {
+      p_secret_id: ws.credential_secret_id,
     });
+    const secret = newWebhookSecret();
+    const { error: updErr } = await supabaseAdmin.rpc("crisp_update_workspace_secret", {
+      p_secret_id: ws.credential_secret_id,
+      p_token_id: (current as any)?.token_id ?? "",
+      p_token_key: (current as any)?.token_key ?? "",
+      p_webhook_secret: secret,
+    });
+    if (updErr) return { ok: false as const, error: updErr.message };
 
-    if (fnErr) {
-      return { ok: false as const, error: fnErr.message };
-    }
-
-    if (resData?.error) {
-      return { ok: false as const, error: resData.error };
-    }
-
-    return { ok: true as const, webhook_url: resData?.webhook_url };
+    return { ok: true as const, webhook_url: webhookUrlFor(secret) };
   });
+
 
 export const addCrispConversationNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
