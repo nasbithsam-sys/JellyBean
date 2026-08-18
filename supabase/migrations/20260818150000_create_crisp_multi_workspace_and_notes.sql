@@ -96,7 +96,9 @@ CREATE INDEX IF NOT EXISTS idx_crisp_messages_sent_at ON public.crisp_messages(s
 ALTER TABLE public.crisp_webhook_events ADD COLUMN IF NOT EXISTS crisp_website_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_crisp_webhook_events_website_id ON public.crisp_webhook_events(crisp_website_id);
 
--- 5. Secure Vault Helpers (service_role ONLY)
+-- 5. Secure Vault Helpers (service_role ONLY, strict Vault API usage)
+
+-- CREATE SECRET: Uses ONLY vault.create_secret()
 CREATE OR REPLACE FUNCTION public.crisp_create_workspace_secret(
     p_website_id TEXT,
     p_token_id TEXT,
@@ -118,18 +120,17 @@ BEGIN
         'webhook_secret', p_webhook_secret
     )::text;
 
-    BEGIN
-        v_secret_id := vault.create_secret(v_secret_json, 'crisp_ws_' || p_website_id, 'Crisp credentials for ' || p_website_id);
-    EXCEPTION WHEN OTHERS THEN
-        INSERT INTO vault.secrets (secret, name, description)
-        VALUES (v_secret_json, 'crisp_ws_' || p_website_id, 'Crisp credentials for ' || p_website_id)
-        RETURNING id INTO v_secret_id;
-    END;
+    v_secret_id := vault.create_secret(
+        v_secret_json,
+        'crisp_ws_' || p_website_id,
+        'Crisp credentials for ' || p_website_id
+    );
 
     RETURN v_secret_id;
 END;
 $$;
 
+-- UPDATE SECRET: Uses ONLY vault.update_secret()
 CREATE OR REPLACE FUNCTION public.crisp_update_workspace_secret(
     p_secret_id UUID,
     p_token_id TEXT,
@@ -150,14 +151,20 @@ BEGIN
         'webhook_secret', p_webhook_secret
     )::text;
 
-    UPDATE vault.secrets
-    SET secret = v_secret_json, updated_at = NOW()
-    WHERE id = p_secret_id;
+    PERFORM vault.update_secret(
+        p_secret_id,
+        v_secret_json,
+        NULL,
+        NULL
+    );
 
-    RETURN FOUND;
+    RETURN TRUE;
+EXCEPTION WHEN OTHERS THEN
+    RETURN FALSE;
 END;
 $$;
 
+-- GET SECRET: Retrieves ONLY from vault.decrypted_secrets.decrypted_secret
 CREATE OR REPLACE FUNCTION public.crisp_get_workspace_secret(
     p_secret_id UUID
 )
@@ -172,12 +179,6 @@ BEGIN
     SELECT decrypted_secret INTO v_secret
     FROM vault.decrypted_secrets
     WHERE id = p_secret_id;
-
-    IF v_secret IS NULL THEN
-        SELECT secret INTO v_secret
-        FROM vault.secrets
-        WHERE id = p_secret_id;
-    END IF;
 
     IF v_secret IS NULL THEN
         RETURN NULL;

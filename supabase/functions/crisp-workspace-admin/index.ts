@@ -74,7 +74,7 @@ serve(async (req) => {
     const body = await req.json();
     const action = String(body.action || "").toLowerCase();
 
-    // 1. ADD WORKSPACE
+    // 1. ADD / CONNECT WORKSPACE
     if (action === "add_workspace") {
       const websiteId = String(body.website_id || body.websiteId || "").trim();
       const tokenId = String(body.token_id || body.tokenId || "").trim();
@@ -111,22 +111,59 @@ serve(async (req) => {
       const domain = wsInfo.domain || null;
       const logo = wsInfo.logo || null;
 
-      const webhookSecret = generateWebhookSecret();
+      // Check if workspace already exists in crisp_workspaces
+      const { data: existingWs } = await supabase
+        .from("crisp_workspaces")
+        .select("id, credential_secret_id")
+        .eq("crisp_website_id", websiteId)
+        .maybeSingle();
 
-      // Store in Vault via SQL helper
-      const { data: secretId, error: vaultErr } = await supabase.rpc("crisp_create_workspace_secret", {
-        p_website_id: websiteId,
-        p_token_id: tokenId,
-        p_token_key: tokenKey,
-        p_webhook_secret: webhookSecret,
-      });
+      let secretId = existingWs?.credential_secret_id || null;
+      let webhookSecret = "";
 
-      if (vaultErr) {
-        console.error("[Crisp Admin] Error creating vault secret:", vaultErr);
-        return new Response(
-          JSON.stringify({ error: `Failed to store workspace credentials in Vault: ${vaultErr.message}` }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (secretId) {
+        // Retrieve existing secret to preserve webhook_secret
+        const { data: currentSecret } = await supabase.rpc("crisp_get_workspace_secret", {
+          p_secret_id: secretId,
+        });
+
+        webhookSecret = currentSecret?.webhook_secret || currentSecret?.webhookSecret || generateWebhookSecret();
+
+        // Update existing Vault secret via crisp_update_workspace_secret
+        const { error: updateErr } = await supabase.rpc("crisp_update_workspace_secret", {
+          p_secret_id: secretId,
+          p_token_id: tokenId,
+          p_token_key: tokenKey,
+          p_webhook_secret: webhookSecret,
+        });
+
+        if (updateErr) {
+          console.error("[Crisp Admin] Error updating existing vault secret:", updateErr);
+          return new Response(
+            JSON.stringify({ error: `Failed to update existing Vault credentials: ${updateErr.message}` }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        // Create brand new Vault secret only if no credential_secret_id exists
+        webhookSecret = generateWebhookSecret();
+
+        const { data: newSecretId, error: vaultErr } = await supabase.rpc("crisp_create_workspace_secret", {
+          p_website_id: websiteId,
+          p_token_id: tokenId,
+          p_token_key: tokenKey,
+          p_webhook_secret: webhookSecret,
+        });
+
+        if (vaultErr || !newSecretId) {
+          console.error("[Crisp Admin] Error creating vault secret:", vaultErr);
+          return new Response(
+            JSON.stringify({ error: `Failed to store workspace credentials in Vault: ${vaultErr?.message}` }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        secretId = newSecretId;
       }
 
       // Upsert crisp_workspaces record
@@ -134,6 +171,7 @@ serve(async (req) => {
         .from("crisp_workspaces")
         .upsert(
           {
+            ...(existingWs?.id ? { id: existingWs.id } : {}),
             crisp_website_id: websiteId,
             workspace_name: workspaceName,
             enabled: true,
