@@ -12,21 +12,31 @@ serve(async (req) => {
   }
 
   try {
-    // 1. Verify ?key=<CRISP_WEBHOOK_SECRET> if secret is configured in environment
+    // 1. Verify CRISP_WEBHOOK_SECRET environment secret (REQUIRED)
     const webhookSecret = Deno.env.get("CRISP_WEBHOOK_SECRET");
-    if (webhookSecret) {
-      const url = new URL(req.url);
-      const providedKey = url.searchParams.get("key");
 
-      if (!providedKey || providedKey !== webhookSecret) {
-        return new Response(
-          JSON.stringify({ error: "Unauthorized: Invalid or missing webhook key parameter (?key=...)" }),
-          {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
+    if (!webhookSecret) {
+      console.error("Missing CRISP_WEBHOOK_SECRET environment variable");
+      return new Response(
+        JSON.stringify({ error: "Server configuration missing: CRISP_WEBHOOK_SECRET is not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const url = new URL(req.url);
+    const providedKey = url.searchParams.get("key");
+
+    if (!providedKey || providedKey !== webhookSecret) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Invalid or missing webhook key parameter (?key=...)" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
