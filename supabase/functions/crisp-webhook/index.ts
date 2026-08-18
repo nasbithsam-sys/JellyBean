@@ -6,56 +6,50 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Timing-safe string comparison
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // 1. Verify CRISP_WEBHOOK_SECRET environment secret (REQUIRED)
-    const webhookSecret = Deno.env.get("CRISP_WEBHOOK_SECRET");
-
-    if (!webhookSecret) {
-      console.error("Missing CRISP_WEBHOOK_SECRET environment variable");
-      return new Response(
-        JSON.stringify({ error: "Server configuration missing: CRISP_WEBHOOK_SECRET is not configured" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    const url = new URL(req.url);
-    const providedKey = url.searchParams.get("key");
-
-    if (!providedKey || providedKey !== webhookSecret) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Invalid or missing webhook key parameter (?key=...)" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const legacyWebhookSecret = Deno.env.get("CRISP_WEBHOOK_SECRET");
+    const legacyWebsiteIdConfig = Deno.env.get("CRISP_WEBSITE_ID");
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variable");
       return new Response(JSON.stringify({ error: "Server configuration missing" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const rawBody = await req.text();
+    const url = new URL(req.url);
+    const providedKey = url.searchParams.get("key");
+
+    if (!providedKey) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Missing webhook secret key (?key=)" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const bodyText = await req.text();
     let body: any;
 
     try {
-      body = JSON.parse(bodyText);
+      body = JSON.parse(rawBody);
     } catch {
       return new Response(JSON.stringify({ error: "Invalid JSON payload" }), {
         status: 400,
@@ -63,27 +57,79 @@ serve(async (req) => {
       });
     }
 
-    // Crisp Webhook Payload Structure
-    // { website_id: string, event: string, data: { session_id, fingerprint, from, type, content, timestamp, user, state ... } }
-    const websiteId = body.website_id || body.data?.website_id || Deno.env.get("CRISP_WEBSITE_ID") || "default";
     const eventType = String(body.event || "unknown").toLowerCase();
     const data = body.data || body;
+    const websiteId = body.website_id || data.website_id;
+
+    if (!websiteId) {
+      return new Response(JSON.stringify({ message: "No website_id in payload, event ignored" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // 1. LOOKUP WORKSPACE IN DATABASE
+    const { data: wsRecord } = await supabase
+      .from("crisp_workspaces")
+      .select("id, enabled, credential_secret_id")
+      .eq("crisp_website_id", websiteId)
+      .maybeSingle();
+
+    let authenticated = false;
+
+    if (wsRecord && wsRecord.enabled && wsRecord.credential_secret_id) {
+      // Retrieve secret from Vault
+      const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
+        p_secret_id: wsRecord.credential_secret_id,
+      });
+
+      const storedWebhookSecret = secretData?.webhook_secret || secretData?.webhookSecret;
+      if (storedWebhookSecret && timingSafeEqual(providedKey, storedWebhookSecret)) {
+        authenticated = true;
+      }
+    }
+
+    // 2. TEMPORARY LEGACY WORKSPACE 1 FALLBACK
+    if (!authenticated && (!wsRecord || !wsRecord.credential_secret_id)) {
+      if (legacyWebsiteIdConfig && websiteId === legacyWebsiteIdConfig && legacyWebhookSecret) {
+        if (timingSafeEqual(providedKey, legacyWebhookSecret)) {
+          authenticated = true;
+        }
+      }
+    }
+
+    if (!authenticated) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Webhook key mismatch or workspace disabled." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Update last_seen_at for registered workspace
+    if (wsRecord) {
+      await supabase
+        .from("crisp_workspaces")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", wsRecord.id);
+    }
+
     const sessionId = data.session_id || body.session_id;
 
     if (!sessionId) {
-      return new Response(JSON.stringify({ message: "No session_id in payload, event ignored" }), {
+      return new Response(JSON.stringify({ status: "success", message: "Event processed (no session_id)" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const fingerprint = data.fingerprint || data.timestamp || Date.now();
-    const eventFingerprint = `${eventType}_${sessionId}_${fingerprint}`;
+    const eventFingerprint = `${websiteId}_${eventType}_${sessionId}_${fingerprint}`;
 
-    // 2. Check & log webhook event idempotently
+    // 3. Log webhook event idempotently with website identity
     const { error: webhookLogErr } = await supabase
       .from("crisp_webhook_events")
       .insert({
+        crisp_website_id: websiteId,
         event_fingerprint: eventFingerprint,
         event_type: eventType,
         payload: body,
@@ -91,21 +137,20 @@ serve(async (req) => {
       });
 
     if (webhookLogErr && webhookLogErr.code === "23505") {
-      // Unique constraint violation -> Already processed duplicate event
       return new Response(JSON.stringify({ status: "ignored", message: "Duplicate webhook event" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 3. Fetch existing conversation to preserve customer details without overwriting with null
+    // 4. Fetch existing conversation to preserve customer details without overwriting with null
     const { data: existingConv } = await supabase
       .from("crisp_conversations")
       .select("id, customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at, status")
+      .eq("crisp_website_id", websiteId)
       .eq("crisp_session_id", sessionId)
       .maybeSingle();
 
-    // Extract customer details from event if available
     const customerUser = data.user || body.user || {};
     const incomingName = customerUser.nickname || customerUser.name || data.nickname || body.nickname || null;
     const incomingEmail = customerUser.email || data.email || body.email || null;
@@ -113,14 +158,12 @@ serve(async (req) => {
     const incomingAvatar = customerUser.avatar || data.avatar || body.avatar || null;
     const incomingState = data.state || body.state || null;
 
-    // Do NOT overwrite existing details with null
     const finalName = incomingName || existingConv?.customer_name || null;
     const finalEmail = incomingEmail || existingConv?.customer_email || null;
     const finalPhone = incomingPhone || existingConv?.customer_phone || null;
     const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
     const finalState = incomingState || existingConv?.status || "unresolved";
 
-    // 4. Extract message text if present
     let messageContent = "";
     if (typeof data.content === "string") {
       messageContent = data.content;
@@ -134,13 +177,13 @@ serve(async (req) => {
     const lastMessage = isMessageEvent && messageContent.trim() ? messageContent.trim() : (existingConv?.last_message || null);
     const lastMessageAt = isMessageEvent && messageContent.trim() ? sentAt : (existingConv?.last_message_at || sentAt);
 
-    // 5. Upsert conversation record with preserved details
+    // 5. Upsert conversation
     const { data: convData, error: convErr } = await supabase
       .from("crisp_conversations")
       .upsert(
         {
-          crisp_session_id: sessionId,
           crisp_website_id: websiteId,
+          crisp_session_id: sessionId,
           customer_name: finalName,
           customer_email: finalEmail,
           customer_phone: finalPhone,
@@ -150,7 +193,7 @@ serve(async (req) => {
           last_message_at: lastMessageAt,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "crisp_session_id" }
+        { onConflict: "crisp_website_id,crisp_session_id" }
       )
       .select("id")
       .single();
@@ -165,7 +208,7 @@ serve(async (req) => {
 
     const conversationId = convData.id;
 
-    // 6. ONLY real message events create crisp_messages (Session metadata events must NOT create fake chat messages)
+    // 6. Insert ONLY real message events into crisp_messages
     if (isMessageEvent && messageContent.trim()) {
       const crispMsgId = String(data.fingerprint || `${sessionId}_${sentAt}`);
       const rawFrom = String(data.from || "user").toLowerCase();
@@ -175,6 +218,7 @@ serve(async (req) => {
 
       const { error: msgErr } = await supabase.from("crisp_messages").insert({
         conversation_id: conversationId,
+        crisp_website_id: websiteId,
         crisp_session_id: sessionId,
         crisp_message_id: crispMsgId,
         sender_type: senderType,
@@ -190,7 +234,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ status: "success", session_id: sessionId }), {
+    return new Response(JSON.stringify({ status: "success", session_id: sessionId, website_id: websiteId }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

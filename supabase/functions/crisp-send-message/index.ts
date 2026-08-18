@@ -43,7 +43,7 @@ serve(async (req) => {
       });
     }
 
-    // Strictly check user roles (admin, cs_admin, cs only)
+    // Role check
     const { data: userRoles, error: roleErr } = await supabase
       .from("user_roles")
       .select("role")
@@ -57,46 +57,84 @@ serve(async (req) => {
     }
 
     const roles = (userRoles || []).map((r: { role: string }) => r.role);
-    const isAuthorized = roles.some((r) => ALLOWED_ROLES.includes(r));
-
-    if (!isAuthorized) {
+    if (!roles.some((r) => ALLOWED_ROLES.includes(r))) {
       return new Response(
-        JSON.stringify({ error: "Forbidden: Crisp Chat is strictly restricted to admin, cs_admin, and cs roles." }),
-        {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "Forbidden: Crisp Chat is restricted to admin, cs_admin, and cs roles." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Parse payload
-    const { session_id, content } = await req.json();
+    const body = await req.json();
+    const conversationId = body.conversation_id || body.conversationId;
+    const content = String(body.content || "").trim();
 
-    if (!session_id || !content || typeof content !== "string" || !content.trim()) {
-      return new Response(JSON.stringify({ error: "session_id and non-empty content are required" }), {
+    if (!conversationId || !content) {
+      return new Response(JSON.stringify({ error: "conversation_id and non-empty content are required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const websiteId = Deno.env.get("CRISP_WEBSITE_ID");
-    const tokenId = Deno.env.get("CRISP_TOKEN_ID");
-    const tokenKey = Deno.env.get("CRISP_TOKEN_KEY");
+    // FETCH FROM DATABASE: crisp_website_id and crisp_session_id
+    const { data: conv, error: convErr } = await supabase
+      .from("crisp_conversations")
+      .select("id, crisp_website_id, crisp_session_id")
+      .eq("id", conversationId)
+      .single();
 
-    if (!websiteId || !tokenId || !tokenKey) {
+    if (convErr || !conv) {
+      return new Response(JSON.stringify({ error: "Conversation not found in database" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const websiteId = conv.crisp_website_id;
+    const sessionId = conv.crisp_session_id;
+
+    // FIND WORKSPACE & VAULT CREDENTIALS
+    const { data: wsRecord } = await supabase
+      .from("crisp_workspaces")
+      .select("id, enabled, credential_secret_id")
+      .eq("crisp_website_id", websiteId)
+      .maybeSingle();
+
+    let tokenId = "";
+    let tokenKey = "";
+
+    if (wsRecord && wsRecord.enabled && wsRecord.credential_secret_id) {
+      const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
+        p_secret_id: wsRecord.credential_secret_id,
+      });
+
+      if (secretData?.token_id && secretData?.token_key) {
+        tokenId = secretData.token_id;
+        tokenKey = secretData.token_key;
+      }
+    }
+
+    // TEMPORARY LEGACY WORKSPACE 1 FALLBACK
+    if (!tokenId || !tokenKey) {
+      const legacyWebsiteId = Deno.env.get("CRISP_WEBSITE_ID");
+      const legacyTokenId = Deno.env.get("CRISP_TOKEN_ID");
+      const legacyTokenKey = Deno.env.get("CRISP_TOKEN_KEY");
+
+      if (legacyWebsiteId && websiteId === legacyWebsiteId && legacyTokenId && legacyTokenKey) {
+        tokenId = legacyTokenId;
+        tokenKey = legacyTokenKey;
+      }
+    }
+
+    if (!tokenId || !tokenKey) {
       return new Response(
-        JSON.stringify({ error: "Crisp integration is not configured yet. Missing Crisp credentials." }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "Workspace is disabled or not configured with Crisp Website Tokens." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Call Crisp REST API
     const authString = btoa(`${tokenId}:${tokenKey}`);
-    const crispUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${session_id}/message`;
-
+    const crispUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/message`;
+    
     const crispResponse = await fetch(crispUrl, {
       method: "POST",
       headers: {
@@ -108,7 +146,7 @@ serve(async (req) => {
         type: "text",
         from: "operator",
         origin: "chat",
-        content: content.trim(),
+        content: content,
       }),
     });
 
@@ -117,91 +155,42 @@ serve(async (req) => {
     if (!crispResponse.ok) {
       console.error("Crisp API Error:", crispResponse.status, responseData);
       return new Response(
-        JSON.stringify({
-          error: responseData.reason || responseData.message || `Crisp API returned status ${crispResponse.status}`,
-        }),
-        {
-          status: crispResponse.status,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: responseData.reason || responseData.message || `Crisp API status ${crispResponse.status}` }),
+        { status: crispResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Crisp response data contains created message details
     const crispMsgData = responseData.data || responseData;
     const crispMsgId = String(crispMsgData.fingerprint || Date.now());
-    const sentAt = crispMsgData.timestamp
-      ? new Date(crispMsgData.timestamp).toISOString()
-      : new Date().toISOString();
+    const sentAt = crispMsgData.timestamp ? new Date(crispMsgData.timestamp).toISOString() : new Date().toISOString();
 
-    // Get conversation record
-    const { data: convData } = await supabase
+    // Update conversation
+    await supabase
       .from("crisp_conversations")
-      .select("id")
-      .eq("crisp_session_id", session_id)
-      .maybeSingle();
+      .update({
+        last_message: content,
+        last_message_at: sentAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conv.id);
 
-    let conversationId = convData?.id;
-
-    if (!conversationId) {
-      // Upsert conversation if record does not exist locally
-      const { data: newConv } = await supabase
-        .from("crisp_conversations")
-        .upsert(
-          {
-            crisp_session_id: session_id,
-            crisp_website_id: websiteId,
-            last_message: content.trim(),
-            last_message_at: sentAt,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "crisp_session_id" }
-        )
-        .select("id")
-        .single();
-
-      conversationId = newConv?.id;
-    } else {
-      // Update last message preview
-      await supabase
-        .from("crisp_conversations")
-        .update({
-          last_message: content.trim(),
-          last_message_at: sentAt,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", conversationId);
-    }
-
-    // Insert outgoing operator message idempotently
-    if (conversationId) {
-      const { error: msgErr } = await supabase.from("crisp_messages").insert({
-        conversation_id: conversationId,
-        crisp_session_id: session_id,
-        crisp_message_id: crispMsgId,
-        sender_type: "operator",
-        direction: "outgoing",
-        content: content.trim(),
-        message_type: "text",
-        sent_at: sentAt,
-        raw_payload: responseData,
-      });
-
-      if (msgErr && msgErr.code !== "23505") {
-        console.error("Error inserting outgoing message into DB:", msgErr);
-      }
-    }
+    // Insert outgoing message
+    await supabase.from("crisp_messages").insert({
+      conversation_id: conv.id,
+      crisp_website_id: websiteId,
+      crisp_session_id: sessionId,
+      crisp_message_id: crispMsgId,
+      sender_type: "operator",
+      direction: "outgoing",
+      content: content,
+      message_type: "text",
+      sent_at: sentAt,
+      raw_payload: responseData,
+    });
 
     return new Response(
-      JSON.stringify({
-        status: "success",
-        crisp_message_id: crispMsgId,
-        sent_at: sentAt,
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ status: "success", crisp_message_id: crispMsgId, sent_at: sentAt }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
     console.error("Crisp send message error:", err);
