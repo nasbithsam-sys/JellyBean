@@ -258,6 +258,7 @@ const PIPELINE_STATUSES = [
   "wrong_person",
   "already_got_someone",
   "service_provider_himself",
+  "small_service",
   "converted",
   "need_follow_up",
 ] as const satisfies readonly CsStatus[];
@@ -2793,7 +2794,11 @@ function statusDotTone(status: string) {
   ) {
     return "bg-destructive";
   }
-  if (status === "already_got_someone" || status === "service_provider_himself") {
+  if (
+    status === "already_got_someone" ||
+    status === "service_provider_himself" ||
+    status === "small_service"
+  ) {
     return "bg-muted-foreground";
   }
   return "bg-primary-glow";

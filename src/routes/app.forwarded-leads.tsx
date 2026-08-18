@@ -70,6 +70,7 @@ const OUTCOME_FILTERS = [
   "wrong_lead",
   "already_got_someone",
   "service_provider_himself",
+  "small_service",
   "converted",
   "need_follow_up",
 ] as const;

@@ -28,6 +28,7 @@ const CS_STATUSES = [
   "wrong_lead",
   "already_got_someone",
   "service_provider_himself",
+  "small_service",
   "converted",
   "need_follow_up",
 ] as const;
@@ -39,6 +40,7 @@ const CS_LABELS: Record<string, string> = {
   wrong_lead: "Wrong lead",
   already_got_someone: "Already got someone",
   service_provider_himself: "Service provider himself",
+  small_service: "Small service",
   converted: "Processed",
   need_follow_up: "Need follow-up",
 };
