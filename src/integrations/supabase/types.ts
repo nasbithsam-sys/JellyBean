@@ -119,6 +119,44 @@ export type Database = {
         }
         Relationships: []
       }
+      crisp_conversation_notes: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          created_by: string
+          id: string
+          is_edited: boolean
+          note: string
+          updated_at: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          is_edited?: boolean
+          note: string
+          updated_at?: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_edited?: boolean
+          note?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crisp_conversation_notes_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "crisp_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crisp_conversations: {
         Row: {
           created_at: string | null
@@ -177,6 +215,7 @@ export type Database = {
           created_at: string | null
           crisp_message_id: string | null
           crisp_session_id: string
+          crisp_website_id: string | null
           direction: string
           id: string
           message_type: string | null
@@ -190,6 +229,7 @@ export type Database = {
           created_at?: string | null
           crisp_message_id?: string | null
           crisp_session_id: string
+          crisp_website_id?: string | null
           direction: string
           id?: string
           message_type?: string | null
@@ -203,6 +243,7 @@ export type Database = {
           created_at?: string | null
           crisp_message_id?: string | null
           crisp_session_id?: string
+          crisp_website_id?: string | null
           direction?: string
           id?: string
           message_type?: string | null
@@ -222,6 +263,7 @@ export type Database = {
       }
       crisp_webhook_events: {
         Row: {
+          crisp_website_id: string | null
           error: string | null
           event_fingerprint: string
           event_type: string
@@ -231,6 +273,7 @@ export type Database = {
           received_at: string | null
         }
         Insert: {
+          crisp_website_id?: string | null
           error?: string | null
           event_fingerprint: string
           event_type: string
@@ -240,6 +283,7 @@ export type Database = {
           received_at?: string | null
         }
         Update: {
+          crisp_website_id?: string | null
           error?: string | null
           event_fingerprint?: string
           event_type?: string
@@ -247,6 +291,45 @@ export type Database = {
           payload?: Json
           processed?: boolean | null
           received_at?: string | null
+        }
+        Relationships: []
+      }
+      crisp_workspaces: {
+        Row: {
+          created_at: string
+          crisp_website_id: string
+          enabled: boolean
+          id: string
+          installed_at: string | null
+          last_seen_at: string | null
+          last_synced_at: string | null
+          metadata: Json
+          updated_at: string
+          workspace_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          crisp_website_id: string
+          enabled?: boolean
+          id?: string
+          installed_at?: string | null
+          last_seen_at?: string | null
+          last_synced_at?: string | null
+          metadata?: Json
+          updated_at?: string
+          workspace_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          crisp_website_id?: string
+          enabled?: boolean
+          id?: string
+          installed_at?: string | null
+          last_seen_at?: string | null
+          last_synced_at?: string | null
+          metadata?: Json
+          updated_at?: string
+          workspace_name?: string | null
         }
         Relationships: []
       }

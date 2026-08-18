@@ -1,526 +1,654 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
-import { useState, useEffect, useRef, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatDistanceToNow, format } from "date-fns";
 import {
-  MessageSquare,
-  Send,
-  RefreshCw,
-  Search,
-  User,
-  Mail,
-  Phone,
-  AlertCircle,
+  Building2,
   CheckCircle2,
   Clock,
+  Globe,
   Loader2,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  Search,
+  Send,
+  ShieldAlert,
+  Trash2,
+  User,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
-import { PageHeader, PageBody, RoleGate } from "@/components/page";
-import { RouteSkeleton } from "@/components/route-skeleton";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  addCrispConversationNote,
+  deleteCrispConversationNote,
+  sendCrispMessage,
+  syncCrispHistory,
+} from "@/lib/crisp.functions";
+import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
-import { syncCrispHistory, sendCrispMessage } from "@/lib/crisp.functions";
-import type { Database } from "@/integrations/supabase/types";
-import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { PageBody, PageHeader, RoleGate } from "@/components/page";
 
 export const Route = createFileRoute("/app/crisp-chat")({
   component: CrispChatPage,
-  pendingComponent: () => <RouteSkeleton />,
-  pendingMs: 200,
 });
 
-type CrispConversation = Database["public"]["Tables"]["crisp_conversations"]["Row"];
-type CrispMessage = Database["public"]["Tables"]["crisp_messages"]["Row"];
+type ConversationRecord = {
+  id: string;
+  crisp_session_id: string;
+  crisp_website_id: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  customer_avatar: string | null;
+  status: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  unread_count: number | null;
+  metadata: any;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type MessageRecord = {
+  id: string;
+  conversation_id: string;
+  crisp_session_id: string;
+  crisp_website_id: string | null;
+  crisp_message_id: string | null;
+  sender_type: "user" | "customer" | "operator";
+  direction: "incoming" | "outgoing";
+  content: string;
+  message_type: string | null;
+  sent_at: string;
+  raw_payload: any;
+};
+
+type WorkspaceRecord = {
+  id: string;
+  crisp_website_id: string;
+  workspace_name: string | null;
+  enabled: boolean;
+  installed_at: string | null;
+  last_seen_at: string | null;
+  last_synced_at: string | null;
+};
+
+type NoteRecord = {
+  id: string;
+  conversation_id: string;
+  created_by: string;
+  note: string;
+  is_edited: boolean;
+  created_at: string;
+  author_name?: string;
+};
+
+function getWorkspaceDisplayName(websiteId: string, workspacesMap: Map<string, string>): string {
+  if (workspacesMap.has(websiteId)) {
+    return workspacesMap.get(websiteId)!;
+  }
+  const suffix = websiteId.length > 6 ? websiteId.slice(-5) : websiteId;
+  return `Workspace • ${suffix}`;
+}
 
 function CrispChatPage() {
   const auth = useAuth();
-
   return (
-    <div className="flex flex-col h-full min-h-screen">
+    <div className="flex h-[calc(100vh-4rem)] flex-col bg-background text-foreground overflow-hidden">
       <PageHeader
-        title="Crisp Chat"
-        description="Manage live customer support conversations from your Crisp workspace."
+        title="Crisp Chat Inbox"
+        description="Unified multi-workspace customer support portal."
       />
-      <PageBody className="flex-1 flex flex-col min-h-0">
-        <RoleGate allow={["admin", "cs_admin", "cs"]} current={auth.primaryRole}>
-          <CrispChatInbox />
+      <PageBody className="flex-1 p-0 overflow-hidden">
+        <RoleGate
+          allow={["admin", "cs_admin", "cs"]}
+          current={auth.primaryRole}
+        >
+          <CrispInboxInner />
         </RoleGate>
       </PageBody>
     </div>
   );
 }
 
-function CrispChatInbox() {
-  const queryClient = useQueryClient();
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [messageInput, setMessageInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [configError, setConfigError] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const syncHistoryFn = useServerFn(syncCrispHistory);
-  const sendMessageFn = useServerFn(sendCrispMessage);
+function CrispInboxInner() {
+  // Handle Send Message
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedConversationId || !messageInput.trim() || isSending) return;
 
-  // 1. Fetch Crisp Conversations
-  const conversationsQuery = useQuery({
-    queryKey: ["crisp-conversations"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("crisp_conversations")
-        .select("*")
-        .order("last_message_at", { ascending: false });
-
-      if (error) throw error;
-      return (data ?? []) as CrispConversation[];
-    },
-    refetchInterval: 10000,
-  });
-
-  const conversations = conversationsQuery.data ?? [];
-
-  // Automatically select first conversation if none selected
-  useEffect(() => {
-    if (!selectedSessionId && conversations.length > 0) {
-      setSelectedSessionId(conversations[0].crisp_session_id);
-    }
-  }, [conversations, selectedSessionId]);
-
-  // 2. Fetch Messages for selected conversation
-  const messagesQuery = useQuery({
-    queryKey: ["crisp-messages", selectedSessionId],
-    queryFn: async () => {
-      if (!selectedSessionId) return [];
-      const { data, error } = await supabase
-        .from("crisp_messages")
-        .select("*")
-        .eq("crisp_session_id", selectedSessionId)
-        .order("sent_at", { ascending: true });
-
-      if (error) throw error;
-      return (data ?? []) as CrispMessage[];
-    },
-    enabled: !!selectedSessionId,
-    refetchInterval: 5000,
-  });
-
-  const messages = messagesQuery.data ?? [];
-  const selectedConversation = useMemo(
-    () => conversations.find((c) => c.crisp_session_id === selectedSessionId),
-    [conversations, selectedSessionId]
-  );
-
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
-
-  // 3. Supabase Realtime Subscription for instant live messages
-  useEffect(() => {
-    const channel = supabase
-      .channel("crisp-realtime-channel")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "crisp_messages" },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ["crisp-messages"] });
-          void queryClient.invalidateQueries({ queryKey: ["crisp-conversations"] });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "crisp_conversations" },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ["crisp-conversations"] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
-  // Filter conversations based on search query and status filter
-  const filteredConversations = useMemo(() => {
-    return conversations.filter((conv) => {
-      const matchesStatus =
-        statusFilter === "all" || (conv.status || "unresolved").toLowerCase() === statusFilter;
-
-      const q = searchQuery.toLowerCase().trim();
-      if (!q) return matchesStatus;
-
-      const nameMatch = conv.customer_name?.toLowerCase().includes(q) ?? false;
-      const emailMatch = conv.customer_email?.toLowerCase().includes(q) ?? false;
-      const phoneMatch = conv.customer_phone?.toLowerCase().includes(q) ?? false;
-      const lastMsgMatch = conv.last_message?.toLowerCase().includes(q) ?? false;
-      const sessionMatch = conv.crisp_session_id.toLowerCase().includes(q);
-
-      return matchesStatus && (nameMatch || emailMatch || phoneMatch || lastMsgMatch || sessionMatch);
-    });
-  }, [conversations, searchQuery, statusFilter]);
-
-  // Send message via server function
-  const handleSendMessage = async () => {
-    if (!selectedSessionId || !messageInput.trim() || sending) return;
-
-    setSending(true);
-    setConfigError(null);
+    setIsSending(true);
+    const content = messageInput.trim();
+    setMessageInput("");
 
     try {
-      const result = await sendMessageFn({
-        data: { sessionId: selectedSessionId, content: messageInput.trim() },
-      });
-      if (!result.ok) {
-        setConfigError(result.error);
-        return;
-      }
-      setMessageInput("");
-      void queryClient.invalidateQueries({ queryKey: ["crisp-messages", selectedSessionId] });
-      void queryClient.invalidateQueries({ queryKey: ["crisp-conversations"] });
-    } catch (err: any) {
-      console.error("Failed to send message:", err);
-      const errMsg = err?.message || "Failed to send message via Crisp";
-      if (errMsg.includes("not configured") || errMsg.includes("Missing CRISP")) {
-        setConfigError(
-          "Crisp integration is not configured yet. Please configure CRISP_WEBSITE_ID, CRISP_TOKEN_ID, and CRISP_TOKEN_KEY in Supabase environment secrets.",
-        );
+      const res = await sendCrispMessage({ data: { conversationId: selectedConversationId, content } });
+      if (!res.ok) {
+        toast.error(res.error || "Could not send message");
+        setMessageInput(content);
       } else {
-        alert(errMsg);
+        loadMessages(selectedConversationId);
       }
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
+      setMessageInput(content);
     } finally {
-      setSending(false);
+      setIsSending(false);
     }
   };
 
-  // Sync Crisp history via server function
+  // Handle Add Note
+  const handleAddNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedConversationId || !noteInput.trim() || isAddingNote) return;
+
+    setIsAddingNote(true);
+    const noteText = noteInput.trim();
+    setNoteInput("");
+
+    try {
+      const res = await addCrispConversationNote({ data: { conversationId: selectedConversationId, note: noteText } });
+      if (!res.ok) {
+        toast.error(res.error || "Could not save internal note");
+        setNoteInput(noteText);
+      } else {
+        loadNotes(selectedConversationId);
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsAddingNote(false);
+    }
+  };
+
+  // Handle Delete Note
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      const res = await deleteCrispConversationNote({ data: { noteId } });
+      if (res.ok && selectedConversationId) {
+        loadNotes(selectedConversationId);
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  // Handle History Sync
   const handleSyncHistory = async () => {
-    setSyncing(true);
-    setConfigError(null);
+    if (isSyncing) return;
+    setIsSyncing(true);
 
     try {
-      const result = await syncHistoryFn({});
-      if (!result.ok) {
-        setConfigError(result.error);
-        return;
-      }
-      alert(
-        `Crisp history sync completed! Synced ${result?.synced_conversations ?? 0} conversations.`,
-      );
-      void queryClient.invalidateQueries({ queryKey: ["crisp-conversations"] });
-    } catch (err: any) {
-      console.error("Sync history failed:", err);
-      const errMsg = err?.message || "Crisp history sync failed";
-      if (errMsg.includes("not configured") || errMsg.includes("Missing CRISP")) {
-        setConfigError(
-          "Crisp integration is not configured yet. Please configure CRISP_WEBSITE_ID, CRISP_TOKEN_ID, and CRISP_TOKEN_KEY in Supabase environment secrets.",
-        );
+      const websiteIdParam = selectedWebsiteId !== "all" ? selectedWebsiteId : undefined;
+      const res = await syncCrispHistory({ data: { websiteId: websiteIdParam } });
+
+      if (!res.ok) {
+        toast.error(res.error || "Failed to sync history");
       } else {
-        alert(errMsg);
+        toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages across ${res.workspaces_synced} workspace(s).`);
+        loadWorkspaces();
+        loadConversations();
+        if (selectedConversationId) loadMessages(selectedConversationId);
       }
+    } catch (err: any) {
+      toast.error(err.message || "History sync failed");
     } finally {
-      setSyncing(false);
+      setIsSyncing(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
-      e.preventDefault();
-      void handleSendMessage();
-    }
-  };
+  // Extract unique workspaces from conversations if crisp_workspaces is empty
+  const availableWorkspacesList = useMemo(() => {
+    const knownSet = new Set(workspaces.map((w) => w.crisp_website_id));
+    const list = [...workspaces];
+
+    conversations.forEach((c) => {
+      if (!knownSet.has(c.crisp_website_id)) {
+        knownSet.add(c.crisp_website_id);
+        list.push({
+          id: c.crisp_website_id,
+          crisp_website_id: c.crisp_website_id,
+          workspace_name: null,
+          enabled: true,
+          installed_at: null,
+          last_seen_at: null,
+          last_synced_at: null,
+        });
+      }
+    });
+
+    return list;
+  }, [workspaces, conversations]);
 
   return (
-    <div className="flex flex-col gap-3 h-[calc(100vh-140px)]">
-      {/* Crisp Not Configured Banner */}
-      {configError && (
-        <div className="bg-amber-500/15 border border-amber-500/30 text-amber-200 px-4 py-3 rounded-2xl flex items-center justify-between text-xs sm:text-sm">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
-            <span>{configError}</span>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-xs h-7 text-amber-200 hover:text-white"
-            onClick={() => setConfigError(null)}
-          >
-            Dismiss
-          </Button>
+    <div className="flex h-full w-full overflow-hidden border-t border-border/40">
+      {/* ========================================================================= */}
+      {/* COLUMN 1: CRISP WORKSPACES (~200px) */}
+      {/* ========================================================================= */}
+      <div className="w-52 shrink-0 border-r border-border/40 bg-card/40 flex flex-col">
+        <div className="p-3 border-b border-border/40 flex items-center gap-2 font-medium text-xs text-muted-foreground uppercase tracking-wider">
+          <Building2 className="w-4 h-4 text-primary" />
+          <span>Workspaces</span>
         </div>
-      )}
 
-      {/* Main CRM Inbox Layout */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0 bg-card border border-border rounded-[28px] overflow-hidden shadow-sm">
-        {/* Left Side: Conversation List (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col border-r border-border min-h-0 bg-background/40">
-          {/* List Header & Search */}
-          <div className="p-3.5 border-b border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-sm tracking-tight text-foreground">
-                <MessageSquare className="h-4 w-4 text-primary" />
-                <span>Conversations</span>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0.2 rounded-full">
-                  {filteredConversations.length}
-                </Badge>
+        <ScrollArea className="flex-1 p-2">
+          <div className="space-y-1">
+            {/* All Workspaces */}
+            <button
+              onClick={() => setSelectedWebsiteId("all")}
+              className={cn(
+                "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
+                selectedWebsiteId === "all"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "hover:bg-accent hover:text-accent-foreground text-foreground"
+              )}
+            >
+              <div className="flex items-center gap-2 truncate">
+                <Globe className="w-4 h-4 shrink-0" />
+                <span className="truncate">All Workspaces</span>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs gap-1.5 rounded-xl"
-                onClick={() => void handleSyncHistory()}
-                disabled={syncing}
-                title="Sync Crisp History"
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
-                <span>Sync</span>
-              </Button>
-            </div>
+              <Badge variant="secondary" className="ml-1 shrink-0 text-xs px-1.5 py-0">
+                {conversations.length}
+              </Badge>
+            </button>
 
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search name, email, message..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 text-xs h-8 rounded-xl bg-background/60"
-              />
-            </div>
+            <div className="my-2 border-t border-border/40" />
 
-            {/* Status Filter Tabs */}
-            <div className="flex items-center gap-1 text-[11px] overflow-x-auto pb-0.5">
-              {["all", "unresolved", "pending", "resolved"].map((st) => (
+            {/* Individual Workspaces */}
+            {availableWorkspacesList.map((ws) => {
+              const count = workspaceCounts.get(ws.crisp_website_id) || 0;
+              const displayName = getWorkspaceDisplayName(ws.crisp_website_id, workspacesMap);
+              const isSelected = selectedWebsiteId === ws.crisp_website_id;
+
+              return (
                 <button
-                  key={st}
-                  onClick={() => setStatusFilter(st)}
+                  key={ws.crisp_website_id}
+                  onClick={() => setSelectedWebsiteId(ws.crisp_website_id)}
                   className={cn(
-                    "px-2.5 py-1 rounded-lg capitalize transition-colors font-medium shrink-0",
-                    statusFilter === st
-                      ? "bg-primary text-primary-foreground font-semibold"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors text-left group",
+                    isSelected
+                      ? "bg-primary text-primary-foreground font-medium shadow-sm"
+                      : "hover:bg-accent hover:text-accent-foreground text-muted-foreground"
                   )}
                 >
-                  {st}
+                  <div className="flex items-center gap-2 truncate">
+                    <span className={cn("w-2 h-2 rounded-full shrink-0", ws.enabled ? "bg-emerald-500" : "bg-muted")} />
+                    <span className="truncate">{displayName}</span>
+                  </div>
+                  <Badge variant="outline" className="ml-1 shrink-0 text-xs px-1.5 py-0 border-border/60">
+                    {count}
+                  </Badge>
                 </button>
-              ))}
-            </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* COLUMN 2: CONVERSATIONS LIST (~300px) */}
+      {/* ========================================================================= */}
+      <div className="w-80 shrink-0 border-r border-border/40 bg-card/20 flex flex-col">
+        {/* Search & Sync Header */}
+        <div className="p-3 border-b border-border/40 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-sm">Chats</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSyncHistory}
+              disabled={isSyncing}
+              className="h-7 px-2 text-xs gap-1.5"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", isSyncing && "animate-spin")} />
+              <span>{isSyncing ? "Syncing..." : "Sync"}</span>
+            </Button>
           </div>
 
-          {/* Conversation List Items */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {conversationsQuery.isLoading ? (
-              <div className="flex items-center justify-center py-10 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-              </div>
-            ) : filteredConversations.length === 0 ? (
-              <div className="text-center py-12 px-4 text-xs text-muted-foreground">
-                {searchQuery || statusFilter !== "all"
-                  ? "No conversations match your search filter."
-                  : "No Crisp conversations yet."}
-              </div>
-            ) : (
-              filteredConversations.map((conv) => {
-                const isSelected = conv.crisp_session_id === selectedSessionId;
-                const displayName =
-                  conv.customer_name || conv.customer_email || `Visitor ${conv.crisp_session_id.slice(-6)}`;
-                const relativeTime = conv.last_message_at
-                  ? formatDistanceToNow(new Date(conv.last_message_at), { addSuffix: true })
-                  : "";
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search conversations..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 h-8 text-xs bg-background/50"
+            />
+          </div>
+
+          {/* Status Tabs */}
+          <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)} className="w-full">
+            <TabsList className="grid grid-cols-4 h-7 p-0.5 text-xs bg-muted/50">
+              <TabsTrigger value="all" className="text-[11px] px-1 py-0.5">All</TabsTrigger>
+              <TabsTrigger value="unresolved" className="text-[11px] px-1 py-0.5">Open</TabsTrigger>
+              <TabsTrigger value="pending" className="text-[11px] px-1 py-0.5">Pending</TabsTrigger>
+              <TabsTrigger value="resolved" className="text-[11px] px-1 py-0.5">Done</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {/* Conversation Cards List */}
+        <ScrollArea className="flex-1">
+          {isLoading ? (
+            <div className="flex items-center justify-center p-8 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              <span className="text-xs">Loading chats...</span>
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground text-xs">
+              No conversations found.
+            </div>
+          ) : (
+            <div className="divide-y divide-border/20">
+              {filteredConversations.map((conv) => {
+                const isSelected = conv.id === selectedConversationId;
+                const wsName = getWorkspaceDisplayName(conv.crisp_website_id, workspacesMap);
+                const status = conv.status || "unresolved";
 
                 return (
-                  <button
+                  <div
                     key={conv.id}
-                    onClick={() => setSelectedSessionId(conv.crisp_session_id)}
+                    onClick={() => setSelectedConversationId(conv.id)}
                     className={cn(
-                      "w-full text-left p-3 rounded-2xl transition-all duration-150 flex items-start gap-3 border",
-                      isSelected
-                        ? "bg-primary/10 border-primary/30 shadow-sm"
-                        : "border-transparent hover:bg-muted/40 hover:border-border/50"
+                      "p-3 cursor-pointer transition-colors hover:bg-accent/40 space-y-1.5",
+                      isSelected && "bg-accent/80 border-l-4 border-l-primary"
                     )}
                   >
-                    {/* Avatar */}
-                    <div className="h-9 w-9 rounded-full bg-primary/20 grid place-items-center shrink-0 font-bold text-xs text-primary uppercase">
-                      {displayName.substring(0, 2)}
-                    </div>
-
-                    {/* Meta info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <span className="text-xs font-semibold text-foreground truncate">
-                          {displayName}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 truncate">
+                        <Avatar className="w-7 h-7">
+                          <AvatarImage src={conv.customer_avatar || undefined} />
+                          <AvatarFallback className="text-xs font-medium bg-primary/10 text-primary">
+                            {(conv.customer_name || "V")[0].toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium text-xs truncate">
+                          {conv.customer_name || "Visitor"}
                         </span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{relativeTime}</span>
                       </div>
-
-                      <p className="text-[11.5px] text-muted-foreground truncate leading-relaxed">
-                        {conv.last_message || "No messages yet"}
-                      </p>
-
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[9.5px] px-1.5 py-0 rounded-md font-medium uppercase tracking-wider",
-                            conv.status === "resolved" && "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
-                            conv.status === "pending" && "border-amber-500/40 text-amber-400 bg-amber-500/10",
-                            (!conv.status || conv.status === "unresolved") && "border-blue-500/40 text-blue-400 bg-blue-500/10"
-                          )}
-                        >
-                          {conv.status || "unresolved"}
-                        </Badge>
-                        {conv.customer_email && (
-                          <span className="text-[10px] text-muted-foreground/80 truncate">
-                            {conv.customer_email}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Right Side: Selected Conversation Chat Panel (8 cols) */}
-        <div className="lg:col-span-8 flex flex-col min-h-0 bg-background/20">
-          {selectedConversation ? (
-            <>
-              {/* Customer Detail Header */}
-              <div className="p-3.5 border-b border-border flex items-center justify-between gap-3 bg-card/60">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-10 w-10 rounded-full bg-primary/20 grid place-items-center shrink-0 font-bold text-sm text-primary uppercase">
-                    {(selectedConversation.customer_name || selectedConversation.customer_email || "V").substring(0, 2)}
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="text-sm font-bold text-foreground truncate">
-                      {selectedConversation.customer_name || "Crisp Visitor"}
-                    </h2>
-                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                      {selectedConversation.customer_email && (
-                        <span className="flex items-center gap-1 truncate">
-                          <Mail className="h-3 w-3 shrink-0" />
-                          {selectedConversation.customer_email}
-                        </span>
-                      )}
-                      {selectedConversation.customer_phone && (
-                        <span className="flex items-center gap-1 truncate">
-                          <Phone className="h-3 w-3 shrink-0" />
-                          {selectedConversation.customer_phone}
-                        </span>
-                      )}
-                      <span className="text-[10px] font-mono text-muted-foreground/70 truncate">
-                        ID: {selectedConversation.crisp_session_id}
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {conv.last_message_at
+                          ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : ""}
                       </span>
                     </div>
+
+                    <p className="text-xs text-muted-foreground line-clamp-1 truncate">
+                      {conv.last_message || "[No messages]"}
+                    </p>
+
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] px-1.5 py-0 capitalize",
+                          status === "resolved" ? "border-emerald-500/40 text-emerald-400" :
+                          status === "pending" ? "border-amber-500/40 text-amber-400" :
+                          "border-primary/40 text-primary"
+                        )}
+                      >
+                        {status}
+                      </Badge>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 truncate max-w-[130px]">
+                        {wsName}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </ScrollArea>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* COLUMN 3: ACTIVE CHAT & COMPOSER (Main Column) */}
+      {/* ========================================================================= */}
+      <div className="flex-1 flex flex-col bg-background/50 overflow-hidden">
+        {activeConversation ? (
+          <>
+            {/* Active Header */}
+            <div className="p-3 border-b border-border/40 flex items-center justify-between bg-card/30">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-9 h-9">
+                  <AvatarImage src={activeConversation.customer_avatar || undefined} />
+                  <AvatarFallback className="bg-primary/20 text-primary font-semibold">
+                    {(activeConversation.customer_name || "V")[0].toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">
+                      {activeConversation.customer_name || "Visitor"}
+                    </span>
+                    <Badge variant="secondary" className="text-[11px] px-2 py-0">
+                      {getWorkspaceDisplayName(activeConversation.crisp_website_id, workspacesMap)}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-2">
+                    <span className="capitalize">{activeConversation.status || "unresolved"}</span>
+                    {activeConversation.customer_email && <span>• {activeConversation.customer_email}</span>}
+                    {activeConversation.customer_phone && <span>• {activeConversation.customer_phone}</span>}
                   </div>
                 </div>
-
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-xs px-2.5 py-0.5 rounded-full capitalize font-semibold shrink-0",
-                    selectedConversation.status === "resolved" && "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
-                    selectedConversation.status === "pending" && "border-amber-500/40 text-amber-400 bg-amber-500/10",
-                    (!selectedConversation.status || selectedConversation.status === "unresolved") && "border-blue-500/40 text-blue-400 bg-blue-500/10"
-                  )}
-                >
-                  {selectedConversation.status || "unresolved"}
-                </Badge>
               </div>
+            </div>
 
-              {/* Chat Messages Thread */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
-                {messagesQuery.isLoading ? (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground gap-2">
-                    <MessageSquare className="h-8 w-8 opacity-40" />
-                    <p className="text-xs">No message history available for this session.</p>
+            {/* Chat Thread */}
+            <ScrollArea className="flex-1 p-4">
+              <div className="space-y-3">
+                {messages.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground text-xs">
+                    No message history loaded for this session.
                   </div>
                 ) : (
                   messages.map((msg) => {
                     const isOperator = msg.sender_type === "operator" || msg.direction === "outgoing";
-                    const formattedTime = msg.sent_at
-                      ? format(new Date(msg.sent_at), "MMM d, h:mm a")
-                      : "";
 
                     return (
                       <div
                         key={msg.id}
-                        className={cn("flex flex-col max-w-[80%]", isOperator ? "ml-auto items-end" : "mr-auto items-start")}
+                        className={cn(
+                          "flex flex-col max-w-[80%]",
+                          isOperator ? "ml-auto items-end" : "mr-auto items-start"
+                        )}
                       >
-                        <div className="flex items-center gap-1.5 mb-1 text-[10.5px] text-muted-foreground font-medium">
-                          <span>{isOperator ? "Staff / Operator" : (selectedConversation.customer_name || "Customer")}</span>
-                          <span>·</span>
-                          <span>{formattedTime}</span>
-                        </div>
-
                         <div
                           className={cn(
-                            "px-4 py-2.5 rounded-2xl text-xs sm:text-[13px] leading-relaxed shadow-sm break-words whitespace-pre-wrap",
+                            "rounded-lg px-3.5 py-2 text-xs leading-relaxed shadow-sm",
                             isOperator
-                              ? "bg-primary text-primary-foreground rounded-tr-xs font-normal"
-                              : "bg-muted/70 text-foreground border border-border/60 rounded-tl-xs"
+                              ? "bg-primary text-primary-foreground rounded-br-none"
+                              : "bg-muted text-foreground border border-border/40 rounded-bl-none"
                           )}
                         >
-                          {msg.content}
+                          <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                         </div>
+                        <span className="text-[10px] text-muted-foreground mt-1 px-1">
+                          {isOperator ? "Operator" : (activeConversation.customer_name || "Customer")} •{" "}
+                          {new Date(msg.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
                       </div>
                     );
                   })
                 )}
                 <div ref={messagesEndRef} />
               </div>
+            </ScrollArea>
 
-              {/* Message Composer Area */}
-              <div className="p-3.5 border-t border-border bg-card/60">
-                <div className="flex flex-col gap-2">
-                  <Textarea
-                    placeholder="Type your response to the customer... (Enter to send)"
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className="min-h-[70px] max-h-[140px] text-xs sm:text-sm resize-none rounded-2xl bg-background/80"
-                  />
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Sent directly to customer via Crisp
+            {/* Message Composer */}
+            <form onSubmit={handleSendMessage} className="p-3 border-t border-border/40 bg-card/30 flex gap-2">
+              <Textarea
+                placeholder="Write a reply..."
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e);
+                  }
+                }}
+                className="flex-1 min-h-[44px] max-h-32 text-xs resize-none bg-background/60"
+              />
+              <Button
+                type="submit"
+                disabled={isSending || !messageInput.trim()}
+                className="self-end h-11 px-4 gap-1.5"
+              >
+                {isSending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <span>Send</span>
+                    <Send className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </Button>
+            </form>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-muted-foreground text-center">
+            <MessageSquare className="w-10 h-10 mb-2 stroke-1 opacity-50" />
+            <p className="text-sm font-medium">No conversation selected</p>
+            <p className="text-xs text-muted-foreground">Select a chat from Column 2 to inspect and reply.</p>
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* COLUMN 4: CHAT DETAILS & INTERNAL NOTES (~280px) */}
+      {/* ========================================================================= */}
+      <div className="w-72 shrink-0 border-l border-border/40 bg-card/30 flex flex-col">
+        {activeConversation ? (
+          <ScrollArea className="flex-1">
+            <div className="p-4 space-y-6">
+              {/* Customer & Chat Details */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 pb-3 border-b border-border/40">
+                  <Avatar className="w-10 h-10">
+                    <AvatarImage src={activeConversation.customer_avatar || undefined} />
+                    <AvatarFallback className="bg-primary/20 text-primary font-semibold">
+                      {(activeConversation.customer_name || "V")[0].toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="truncate">
+                    <h4 className="font-semibold text-sm truncate">
+                      {activeConversation.customer_name || "Visitor"}
+                    </h4>
+                    <p className="text-xs text-muted-foreground capitalize">
+                      {activeConversation.status || "unresolved"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Workspace</span>
+                    <span className="font-medium text-foreground">
+                      {getWorkspaceDisplayName(activeConversation.crisp_website_id, workspacesMap)}
                     </span>
-                    <Button
-                      size="sm"
-                      onClick={() => void handleSendMessage()}
-                      disabled={sending || !messageInput.trim()}
-                      className="rounded-xl px-4 text-xs gap-1.5 h-8 font-semibold shadow-sm"
-                    >
-                      {sending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Send className="h-3.5 w-3.5" />
-                      )}
-                      <span>{sending ? "Sending..." : "Send Message"}</span>
-                    </Button>
+                  </div>
+
+                  {activeConversation.customer_email && (
+                    <div>
+                      <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Email</span>
+                      <span className="font-medium text-foreground break-all">{activeConversation.customer_email}</span>
+                    </div>
+                  )}
+
+                  {activeConversation.customer_phone && (
+                    <div>
+                      <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Phone</span>
+                      <span className="font-medium text-foreground">{activeConversation.customer_phone}</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Crisp Session ID</span>
+                    <span className="font-mono text-[11px] text-muted-foreground break-all">{activeConversation.crisp_session_id}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Crisp Website ID</span>
+                    <span className="font-mono text-[11px] text-muted-foreground break-all">{activeConversation.crisp_website_id}</span>
                   </div>
                 </div>
               </div>
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
-              <MessageSquare className="h-10 w-10 opacity-30" />
-              <p className="text-sm font-medium">Select a conversation to view chat history</p>
+
+              {/* Internal Notes Section */}
+              <div className="border-t border-border/40 pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Internal Notes</span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-400">
+                    JellyBean Only
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Internal team notes. Never visible to customers or sent to Crisp.
+                </p>
+
+                {/* Add Note Input */}
+                <form onSubmit={handleAddNote} className="space-y-2">
+                  <Textarea
+                    placeholder="Add an internal note..."
+                    value={noteInput}
+                    onChange={(e) => setNoteInput(e.target.value)}
+                    className="min-h-[60px] text-xs resize-none bg-background/60"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isAddingNote || !noteInput.trim()}
+                    className="w-full h-8 text-xs gap-1"
+                  >
+                    {isAddingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    <span>Add Note</span>
+                  </Button>
+                </form>
+
+                {/* Notes List */}
+                <div className="space-y-2 pt-2">
+                  {notes.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic text-center py-2">
+                      No internal notes added yet.
+                    </p>
+                  ) : (
+                    notes.map((note) => (
+                      <div key={note.id} className="p-2.5 rounded bg-muted/40 border border-border/40 space-y-1 relative group">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-[11px] text-primary">
+                            {note.author_name || "Team Member"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {new Date(note.created_at).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <p className="text-xs whitespace-pre-wrap break-words">{note.note}</p>
+                        <button
+                          onClick={() => handleDeleteNote(note.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 text-muted-foreground hover:text-destructive"
+                          title="Delete note"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
-          )}
-        </div>
+          </ScrollArea>
+        ) : (
+          <div className="p-8 text-center text-muted-foreground text-xs">
+            Select a conversation to view customer details & internal notes.
+          </div>
+        )}
       </div>
     </div>
   );
