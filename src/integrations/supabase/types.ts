@@ -119,6 +119,137 @@ export type Database = {
         }
         Relationships: []
       }
+      crisp_conversations: {
+        Row: {
+          created_at: string | null
+          crisp_session_id: string
+          crisp_website_id: string
+          customer_avatar: string | null
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          id: string
+          last_message: string | null
+          last_message_at: string | null
+          metadata: Json | null
+          status: string | null
+          unread_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          crisp_session_id: string
+          crisp_website_id: string
+          customer_avatar?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          metadata?: Json | null
+          status?: string | null
+          unread_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          crisp_session_id?: string
+          crisp_website_id?: string
+          customer_avatar?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          id?: string
+          last_message?: string | null
+          last_message_at?: string | null
+          metadata?: Json | null
+          status?: string | null
+          unread_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      crisp_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string | null
+          crisp_message_id: string | null
+          crisp_session_id: string
+          direction: string
+          id: string
+          message_type: string | null
+          raw_payload: Json | null
+          sender_type: string
+          sent_at: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string | null
+          crisp_message_id?: string | null
+          crisp_session_id: string
+          direction: string
+          id?: string
+          message_type?: string | null
+          raw_payload?: Json | null
+          sender_type: string
+          sent_at?: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string | null
+          crisp_message_id?: string | null
+          crisp_session_id?: string
+          direction?: string
+          id?: string
+          message_type?: string | null
+          raw_payload?: Json | null
+          sender_type?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crisp_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "crisp_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crisp_webhook_events: {
+        Row: {
+          error: string | null
+          event_fingerprint: string
+          event_type: string
+          id: string
+          payload: Json
+          processed: boolean | null
+          received_at: string | null
+        }
+        Insert: {
+          error?: string | null
+          event_fingerprint: string
+          event_type: string
+          id?: string
+          payload: Json
+          processed?: boolean | null
+          received_at?: string | null
+        }
+        Update: {
+          error?: string | null
+          event_fingerprint?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed?: boolean | null
+          received_at?: string | null
+        }
+        Relationships: []
+      }
       crm_update_notification_receipts: {
         Row: {
           acknowledged_at: string
