@@ -12,6 +12,23 @@ serve(async (req) => {
   }
 
   try {
+    // 1. Verify ?key=<CRISP_WEBHOOK_SECRET> if secret is configured in environment
+    const webhookSecret = Deno.env.get("CRISP_WEBHOOK_SECRET");
+    if (webhookSecret) {
+      const url = new URL(req.url);
+      const providedKey = url.searchParams.get("key");
+
+      if (!providedKey || providedKey !== webhookSecret) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized: Invalid or missing webhook key parameter (?key=...)" }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
@@ -37,9 +54,9 @@ serve(async (req) => {
     }
 
     // Crisp Webhook Payload Structure
-    // { website_id: string, event: string, data: { session_id, fingerprint, from, type, content, timestamp, user, ... } }
+    // { website_id: string, event: string, data: { session_id, fingerprint, from, type, content, timestamp, user, state ... } }
     const websiteId = body.website_id || body.data?.website_id || Deno.env.get("CRISP_WEBSITE_ID") || "default";
-    const eventType = body.event || "unknown";
+    const eventType = String(body.event || "unknown").toLowerCase();
     const data = body.data || body;
     const sessionId = data.session_id || body.session_id;
 
@@ -53,7 +70,7 @@ serve(async (req) => {
     const fingerprint = data.fingerprint || data.timestamp || Date.now();
     const eventFingerprint = `${eventType}_${sessionId}_${fingerprint}`;
 
-    // 1. Check & insert webhook log idempotently
+    // 2. Check & log webhook event idempotently
     const { error: webhookLogErr } = await supabase
       .from("crisp_webhook_events")
       .insert({
@@ -71,38 +88,56 @@ serve(async (req) => {
       });
     }
 
-    // 2. Extract customer details if available
-    const customerUser = data.user || body.user || {};
-    const customerName = customerUser.nickname || customerUser.name || null;
-    const customerEmail = customerUser.email || null;
-    const customerPhone = customerUser.phone || null;
-    const customerAvatar = customerUser.avatar || null;
+    // 3. Fetch existing conversation to preserve customer details without overwriting with null
+    const { data: existingConv } = await supabase
+      .from("crisp_conversations")
+      .select("id, customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at, status")
+      .eq("crisp_session_id", sessionId)
+      .maybeSingle();
 
-    // 3. Determine last message text & timestamp
-    let contentText = "";
+    // Extract customer details from event if available
+    const customerUser = data.user || body.user || {};
+    const incomingName = customerUser.nickname || customerUser.name || data.nickname || body.nickname || null;
+    const incomingEmail = customerUser.email || data.email || body.email || null;
+    const incomingPhone = customerUser.phone || data.phone || body.phone || null;
+    const incomingAvatar = customerUser.avatar || data.avatar || body.avatar || null;
+    const incomingState = data.state || body.state || null;
+
+    // Do NOT overwrite existing details with null
+    const finalName = incomingName || existingConv?.customer_name || null;
+    const finalEmail = incomingEmail || existingConv?.customer_email || null;
+    const finalPhone = incomingPhone || existingConv?.customer_phone || null;
+    const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
+    const finalState = incomingState || existingConv?.status || "unresolved";
+
+    // 4. Extract message text if present
+    let messageContent = "";
     if (typeof data.content === "string") {
-      contentText = data.content;
-    } else if (data.content && typeof data.content === "object") {
-      contentText = data.content.text || JSON.stringify(data.content);
-    } else if (eventType.includes("session")) {
-      contentText = `[Event: ${eventType}]`;
+      messageContent = data.content;
+    } else if (data.content && typeof data.content === "object" && typeof data.content.text === "string") {
+      messageContent = data.content.text;
     }
 
+    const isMessageEvent = eventType.startsWith("message:");
     const sentAt = data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString();
 
-    // 4. Upsert conversation
+    const lastMessage = isMessageEvent && messageContent.trim() ? messageContent.trim() : (existingConv?.last_message || null);
+    const lastMessageAt = isMessageEvent && messageContent.trim() ? sentAt : (existingConv?.last_message_at || sentAt);
+
+    // 5. Upsert conversation record with preserved details
     const { data: convData, error: convErr } = await supabase
       .from("crisp_conversations")
       .upsert(
         {
           crisp_session_id: sessionId,
           crisp_website_id: websiteId,
-          customer_name: customerName,
-          customer_email: customerEmail,
-          customer_phone: customerPhone,
-          customer_avatar: customerAvatar,
-          last_message: contentText || null,
-          last_message_at: sentAt,
+          customer_name: finalName,
+          customer_email: finalEmail,
+          customer_phone: finalPhone,
+          customer_avatar: finalAvatar,
+          status: finalState,
+          last_message: lastMessage,
+          last_message_at: lastMessageAt,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "crisp_session_id" }
@@ -120,8 +155,8 @@ serve(async (req) => {
 
     const conversationId = convData.id;
 
-    // 5. If it's a message event, insert message idempotently
-    if (eventType.startsWith("message:") || contentText) {
+    // 6. ONLY real message events create crisp_messages (Session metadata events must NOT create fake chat messages)
+    if (isMessageEvent && messageContent.trim()) {
       const crispMsgId = String(data.fingerprint || `${sessionId}_${sentAt}`);
       const rawFrom = String(data.from || "user").toLowerCase();
       const isOperator = rawFrom === "operator";
@@ -134,7 +169,7 @@ serve(async (req) => {
         crisp_message_id: crispMsgId,
         sender_type: senderType,
         direction: direction,
-        content: contentText || "[Empty Message]",
+        content: messageContent.trim(),
         message_type: data.type || "text",
         sent_at: sentAt,
         raw_payload: data,

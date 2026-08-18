@@ -77,7 +77,7 @@ serve(async (req) => {
     const authString = btoa(`${tokenId}:${tokenKey}`);
     const headers = {
       "Authorization": `Basic ${authString}`,
-      "X-Crisp-Tier": "plugin",
+      "X-Crisp-Tier": "website",
     };
 
     let totalSyncedConversations = 0;
