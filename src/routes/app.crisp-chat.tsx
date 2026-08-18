@@ -163,7 +163,7 @@ function CrispChatInbox() {
     });
   }, [conversations, searchQuery, statusFilter]);
 
-  // Send message via crisp-send-message Edge Function
+  // Send message via server function
   const handleSendMessage = async () => {
     if (!selectedSessionId || !messageInput.trim() || sending) return;
 
@@ -171,43 +171,19 @@ function CrispChatInbox() {
     setConfigError(null);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-
-      if (!token) {
-        throw new Error("You must be logged in to send messages.");
-      }
-
-      const { data, error } = await supabase.functions.invoke("crisp-send-message", {
-        body: {
-          session_id: selectedSessionId,
-          content: messageInput.trim(),
-        },
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      await sendMessageFn({
+        data: { sessionId: selectedSessionId, content: messageInput.trim() },
       });
-
-      if (error) {
-        throw error;
-      }
-
-      if (data?.error) {
-        if (data.error.includes("not configured yet") || data.error.includes("Missing Crisp credentials")) {
-          setConfigError("Crisp integration is not configured yet. Please configure CRISP_WEBSITE_ID, CRISP_TOKEN_ID, and CRISP_TOKEN_KEY in Supabase environment secrets.");
-        } else {
-          throw new Error(data.error);
-        }
-      } else {
-        setMessageInput("");
-        void queryClient.invalidateQueries({ queryKey: ["crisp-messages", selectedSessionId] });
-        void queryClient.invalidateQueries({ queryKey: ["crisp-conversations"] });
-      }
+      setMessageInput("");
+      void queryClient.invalidateQueries({ queryKey: ["crisp-messages", selectedSessionId] });
+      void queryClient.invalidateQueries({ queryKey: ["crisp-conversations"] });
     } catch (err: any) {
       console.error("Failed to send message:", err);
-      const errMsg = err.message || "Failed to send message via Crisp";
-      if (errMsg.includes("not configured") || errMsg.includes("Missing Crisp")) {
-        setConfigError("Crisp integration is not configured yet. Please configure CRISP_WEBSITE_ID, CRISP_TOKEN_ID, and CRISP_TOKEN_KEY in Supabase environment secrets.");
+      const errMsg = err?.message || "Failed to send message via Crisp";
+      if (errMsg.includes("not configured") || errMsg.includes("Missing CRISP")) {
+        setConfigError(
+          "Crisp integration is not configured yet. Please configure CRISP_WEBSITE_ID, CRISP_TOKEN_ID, and CRISP_TOKEN_KEY in Supabase environment secrets.",
+        );
       } else {
         alert(errMsg);
       }
@@ -216,36 +192,27 @@ function CrispChatInbox() {
     }
   };
 
-  // Sync Crisp history via crisp-sync-history Edge Function
+  // Sync Crisp history via server function
   const handleSyncHistory = async () => {
     setSyncing(true);
     setConfigError(null);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-
-      const { data, error } = await supabase.functions.invoke("crisp-sync-history", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.error) {
-        if (data.error.includes("not configured") || data.error.includes("Missing")) {
-          setConfigError("Crisp integration is not configured yet. Please configure CRISP_WEBSITE_ID, CRISP_TOKEN_ID, and CRISP_TOKEN_KEY in Supabase environment secrets.");
-        } else {
-          alert(`Sync error: ${data.error}`);
-        }
-      } else {
-        alert(`Crisp history sync completed! Synced ${data.synced_conversations ?? 0} conversations.`);
-        void queryClient.invalidateQueries({ queryKey: ["crisp-conversations"] });
-      }
+      const result = await syncHistoryFn({});
+      alert(
+        `Crisp history sync completed! Synced ${result?.synced_conversations ?? 0} conversations.`,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["crisp-conversations"] });
     } catch (err: any) {
       console.error("Sync history failed:", err);
-      setConfigError("Crisp integration is not configured yet. Please configure CRISP_WEBSITE_ID, CRISP_TOKEN_ID, and CRISP_TOKEN_KEY in Supabase environment secrets.");
+      const errMsg = err?.message || "Crisp history sync failed";
+      if (errMsg.includes("not configured") || errMsg.includes("Missing CRISP")) {
+        setConfigError(
+          "Crisp integration is not configured yet. Please configure CRISP_WEBSITE_ID, CRISP_TOKEN_ID, and CRISP_TOKEN_KEY in Supabase environment secrets.",
+        );
+      } else {
+        alert(errMsg);
+      }
     } finally {
       setSyncing(false);
     }
