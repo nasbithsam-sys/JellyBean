@@ -215,7 +215,7 @@ export type Database = {
           created_at: string | null
           crisp_message_id: string | null
           crisp_session_id: string
-          crisp_website_id: string | null
+          crisp_website_id: string
           direction: string
           id: string
           message_type: string | null
@@ -229,7 +229,7 @@ export type Database = {
           created_at?: string | null
           crisp_message_id?: string | null
           crisp_session_id: string
-          crisp_website_id?: string | null
+          crisp_website_id: string
           direction: string
           id?: string
           message_type?: string | null
@@ -243,7 +243,7 @@ export type Database = {
           created_at?: string | null
           crisp_message_id?: string | null
           crisp_session_id?: string
-          crisp_website_id?: string | null
+          crisp_website_id?: string
           direction?: string
           id?: string
           message_type?: string | null
@@ -1074,6 +1074,28 @@ export type Database = {
           customer_number_2: string
           id: string
         }[]
+      }
+      crisp_create_workspace_secret: {
+        Args: {
+          p_token_id: string
+          p_token_key: string
+          p_webhook_secret: string
+          p_website_id: string
+        }
+        Returns: string
+      }
+      crisp_get_workspace_secret: {
+        Args: { p_secret_id: string }
+        Returns: Json
+      }
+      crisp_update_workspace_secret: {
+        Args: {
+          p_secret_id: string
+          p_token_id: string
+          p_token_key: string
+          p_webhook_secret: string
+        }
+        Returns: boolean
       }
       cs_leads_status_counts: { Args: never; Returns: Json }
       cs_user_assignment_totals: {
