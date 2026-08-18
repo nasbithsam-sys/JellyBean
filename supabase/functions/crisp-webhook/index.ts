@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-crisp-signature, x-crisp-request-timestamp",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 // Timing-safe string comparison
@@ -16,121 +16,31 @@ function timingSafeEqual(a: string, b: string): boolean {
   return result === 0;
 }
 
-// Official Crisp Plugin Hook HMAC-SHA256 signature verification: [timestamp;body_as_string]
-async function verifyCrispPluginSignature(secret: string, timestamp: string, rawBody: string, signature: string): Promise<boolean> {
-  try {
-    const signedPayload = `[${timestamp};${rawBody}]`;
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(secret);
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      keyData,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-
-    const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(signedPayload));
-    
-    // Convert to hex string
-    const hexDigest = Array.from(new Uint8Array(signatureBuffer))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    // Convert to base64 string
-    const base64Digest = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
-
-    return timingSafeEqual(signature, hexDigest) || timingSafeEqual(signature, base64Digest);
-  } catch {
-    return false;
-  }
-}
-
-// Helper to fetch Crisp website details (name, domain, logo) via Crisp API GET /v1/website/{website_id}
-async function fetchCrispWebsiteDetails(websiteId: string, authString: string, crispTier: string): Promise<{ name?: string; domain?: string; logo?: string } | null> {
-  try {
-    const res = await fetch(`https://api.crisp.chat/v1/website/${websiteId}`, {
-      headers: {
-        "Authorization": `Basic ${authString}`,
-        "X-Crisp-Tier": crispTier,
-      },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    const data = json?.data || {};
-    return {
-      name: data.name || undefined,
-      domain: data.domain || undefined,
-      logo: data.logo || undefined,
-    };
-  } catch {
-    return null;
-  }
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const pluginTokenId = Deno.env.get("CRISP_PLUGIN_TOKEN_ID");
-    const pluginTokenKey = Deno.env.get("CRISP_PLUGIN_TOKEN_KEY");
-    const pluginHookSecret = Deno.env.get("CRISP_PLUGIN_HOOK_SECRET");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const legacyWebhookSecret = Deno.env.get("CRISP_WEBHOOK_SECRET");
     const legacyWebsiteIdConfig = Deno.env.get("CRISP_WEBSITE_ID");
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return new Response(JSON.stringify({ error: "Server configuration missing" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const rawBody = await req.text();
     const url = new URL(req.url);
     const providedKey = url.searchParams.get("key");
 
-    const crispSignature = req.headers.get("x-crisp-signature") || req.headers.get("X-Crisp-Signature");
-    const crispTimestamp = req.headers.get("x-crisp-request-timestamp") || req.headers.get("X-Crisp-Request-Timestamp");
-
-    let authMode: "plugin" | "legacy_website" | null = null;
-
-    // 1. DETERMINE AUTH MODE
-    if (crispSignature) {
-      if (!pluginHookSecret || !crispTimestamp) {
-        return new Response(
-          JSON.stringify({ error: "Unauthorized: Missing plugin hook secret or timestamp header." }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const isValidPluginSig = await verifyCrispPluginSignature(pluginHookSecret, crispTimestamp, rawBody, crispSignature);
-      if (!isValidPluginSig) {
-        return new Response(
-          JSON.stringify({ error: "Unauthorized: Invalid Crisp plugin hook signature." }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      authMode = "plugin";
-    } else if (legacyWebhookSecret && providedKey) {
-      if (timingSafeEqual(providedKey, legacyWebhookSecret)) {
-        authMode = "legacy_website";
-      } else {
-        return new Response(
-          JSON.stringify({ error: "Unauthorized: Invalid legacy webhook secret key." }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    }
-
-    if (!authMode) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Webhook authentication missing or failed." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(JSON.stringify({ error: "Server configuration missing" }), {
-        status: 500,
+    if (!providedKey) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Missing webhook secret key (?key=)" }), {
+        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -149,125 +59,58 @@ serve(async (req) => {
 
     const eventType = String(body.event || "unknown").toLowerCase();
     const data = body.data || body;
-    const payloadWebsiteId = body.website_id || data.website_id;
+    const websiteId = body.website_id || data.website_id;
 
-    let websiteId = "";
-
-    if (authMode === "plugin") {
-      if (!payloadWebsiteId) {
-        return new Response(JSON.stringify({ message: "No website_id in plugin payload, event ignored" }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      websiteId = payloadWebsiteId;
-    } else {
-      if (!legacyWebsiteIdConfig) {
-        return new Response(JSON.stringify({ error: "CRISP_WEBSITE_ID is not configured for legacy mode" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (payloadWebsiteId && payloadWebsiteId !== legacyWebsiteIdConfig) {
-        return new Response(
-          JSON.stringify({ error: "Legacy webhook secret can only be used for the configured CRISP_WEBSITE_ID" }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      websiteId = legacyWebsiteIdConfig;
+    if (!websiteId) {
+      return new Response(JSON.stringify({ message: "No website_id in payload, event ignored" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // 2. WORKSPACE MANAGEMENT ACCORDING TO AUTH MODE
-    if (authMode === "plugin") {
-      if (eventType === "plugin:subscription:updated") {
-        const isBound = data.bound === true;
-        
-        if (isBound) {
-          // Resolve real workspace name if plugin credentials are present
-          let wsDetails: { name?: string; domain?: string; logo?: string } | null = null;
-          if (pluginTokenId && pluginTokenKey) {
-            const pluginAuth = btoa(`${pluginTokenId}:${pluginTokenKey}`);
-            wsDetails = await fetchCrispWebsiteDetails(websiteId, pluginAuth, "plugin");
-          }
+    // 1. LOOKUP WORKSPACE IN DATABASE
+    const { data: wsRecord } = await supabase
+      .from("crisp_workspaces")
+      .select("id, enabled, credential_secret_id")
+      .eq("crisp_website_id", websiteId)
+      .maybeSingle();
 
-          const { data: existingWs } = await supabase
-            .from("crisp_workspaces")
-            .select("installed_at, workspace_name, metadata")
-            .eq("crisp_website_id", websiteId)
-            .maybeSingle();
+    let authenticated = false;
 
-          const installedAt = existingWs?.installed_at || new Date().toISOString();
-          const resolvedName = wsDetails?.name || existingWs?.workspace_name || null;
-          const existingMeta = (existingWs?.metadata as Record<string, any>) || {};
-          const newMeta = {
-            ...existingMeta,
-            ...(wsDetails?.domain ? { domain: wsDetails.domain } : {}),
-            ...(wsDetails?.logo ? { logo: wsDetails.logo } : {}),
-          };
+    if (wsRecord && wsRecord.enabled && wsRecord.credential_secret_id) {
+      // Retrieve secret from Vault
+      const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
+        p_secret_id: wsRecord.credential_secret_id,
+      });
 
-          await supabase
-            .from("crisp_workspaces")
-            .upsert(
-              {
-                crisp_website_id: websiteId,
-                workspace_name: resolvedName,
-                connection_mode: "plugin",
-                enabled: true,
-                installed_at: installedAt,
-                last_seen_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                metadata: newMeta,
-              },
-              { onConflict: "crisp_website_id" }
-            );
-        } else {
-          await supabase
-            .from("crisp_workspaces")
-            .update({
-              enabled: false,
-              last_seen_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("crisp_website_id", websiteId);
-        }
-
-        return new Response(JSON.stringify({ status: "success", event: eventType, bound: isBound }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      const storedWebhookSecret = secretData?.webhook_secret || secretData?.webhookSecret;
+      if (storedWebhookSecret && timingSafeEqual(providedKey, storedWebhookSecret)) {
+        authenticated = true;
       }
+    }
 
-      // For ordinary verified Plugin Hook events:
-      const { data: existingWorkspace } = await supabase
+    // 2. TEMPORARY LEGACY WORKSPACE 1 FALLBACK
+    if (!authenticated && (!wsRecord || !wsRecord.credential_secret_id)) {
+      if (legacyWebsiteIdConfig && websiteId === legacyWebsiteIdConfig && legacyWebhookSecret) {
+        if (timingSafeEqual(providedKey, legacyWebhookSecret)) {
+          authenticated = true;
+        }
+      }
+    }
+
+    if (!authenticated) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: Webhook key mismatch or workspace disabled." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Update last_seen_at for registered workspace
+    if (wsRecord) {
+      await supabase
         .from("crisp_workspaces")
-        .select("id, enabled, workspace_name")
-        .eq("crisp_website_id", websiteId)
-        .maybeSingle();
-
-      if (!existingWorkspace) {
-        let wsDetails: { name?: string; domain?: string; logo?: string } | null = null;
-        if (pluginTokenId && pluginTokenKey) {
-          const pluginAuth = btoa(`${pluginTokenId}:${pluginTokenKey}`);
-          wsDetails = await fetchCrispWebsiteDetails(websiteId, pluginAuth, "plugin");
-        }
-
-        await supabase
-          .from("crisp_workspaces")
-          .insert({
-            crisp_website_id: websiteId,
-            workspace_name: wsDetails?.name || null,
-            connection_mode: "plugin",
-            enabled: true,
-            installed_at: new Date().toISOString(),
-            last_seen_at: new Date().toISOString(),
-            metadata: wsDetails ? { domain: wsDetails.domain, logo: wsDetails.logo } : {},
-          });
-      } else {
-        await supabase
-          .from("crisp_workspaces")
-          .update({ last_seen_at: new Date().toISOString() })
-          .eq("crisp_website_id", websiteId);
-      }
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", wsRecord.id);
     }
 
     const sessionId = data.session_id || body.session_id;
@@ -391,7 +234,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ status: "success", session_id: sessionId, website_id: websiteId, auth_mode: authMode }), {
+    return new Response(JSON.stringify({ status: "success", session_id: sessionId, website_id: websiteId }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

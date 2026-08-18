@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Building2,
+  Check,
   CheckCircle2,
   Clock,
+  Copy,
   Globe,
+  Key,
   Loader2,
   MessageSquare,
   Plus,
@@ -20,15 +23,26 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
   addCrispConversationNote,
+  addCrispWorkspace,
   deleteCrispConversationNote,
+  regenerateCrispWebhookSecret,
   sendCrispMessage,
   syncCrispHistory,
+  toggleCrispWorkspace,
 } from "@/lib/crisp.functions";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,6 +89,7 @@ type WorkspaceRecord = {
   crisp_website_id: string;
   workspace_name: string | null;
   enabled: boolean;
+  credential_secret_id: string | null;
   installed_at: string | null;
   last_seen_at: string | null;
   last_synced_at: string | null;
@@ -91,7 +106,7 @@ type NoteRecord = {
 };
 
 function getWorkspaceDisplayName(websiteId: string, workspacesMap: Map<string, string>): string {
-  if (workspacesMap.has(websiteId)) {
+  if (workspacesMap.has(websiteId) && workspacesMap.get(websiteId)?.trim()) {
     return workspacesMap.get(websiteId)!;
   }
   const suffix = websiteId.length > 6 ? websiteId.slice(-5) : websiteId;
@@ -119,6 +134,228 @@ function CrispChatPage() {
 }
 
 function CrispInboxInner() {
+  const auth = useAuth();
+  const isAdmin = auth.primaryRole === "admin";
+
+  const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
+  const [selectedWebsiteId, setSelectedWebsiteId] = useState<string>("all");
+  const [conversations, setConversations] = useState<ConversationRecord[]>([]);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<MessageRecord[]>([]);
+  const [notes, setNotes] = useState<NoteRecord[]>([]);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusTab, setStatusTab] = useState<"all" | "unresolved" | "resolved">("all");
+  const [messageInput, setMessageInput] = useState("");
+  const [noteInput, setNoteInput] = useState("");
+
+  const [isSending, setIsSending] = useState(false);
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Admin Add Workspace State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addWebsiteId, setAddWebsiteId] = useState("");
+  const [addTokenId, setAddTokenId] = useState("");
+  const [addTokenKey, setAddTokenKey] = useState("");
+  const [isAddingWorkspace, setIsAddingWorkspace] = useState(false);
+  const [addSuccessResult, setAddSuccessResult] = useState<{ workspaceName: string; webhookUrl: string } | null>(null);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Fetch workspaces
+  const loadWorkspaces = async () => {
+    const { data } = await supabase
+      .from("crisp_workspaces")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (data) setWorkspaces(data as any);
+  };
+
+  // Fetch conversations
+  const loadConversations = async () => {
+    let query = supabase
+      .from("crisp_conversations")
+      .select("*")
+      .order("last_message_at", { ascending: false });
+
+    if (selectedWebsiteId !== "all") {
+      query = query.eq("crisp_website_id", selectedWebsiteId);
+    }
+
+    const { data } = await query;
+    if (data) setConversations(data as any);
+  };
+
+  // Fetch messages for active conversation
+  const loadMessages = async (convId: string) => {
+    const { data } = await supabase
+      .from("crisp_messages")
+      .select("*")
+      .eq("conversation_id", convId)
+      .order("sent_at", { ascending: true });
+
+    if (data) setMessages(data as any);
+  };
+
+  // Fetch internal notes for active conversation
+  const loadNotes = async (convId: string) => {
+    const { data } = await supabase
+      .from("crisp_conversation_notes")
+      .select("*")
+      .eq("conversation_id", convId)
+      .order("created_at", { ascending: true });
+
+    if (data) {
+      const userIds = Array.from(new Set(data.map((n) => n.created_by)));
+      let namesMap: Record<string, string> = {};
+
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", userIds);
+
+        if (profiles) {
+          profiles.forEach((p) => {
+            namesMap[p.id] = p.full_name || p.email?.split("@")[0] || "Team Member";
+          });
+        }
+      }
+
+      setNotes(
+        data.map((n) => ({
+          ...n,
+          author_name: namesMap[n.created_by] || "Team Member",
+        }))
+      );
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    loadWorkspaces();
+    loadConversations();
+  }, []);
+
+  // Reload conversations on workspace filter change
+  useEffect(() => {
+    loadConversations();
+  }, [selectedWebsiteId]);
+
+  // Load messages & notes when conversation selection changes
+  useEffect(() => {
+    if (selectedConversationId) {
+      loadMessages(selectedConversationId);
+      loadNotes(selectedConversationId);
+    } else {
+      setMessages([]);
+      setNotes([]);
+    }
+  }, [selectedConversationId]);
+
+  // Auto-scroll messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Realtime Subscriptions
+  useEffect(() => {
+    const channel = supabase
+      .channel("crisp_inbox_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "crisp_conversations" },
+        () => {
+          loadConversations();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "crisp_messages" },
+        (payload) => {
+          loadConversations();
+          if (
+            selectedConversationId &&
+            payload.new &&
+            (payload.new as any).conversation_id === selectedConversationId
+          ) {
+            loadMessages(selectedConversationId);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "crisp_conversation_notes" },
+        (payload) => {
+          if (
+            selectedConversationId &&
+            payload.new &&
+            (payload.new as any).conversation_id === selectedConversationId
+          ) {
+            loadNotes(selectedConversationId);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "crisp_workspaces" },
+        () => {
+          loadWorkspaces();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedConversationId]);
+
+  // Map of workspace website_id -> workspace_name
+  const workspacesMap = useMemo(() => {
+    const map = new Map<string, string>();
+    workspaces.forEach((w) => {
+      if (w.workspace_name) {
+        map.set(w.crisp_website_id, w.workspace_name);
+      }
+    });
+    return map;
+  }, [workspaces]);
+
+  // Workspace counts
+  const workspaceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    conversations.forEach((c) => {
+      const current = counts.get(c.crisp_website_id) || 0;
+      counts.set(c.crisp_website_id, current + 1);
+    });
+    return counts;
+  }, [conversations]);
+
+  // Filtered conversations
+  const filteredConversations = useMemo(() => {
+    return conversations.filter((c) => {
+      if (statusTab === "unresolved" && c.status === "resolved") return false;
+      if (statusTab === "resolved" && c.status !== "resolved") return false;
+
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const nameMatch = c.customer_name?.toLowerCase().includes(query);
+        const emailMatch = c.customer_email?.toLowerCase().includes(query);
+        const lastMsgMatch = c.last_message?.toLowerCase().includes(query);
+        const sessionMatch = c.crisp_session_id.toLowerCase().includes(query);
+        return nameMatch || emailMatch || lastMsgMatch || sessionMatch;
+      }
+
+      return true;
+    });
+  }, [conversations, statusTab, searchQuery]);
+
+  const activeConversation = useMemo(() => {
+    return conversations.find((c) => c.id === selectedConversationId) || null;
+  }, [conversations, selectedConversationId]);
+
   // Handle Send Message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,7 +429,7 @@ function CrispInboxInner() {
       if (!res.ok) {
         toast.error(res.error || "Failed to sync history");
       } else {
-        toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages across ${res.workspaces_synced} workspace(s).`);
+        toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages.`);
         loadWorkspaces();
         loadConversations();
         if (selectedConversationId) loadMessages(selectedConversationId);
@@ -202,6 +439,48 @@ function CrispInboxInner() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  // Handle Admin Add Workspace Submit
+  const handleAddWorkspaceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addWebsiteId.trim() || !addTokenId.trim() || !addTokenKey.trim() || isAddingWorkspace) return;
+
+    setIsAddingWorkspace(true);
+    try {
+      const res = await addCrispWorkspace({
+        data: {
+          websiteId: addWebsiteId.trim(),
+          tokenId: addTokenId.trim(),
+          tokenKey: addTokenKey.trim(),
+        },
+      });
+
+      if (!res.ok) {
+        toast.error(res.error || "Could not add workspace");
+      } else {
+        setAddSuccessResult({
+          workspaceName: res.workspace_name || `Workspace • ${addWebsiteId.slice(0, 5)}`,
+          webhookUrl: res.webhook_url || "",
+        });
+        setAddWebsiteId("");
+        setAddTokenId("");
+        setAddTokenKey("");
+        loadWorkspaces();
+        toast.success("Crisp Workspace connected successfully!");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
+    } finally {
+      setIsAddingWorkspace(false);
+    }
+  };
+
+  const handleCopyWebhookUrl = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedUrl(true);
+    toast.success("Webhook URL copied to clipboard!");
+    setTimeout(() => setCopiedUrl(false), 2500);
   };
 
   // Extract unique workspaces from conversations if crisp_workspaces is empty
@@ -217,6 +496,7 @@ function CrispInboxInner() {
           crisp_website_id: c.crisp_website_id,
           workspace_name: null,
           enabled: true,
+          credential_secret_id: null,
           installed_at: null,
           last_seen_at: null,
           last_synced_at: null,
@@ -233,9 +513,25 @@ function CrispInboxInner() {
       {/* COLUMN 1: CRISP WORKSPACES (~200px) */}
       {/* ========================================================================= */}
       <div className="w-52 shrink-0 border-r border-border/40 bg-card/40 flex flex-col">
-        <div className="p-3 border-b border-border/40 flex items-center gap-2 font-medium text-xs text-muted-foreground uppercase tracking-wider">
-          <Building2 className="w-4 h-4 text-primary" />
-          <span>Workspaces</span>
+        <div className="p-3 border-b border-border/40 flex items-center justify-between font-medium text-xs text-muted-foreground uppercase tracking-wider">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-primary" />
+            <span>Workspaces</span>
+          </div>
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded-md hover:bg-accent hover:text-accent-foreground"
+              onClick={() => {
+                setAddSuccessResult(null);
+                setIsAddModalOpen(true);
+              }}
+              title="Add Crisp Workspace"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          )}
         </div>
 
         <ScrollArea className="flex-1 p-2">
@@ -298,81 +594,64 @@ function CrispInboxInner() {
       <div className="w-80 shrink-0 border-r border-border/40 bg-card/20 flex flex-col">
         {/* Search & Sync Header */}
         <div className="p-3 border-b border-border/40 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-sm">Chats</span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+              <Input
+                placeholder="Search chats..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-9 text-xs"
+              />
+            </div>
             <Button
-              size="sm"
               variant="outline"
+              size="icon"
               onClick={handleSyncHistory}
               disabled={isSyncing}
-              className="h-7 px-2 text-xs gap-1.5"
+              title="Sync Crisp History"
+              className="h-9 w-9 shrink-0"
             >
-              <RefreshCw className={cn("w-3.5 h-3.5", isSyncing && "animate-spin")} />
-              <span>{isSyncing ? "Syncing..." : "Sync"}</span>
+              <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
             </Button>
           </div>
 
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search conversations..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 h-8 text-xs bg-background/50"
-            />
-          </div>
-
-          {/* Status Tabs */}
-          <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)} className="w-full">
-            <TabsList className="grid grid-cols-4 h-7 p-0.5 text-xs bg-muted/50">
-              <TabsTrigger value="all" className="text-[11px] px-1 py-0.5">All</TabsTrigger>
-              <TabsTrigger value="unresolved" className="text-[11px] px-1 py-0.5">Open</TabsTrigger>
-              <TabsTrigger value="pending" className="text-[11px] px-1 py-0.5">Pending</TabsTrigger>
-              <TabsTrigger value="resolved" className="text-[11px] px-1 py-0.5">Done</TabsTrigger>
+          <Tabs value={statusTab} onValueChange={(v: any) => setStatusTab(v)} className="w-full">
+            <TabsList className="w-full grid grid-cols-3 h-8 text-xs">
+              <TabsTrigger value="all" className="text-xs py-1">All</TabsTrigger>
+              <TabsTrigger value="unresolved" className="text-xs py-1">Unresolved</TabsTrigger>
+              <TabsTrigger value="resolved" className="text-xs py-1">Resolved</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
 
-        {/* Conversation Cards List */}
+        {/* Conversations List */}
         <ScrollArea className="flex-1">
-          {isLoading ? (
-            <div className="flex items-center justify-center p-8 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              <span className="text-xs">Loading chats...</span>
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-xs">
-              No conversations found.
-            </div>
-          ) : (
-            <div className="divide-y divide-border/20">
-              {filteredConversations.map((conv) => {
-                const isSelected = conv.id === selectedConversationId;
-                const wsName = getWorkspaceDisplayName(conv.crisp_website_id, workspacesMap);
-                const status = conv.status || "unresolved";
+          <div className="p-2 space-y-1">
+            {filteredConversations.length === 0 ? (
+              <div className="p-6 text-center text-muted-foreground text-xs">
+                No conversations found.
+              </div>
+            ) : (
+              filteredConversations.map((conv) => {
+                const isSelected = selectedConversationId === conv.id;
+                const wsLabel = getWorkspaceDisplayName(conv.crisp_website_id, workspacesMap);
 
                 return (
-                  <div
+                  <button
                     key={conv.id}
                     onClick={() => setSelectedConversationId(conv.id)}
                     className={cn(
-                      "p-3 cursor-pointer transition-colors hover:bg-accent/40 space-y-1.5",
-                      isSelected && "bg-accent/80 border-l-4 border-l-primary"
+                      "w-full text-left p-3 rounded-lg border transition-all space-y-1.5",
+                      isSelected
+                        ? "bg-accent/80 border-primary/50 shadow-sm"
+                        : "border-transparent hover:bg-accent/40"
                     )}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 truncate">
-                        <Avatar className="w-7 h-7">
-                          <AvatarImage src={conv.customer_avatar || undefined} />
-                          <AvatarFallback className="text-xs font-medium bg-primary/10 text-primary">
-                            {(conv.customer_name || "V")[0].toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="font-medium text-xs truncate">
-                          {conv.customer_name || "Visitor"}
-                        </span>
-                      </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-sm truncate text-foreground">
+                        {conv.customer_name || "Visitor"}
+                      </span>
                       <span className="text-[10px] text-muted-foreground shrink-0">
                         {conv.last_message_at
                           ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -380,112 +659,103 @@ function CrispInboxInner() {
                       </span>
                     </div>
 
-                    <p className="text-xs text-muted-foreground line-clamp-1 truncate">
-                      {conv.last_message || "[No messages]"}
+                    <p className="text-xs text-muted-foreground line-clamp-2 break-words">
+                      {conv.last_message || "No messages yet"}
                     </p>
 
-                    <div className="flex items-center gap-1.5 pt-0.5">
-                      <Badge
-                        variant="outline"
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 truncate border-border/60">
+                        {wsLabel}
+                      </Badge>
+                      <span
                         className={cn(
-                          "text-[10px] px-1.5 py-0 capitalize",
-                          status === "resolved" ? "border-emerald-500/40 text-emerald-400" :
-                          status === "pending" ? "border-amber-500/40 text-amber-400" :
-                          "border-primary/40 text-primary"
+                          "text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded",
+                          conv.status === "resolved"
+                            ? "bg-emerald-500/10 text-emerald-500"
+                            : "bg-amber-500/10 text-amber-500"
                         )}
                       >
-                        {status}
-                      </Badge>
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 truncate max-w-[130px]">
-                        {wsName}
-                      </Badge>
+                        {conv.status || "unresolved"}
+                      </span>
                     </div>
-                  </div>
+                  </button>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
         </ScrollArea>
       </div>
 
       {/* ========================================================================= */}
-      {/* COLUMN 3: ACTIVE CHAT & COMPOSER (Main Column) */}
+      {/* COLUMN 3: ACTIVE CHAT THREAD (~flex-1) */}
       {/* ========================================================================= */}
-      <div className="flex-1 flex flex-col bg-background/50 overflow-hidden">
+      <div className="flex-1 flex flex-col bg-background min-w-0">
         {activeConversation ? (
           <>
-            {/* Active Header */}
-            <div className="p-3 border-b border-border/40 flex items-center justify-between bg-card/30">
-              <div className="flex items-center gap-3">
-                <Avatar className="w-9 h-9">
+            {/* Header */}
+            <div className="p-3 border-b border-border/40 flex items-center justify-between bg-card/20">
+              <div className="flex items-center gap-3 truncate">
+                <Avatar className="w-8 h-8">
                   <AvatarImage src={activeConversation.customer_avatar || undefined} />
-                  <AvatarFallback className="bg-primary/20 text-primary font-semibold">
+                  <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                     {(activeConversation.customer_name || "V")[0].toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm">
-                      {activeConversation.customer_name || "Visitor"}
-                    </span>
-                    <Badge variant="secondary" className="text-[11px] px-2 py-0">
-                      {getWorkspaceDisplayName(activeConversation.crisp_website_id, workspacesMap)}
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-2">
-                    <span className="capitalize">{activeConversation.status || "unresolved"}</span>
-                    {activeConversation.customer_email && <span>• {activeConversation.customer_email}</span>}
-                    {activeConversation.customer_phone && <span>• {activeConversation.customer_phone}</span>}
-                  </div>
+                <div className="truncate">
+                  <h3 className="font-semibold text-sm truncate">
+                    {activeConversation.customer_name || "Visitor"}
+                  </h3>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {activeConversation.customer_email || activeConversation.crisp_session_id}
+                  </p>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant="secondary" className="text-xs">
+                  {getWorkspaceDisplayName(activeConversation.crisp_website_id, workspacesMap)}
+                </Badge>
               </div>
             </div>
 
-            {/* Chat Thread */}
+            {/* Messages Scroll Area */}
             <ScrollArea className="flex-1 p-4">
-              <div className="space-y-3">
-                {messages.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground text-xs">
-                    No message history loaded for this session.
-                  </div>
-                ) : (
-                  messages.map((msg) => {
-                    const isOperator = msg.sender_type === "operator" || msg.direction === "outgoing";
+              <div className="space-y-3 max-w-3xl mx-auto">
+                {messages.map((msg) => {
+                  const isOperator = msg.sender_type === "operator" || msg.direction === "outgoing";
 
-                    return (
+                  return (
+                    <div
+                      key={msg.id}
+                      className={cn(
+                        "flex flex-col max-w-[75%]",
+                        isOperator ? "ml-auto items-end" : "mr-auto items-start"
+                      )}
+                    >
                       <div
-                        key={msg.id}
                         className={cn(
-                          "flex flex-col max-w-[80%]",
-                          isOperator ? "ml-auto items-end" : "mr-auto items-start"
+                          "px-3.5 py-2.5 rounded-2xl text-xs break-words shadow-sm space-y-1",
+                          isOperator
+                            ? "bg-primary text-primary-foreground rounded-br-xs"
+                            : "bg-muted text-foreground rounded-bl-xs"
                         )}
                       >
-                        <div
-                          className={cn(
-                            "rounded-lg px-3.5 py-2 text-xs leading-relaxed shadow-sm",
-                            isOperator
-                              ? "bg-primary text-primary-foreground rounded-br-none"
-                              : "bg-muted text-foreground border border-border/40 rounded-bl-none"
-                          )}
-                        >
-                          <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground mt-1 px-1">
-                          {isOperator ? "Operator" : (activeConversation.customer_name || "Customer")} •{" "}
-                          {new Date(msg.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
                       </div>
-                    );
-                  })
-                )}
+                      <span className="text-[10px] text-muted-foreground px-1 mt-0.5">
+                        {new Date(msg.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </div>
             </ScrollArea>
 
             {/* Message Composer */}
-            <form onSubmit={handleSendMessage} className="p-3 border-t border-border/40 bg-card/30 flex gap-2">
+            <form onSubmit={handleSendMessage} className="p-3 border-t border-border/40 flex items-center gap-2 bg-card/20">
               <Textarea
-                placeholder="Write a reply..."
+                placeholder="Type a message to send to Crisp visitor..."
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -494,7 +764,7 @@ function CrispInboxInner() {
                     handleSendMessage(e);
                   }
                 }}
-                className="flex-1 min-h-[44px] max-h-32 text-xs resize-none bg-background/60"
+                className="min-h-[44px] max-h-32 text-xs resize-none flex-1 py-2.5"
               />
               <Button
                 type="submit"
@@ -650,6 +920,148 @@ function CrispInboxInner() {
           </div>
         )}
       </div>
+
+      {/* ========================================================================= */}
+      {/* ADMIN ADD WORKSPACE MODAL */}
+      {/* ========================================================================= */}
+      {isAdmin && (
+        <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+                <Building2 className="w-5 h-5 text-primary" />
+                <span>Connect Crisp Workspace</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Generate a Website Token in Crisp under <strong>Settings → Workspace Settings → Advanced configuration → REST API / API Token</strong>.
+              </DialogDescription>
+            </DialogHeader>
+
+            {!addSuccessResult ? (
+              <form onSubmit={handleAddWorkspaceSubmit} className="space-y-4 pt-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ws-website-id" className="text-xs font-semibold">
+                    Crisp Website ID
+                  </Label>
+                  <Input
+                    id="ws-website-id"
+                    placeholder="e.g. 57a2f8b1-39c4-4d8e-90ab-1234567890ab"
+                    value={addWebsiteId}
+                    onChange={(e) => setAddWebsiteId(e.target.value)}
+                    className="text-xs font-mono"
+                    required
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Found in Crisp under Website Settings → Setup instructions.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="ws-token-id" className="text-xs font-semibold">
+                    Website Token Identifier (API Identifier)
+                  </Label>
+                  <Input
+                    id="ws-token-id"
+                    placeholder="e.g. 59881881-80a1-4328-86d1-..."
+                    value={addTokenId}
+                    onChange={(e) => setAddTokenId(e.target.value)}
+                    className="text-xs font-mono"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="ws-token-key" className="text-xs font-semibold">
+                    Website Token Key (API Key)
+                  </Label>
+                  <Input
+                    id="ws-token-key"
+                    type="password"
+                    placeholder="e.g. 81a9f012b..."
+                    value={addTokenKey}
+                    onChange={(e) => setAddTokenKey(e.target.value)}
+                    className="text-xs font-mono"
+                    required
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Credentials are validated with Crisp API and stored encrypted in Supabase Vault.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAddModalOpen(false)}
+                    disabled={isAddingWorkspace}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="sm" disabled={isAddingWorkspace}>
+                    {isAddingWorkspace ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                        <span>Validating...</span>
+                      </>
+                    ) : (
+                      <span>Connect Workspace</span>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-4 pt-2">
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 space-y-1">
+                  <div className="flex items-center gap-2 text-emerald-500 font-semibold text-xs">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Workspace Connected: {addSuccessResult.workspaceName}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Website Token verified successfully and encrypted in Vault.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Website Hook Setup URL</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      readOnly
+                      value={addSuccessResult.webhookUrl}
+                      className="text-xs font-mono bg-muted/50 select-all"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="shrink-0 h-9 w-9"
+                      onClick={() => handleCopyWebhookUrl(addSuccessResult.webhookUrl)}
+                    >
+                      {copiedUrl ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Add this URL as a Website Hook in this Crisp workspace under <strong>Settings → Advanced configuration → Webhooks</strong>.
+                  </p>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t border-border/40">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setIsAddModalOpen(false);
+                      setAddSuccessResult(null);
+                    }}
+                  >
+                    Done
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

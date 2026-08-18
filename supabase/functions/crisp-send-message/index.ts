@@ -92,52 +92,54 @@ serve(async (req) => {
     const websiteId = conv.crisp_website_id;
     const sessionId = conv.crisp_session_id;
 
-    // Credentials lookup
-    const pluginTokenId = Deno.env.get("CRISP_PLUGIN_TOKEN_ID");
-    const pluginTokenKey = Deno.env.get("CRISP_PLUGIN_TOKEN_KEY");
-
-    const legacyWebsiteId = Deno.env.get("CRISP_WEBSITE_ID");
-    const legacyTokenId = Deno.env.get("CRISP_TOKEN_ID");
-    const legacyTokenKey = Deno.env.get("CRISP_TOKEN_KEY");
-
+    // FIND WORKSPACE & VAULT CREDENTIALS
     const { data: wsRecord } = await supabase
       .from("crisp_workspaces")
-      .select("id, enabled, connection_mode")
+      .select("id, enabled, credential_secret_id")
       .eq("crisp_website_id", websiteId)
       .maybeSingle();
 
-    let authString = "";
-    let crispTier = "plugin";
-    let isMatched = false;
+    let tokenId = "";
+    let tokenKey = "";
 
-    // A) Plugin Token: enabled=true AND connection_mode='plugin' AND Plugin credentials exist
-    if (pluginTokenId && pluginTokenKey && wsRecord && wsRecord.enabled && wsRecord.connection_mode === "plugin") {
-      authString = btoa(`${pluginTokenId}:${pluginTokenKey}`);
-      crispTier = "plugin";
-      isMatched = true;
+    if (wsRecord && wsRecord.enabled && wsRecord.credential_secret_id) {
+      const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
+        p_secret_id: wsRecord.credential_secret_id,
+      });
+
+      if (secretData?.token_id && secretData?.token_key) {
+        tokenId = secretData.token_id;
+        tokenKey = secretData.token_key;
+      }
     }
 
-    // B) Legacy Website Token: conversation.crisp_website_id === CRISP_WEBSITE_ID AND legacy credentials exist AND (no wsRecord OR connection_mode='legacy')
-    if (!isMatched && legacyTokenId && legacyTokenKey && legacyWebsiteId === websiteId && (!wsRecord || wsRecord.connection_mode === "legacy")) {
-      authString = btoa(`${legacyTokenId}:${legacyTokenKey}`);
-      crispTier = "website";
-      isMatched = true;
+    // TEMPORARY LEGACY WORKSPACE 1 FALLBACK
+    if (!tokenId || !tokenKey) {
+      const legacyWebsiteId = Deno.env.get("CRISP_WEBSITE_ID");
+      const legacyTokenId = Deno.env.get("CRISP_TOKEN_ID");
+      const legacyTokenKey = Deno.env.get("CRISP_TOKEN_KEY");
+
+      if (legacyWebsiteId && websiteId === legacyWebsiteId && legacyTokenId && legacyTokenKey) {
+        tokenId = legacyTokenId;
+        tokenKey = legacyTokenKey;
+      }
     }
 
-    // C) Otherwise, return clear error
-    if (!isMatched) {
+    if (!tokenId || !tokenKey) {
       return new Response(
-        JSON.stringify({ error: "Workspace is disabled, not registered as a Crisp Plugin, or not configured for legacy access." }),
+        JSON.stringify({ error: "Workspace is disabled or not configured with Crisp Website Tokens." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const authString = btoa(`${tokenId}:${tokenKey}`);
     const crispUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/message`;
+    
     const crispResponse = await fetch(crispUrl, {
       method: "POST",
       headers: {
         "Authorization": `Basic ${authString}`,
-        "X-Crisp-Tier": crispTier,
+        "X-Crisp-Tier": "website",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

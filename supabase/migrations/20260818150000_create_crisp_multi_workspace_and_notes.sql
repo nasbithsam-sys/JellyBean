@@ -1,13 +1,16 @@
--- Migration: Add multi-workspace support and internal conversation notes to Crisp integration
--- Access strictly limited to admin, cs_admin, and cs roles.
+-- Migration: Add multi-workspace Crisp integration using Supabase Vault secrets and internal notes
+-- Access strictly limited to admin, cs_admin, and cs roles. Credentials managed by admin only.
+
+-- Enable Vault extension safely
+CREATE EXTENSION IF NOT EXISTS supabase_vault CASCADE;
 
 -- 1. Create crisp_workspaces table
 CREATE TABLE IF NOT EXISTS public.crisp_workspaces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     crisp_website_id TEXT NOT NULL UNIQUE,
     workspace_name TEXT,
-    connection_mode TEXT NOT NULL DEFAULT 'plugin' CHECK (connection_mode IN ('plugin', 'legacy')),
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    credential_secret_id UUID,
     installed_at TIMESTAMPTZ,
     last_seen_at TIMESTAMPTZ,
     last_synced_at TIMESTAMPTZ,
@@ -16,8 +19,9 @@ CREATE TABLE IF NOT EXISTS public.crisp_workspaces (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Ensure connection_mode column exists if table was already created
-ALTER TABLE public.crisp_workspaces ADD COLUMN IF NOT EXISTS connection_mode TEXT NOT NULL DEFAULT 'plugin';
+-- Ensure connection_mode column is dropped if it existed from previous iteration
+ALTER TABLE public.crisp_workspaces DROP COLUMN IF EXISTS connection_mode;
+ALTER TABLE public.crisp_workspaces ADD COLUMN IF NOT EXISTS credential_secret_id UUID;
 
 -- 2. Modify crisp_conversations for multi-workspace uniqueness
 ALTER TABLE public.crisp_conversations DROP CONSTRAINT IF EXISTS crisp_conversations_crisp_session_id_key;
@@ -92,7 +96,109 @@ CREATE INDEX IF NOT EXISTS idx_crisp_messages_sent_at ON public.crisp_messages(s
 ALTER TABLE public.crisp_webhook_events ADD COLUMN IF NOT EXISTS crisp_website_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_crisp_webhook_events_website_id ON public.crisp_webhook_events(crisp_website_id);
 
--- 5. Create crisp_conversation_notes table
+-- 5. Secure Vault Helpers (service_role ONLY)
+CREATE OR REPLACE FUNCTION public.crisp_create_workspace_secret(
+    p_website_id TEXT,
+    p_token_id TEXT,
+    p_token_key TEXT,
+    p_webhook_secret TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault
+AS $$
+DECLARE
+    v_secret_json TEXT;
+    v_secret_id UUID;
+BEGIN
+    v_secret_json := json_build_object(
+        'token_id', p_token_id,
+        'token_key', p_token_key,
+        'webhook_secret', p_webhook_secret
+    )::text;
+
+    BEGIN
+        v_secret_id := vault.create_secret(v_secret_json, 'crisp_ws_' || p_website_id, 'Crisp credentials for ' || p_website_id);
+    EXCEPTION WHEN OTHERS THEN
+        INSERT INTO vault.secrets (secret, name, description)
+        VALUES (v_secret_json, 'crisp_ws_' || p_website_id, 'Crisp credentials for ' || p_website_id)
+        RETURNING id INTO v_secret_id;
+    END;
+
+    RETURN v_secret_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.crisp_update_workspace_secret(
+    p_secret_id UUID,
+    p_token_id TEXT,
+    p_token_key TEXT,
+    p_webhook_secret TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault
+AS $$
+DECLARE
+    v_secret_json TEXT;
+BEGIN
+    v_secret_json := json_build_object(
+        'token_id', p_token_id,
+        'token_key', p_token_key,
+        'webhook_secret', p_webhook_secret
+    )::text;
+
+    UPDATE vault.secrets
+    SET secret = v_secret_json, updated_at = NOW()
+    WHERE id = p_secret_id;
+
+    RETURN FOUND;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.crisp_get_workspace_secret(
+    p_secret_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault
+AS $$
+DECLARE
+    v_secret TEXT;
+BEGIN
+    SELECT decrypted_secret INTO v_secret
+    FROM vault.decrypted_secrets
+    WHERE id = p_secret_id;
+
+    IF v_secret IS NULL THEN
+        SELECT secret INTO v_secret
+        FROM vault.secrets
+        WHERE id = p_secret_id;
+    END IF;
+
+    IF v_secret IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    RETURN v_secret::jsonb;
+EXCEPTION WHEN OTHERS THEN
+    RETURN NULL;
+END;
+$$;
+
+-- Restrict Vault Helper Execution STRICTLY to service_role
+REVOKE ALL ON FUNCTION public.crisp_create_workspace_secret FROM PUBLIC, authenticated;
+REVOKE ALL ON FUNCTION public.crisp_update_workspace_secret FROM PUBLIC, authenticated;
+REVOKE ALL ON FUNCTION public.crisp_get_workspace_secret FROM PUBLIC, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.crisp_create_workspace_secret TO service_role;
+GRANT EXECUTE ON FUNCTION public.crisp_update_workspace_secret TO service_role;
+GRANT EXECUTE ON FUNCTION public.crisp_get_workspace_secret TO service_role;
+
+-- 6. Create crisp_conversation_notes table
 CREATE TABLE IF NOT EXISTS public.crisp_conversation_notes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES public.crisp_conversations(id) ON DELETE CASCADE,
@@ -105,7 +211,7 @@ CREATE TABLE IF NOT EXISTS public.crisp_conversation_notes (
 
 CREATE INDEX IF NOT EXISTS idx_crisp_conversation_notes_conv_created ON public.crisp_conversation_notes (conversation_id, created_at DESC);
 
--- 6. Enable RLS and Grant Permissions
+-- 7. Enable RLS and Grant Permissions
 ALTER TABLE public.crisp_workspaces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crisp_conversation_notes ENABLE ROW LEVEL SECURITY;
 
@@ -132,7 +238,7 @@ USING (
     )
 );
 
--- Granular RLS Policies for crisp_conversation_notes (NO FOR ALL POLICY)
+-- Granular RLS Policies for crisp_conversation_notes
 DROP POLICY IF EXISTS "Crisp conversation notes access for cs roles" ON public.crisp_conversation_notes;
 DROP POLICY IF EXISTS "Crisp conversation notes select for cs roles" ON public.crisp_conversation_notes;
 DROP POLICY IF EXISTS "Crisp conversation notes insert for cs roles" ON public.crisp_conversation_notes;
@@ -140,7 +246,6 @@ DROP POLICY IF EXISTS "Crisp conversation notes update/delete" ON public.crisp_c
 DROP POLICY IF EXISTS "Crisp conversation notes update for cs roles" ON public.crisp_conversation_notes;
 DROP POLICY IF EXISTS "Crisp conversation notes delete for cs roles" ON public.crisp_conversation_notes;
 
--- 1. SELECT POLICY
 CREATE POLICY "Crisp conversation notes select for cs roles"
 ON public.crisp_conversation_notes
 FOR SELECT
@@ -153,7 +258,6 @@ USING (
     )
 );
 
--- 2. INSERT POLICY
 CREATE POLICY "Crisp conversation notes insert for cs roles"
 ON public.crisp_conversation_notes
 FOR INSERT
@@ -167,7 +271,6 @@ WITH CHECK (
     )
 );
 
--- 3. UPDATE POLICY (Dedicated FOR UPDATE)
 CREATE POLICY "Crisp conversation notes update for cs roles"
 ON public.crisp_conversation_notes
 FOR UPDATE
@@ -203,7 +306,6 @@ WITH CHECK (
     )
 );
 
--- 4. DELETE POLICY (Dedicated FOR DELETE)
 CREATE POLICY "Crisp conversation notes delete for cs roles"
 ON public.crisp_conversation_notes
 FOR DELETE
@@ -224,7 +326,7 @@ USING (
     )
 );
 
--- 7. Add new tables to Realtime Publication safely
+-- 8. Add new tables to Realtime Publication safely
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
