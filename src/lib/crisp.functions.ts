@@ -44,7 +44,7 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
     const workspaceResults: Array<{ website_id: string; conversations: number; messages: number }> = [];
 
     if (pluginCreds) {
-      // Plugin Mode: Multi-Workspace
+      // PLUGIN MODE: Sync ONLY registered, enabled crisp_workspaces
       let query = supabaseAdmin
         .from("crisp_workspaces")
         .select("crisp_website_id, workspace_name")
@@ -57,12 +57,21 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
       const { data: workspaces } = await query;
       const targetWorkspaces = workspaces || [];
 
-      // If no workspaces registered yet, register legacy website if available
-      if (targetWorkspaces.length === 0 && legacyCreds) {
-        targetWorkspaces.push({
-          crisp_website_id: legacyCreds.websiteId,
-          workspace_name: "Workspace 1",
-        });
+      // If a specific websiteId was requested but not found or disabled
+      if (data.websiteId && targetWorkspaces.length === 0) {
+        return { ok: false as const, error: "Workspace is not registered or is disabled." };
+      }
+
+      // If zero registered plugin workspaces for "All Workspaces"
+      if (targetWorkspaces.length === 0) {
+        return {
+          ok: true as const,
+          workspaces_synced: 0,
+          synced_conversations: 0,
+          synced_messages: 0,
+          workspace_results: [],
+          message: "No registered Crisp Plugin workspaces found.",
+        };
       }
 
       const headers = crispPluginHeaders(pluginCreds);
@@ -94,7 +103,7 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
             if (!sessionId) continue;
             const meta = (session["meta"] ?? {}) as Record<string, any>;
 
-            // Preserve existing customer details if incoming is null
+            // Preserve existing customer details
             const { data: existingConv } = await supabaseAdmin
               .from("crisp_conversations")
               .select("customer_name, customer_email, customer_phone, customer_avatar")
@@ -169,8 +178,12 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
         workspaceResults.push({ website_id: websiteId, conversations: wsConversations, messages: wsMessages });
       }
     } else if (legacyCreds) {
-      // Legacy Mode: Single Workspace 1
+      // LEGACY MODE: Sync ONLY configured CRISP_WEBSITE_ID using X-Crisp-Tier: website
       const websiteId = legacyCreds.websiteId;
+      if (data.websiteId && data.websiteId !== websiteId) {
+        return { ok: false as const, error: "Legacy credentials can only sync the configured CRISP_WEBSITE_ID." };
+      }
+
       const headers = crispWebsiteHeaders(legacyCreds);
       let wsConversations = 0;
       let wsMessages = 0;
@@ -197,16 +210,29 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
           if (!sessionId) continue;
           const meta = (session["meta"] ?? {}) as Record<string, any>;
 
+          // Preserve existing customer details in legacy mode too
+          const { data: existingConv } = await supabaseAdmin
+            .from("crisp_conversations")
+            .select("customer_name, customer_email, customer_phone, customer_avatar")
+            .eq("crisp_website_id", websiteId)
+            .eq("crisp_session_id", sessionId)
+            .maybeSingle();
+
+          const name = meta["nickname"] ?? session["nickname"] ?? existingConv?.customer_name ?? null;
+          const email = meta["email"] ?? session["email"] ?? existingConv?.customer_email ?? null;
+          const phone = meta["phone"] ?? session["phone"] ?? existingConv?.customer_phone ?? null;
+          const avatar = meta["avatar"] ?? session["avatar"] ?? existingConv?.customer_avatar ?? null;
+
           const { data: conv, error: convErr } = await supabaseAdmin
             .from("crisp_conversations")
             .upsert(
               {
                 crisp_website_id: websiteId,
                 crisp_session_id: sessionId,
-                customer_name: meta["nickname"] ?? session["nickname"] ?? null,
-                customer_email: meta["email"] ?? session["email"] ?? null,
-                customer_phone: meta["phone"] ?? session["phone"] ?? null,
-                customer_avatar: meta["avatar"] ?? session["avatar"] ?? null,
+                customer_name: name,
+                customer_email: email,
+                customer_phone: phone,
+                customer_avatar: avatar,
                 status: (session["state"] as string) ?? "unresolved",
                 updated_at: new Date().toISOString(),
               },
@@ -315,6 +341,20 @@ export const sendCrispMessage = createServerFn({ method: "POST" })
     let errorMode: "plugin" | "website" = "plugin";
 
     if (pluginCreds) {
+      // Validate that website exists in crisp_workspaces AND enabled = true
+      const { data: wsRecord } = await supabaseAdmin
+        .from("crisp_workspaces")
+        .select("id, enabled")
+        .eq("crisp_website_id", websiteId)
+        .maybeSingle();
+
+      if (!wsRecord || !wsRecord.enabled) {
+        return {
+          ok: false as const,
+          error: "Workspace is disabled or not registered as a Crisp Plugin.",
+        };
+      }
+
       requestHeaders = crispPluginHeaders(pluginCreds);
       errorMode = "plugin";
     } else if (legacyCreds && websiteId === legacyCreds.websiteId) {

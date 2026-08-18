@@ -6,9 +6,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-crisp-signature, x-crisp-request-timestamp",
 };
 
-// HMAC-SHA256 signature verification for Crisp Plugin Hooks
-async function verifyCrispSignature(secret: string, timestamp: string, rawBody: string, signature: string): Promise<boolean> {
+// Timing-safe string comparison
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+// Official Crisp Plugin Hook HMAC-SHA256 signature verification: [timestamp;body_as_string]
+async function verifyCrispPluginSignature(secret: string, timestamp: string, rawBody: string, signature: string): Promise<boolean> {
   try {
+    const signedPayload = `[${timestamp};${rawBody}]`;
     const encoder = new TextEncoder();
     const keyData = encoder.encode(secret);
     const cryptoKey = await crypto.subtle.importKey(
@@ -19,20 +30,17 @@ async function verifyCrispSignature(secret: string, timestamp: string, rawBody: 
       ["sign"]
     );
 
-    // Crisp signature is computed on concatenated string: timestamp + rawBody or rawBody
-    // Crisp calculates HMAC-SHA256 over rawBody (or timestamp + rawBody)
-    const signedData = encoder.encode(rawBody);
-    const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, signedData);
+    const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(signedPayload));
     
-    // Convert buffer to hex string
+    // Convert to hex string
     const hexDigest = Array.from(new Uint8Array(signatureBuffer))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    // Convert buffer to base64 string
+    // Convert to base64 string
     const base64Digest = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
 
-    return signature === hexDigest || signature === base64Digest;
+    return timingSafeEqual(signature, hexDigest) || timingSafeEqual(signature, base64Digest);
   } catch {
     return false;
   }
@@ -46,6 +54,7 @@ serve(async (req) => {
   try {
     const pluginHookSecret = Deno.env.get("CRISP_PLUGIN_HOOK_SECRET");
     const legacyWebhookSecret = Deno.env.get("CRISP_WEBHOOK_SECRET");
+    const legacyWebsiteIdConfig = Deno.env.get("CRISP_WEBSITE_ID");
 
     const rawBody = await req.text();
     const url = new URL(req.url);
@@ -54,34 +63,43 @@ serve(async (req) => {
     const crispSignature = req.headers.get("x-crisp-signature") || req.headers.get("X-Crisp-Signature");
     const crispTimestamp = req.headers.get("x-crisp-request-timestamp") || req.headers.get("X-Crisp-Request-Timestamp");
 
-    let isAuthorized = false;
+    let authMode: "plugin" | "legacy_website" | null = null;
 
-    // A) Verify Crisp Plugin Hook Signature if secret & headers exist
-    if (pluginHookSecret && crispSignature) {
-      if (crispTimestamp) {
-        isAuthorized = await verifyCrispSignature(pluginHookSecret, crispTimestamp, rawBody, crispSignature);
+    // 1. DETERMINE AUTH MODE
+    // If X-Crisp-Signature header is present, treat request STRICTLY as a Plugin Hook.
+    if (crispSignature) {
+      if (!pluginHookSecret || !crispTimestamp) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized: Missing plugin hook secret or timestamp header." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const isValidPluginSig = await verifyCrispPluginSignature(pluginHookSecret, crispTimestamp, rawBody, crispSignature);
+      if (!isValidPluginSig) {
+        // DO NOT fall back to legacy ?key= when Crisp signature is present!
+        return new Response(
+          JSON.stringify({ error: "Unauthorized: Invalid Crisp plugin hook signature." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      authMode = "plugin";
+    } else if (legacyWebhookSecret && providedKey) {
+      // Requests without X-Crisp-Signature may use legacy ?key= secret
+      if (timingSafeEqual(providedKey, legacyWebhookSecret)) {
+        authMode = "legacy_website";
+      } else {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized: Invalid legacy webhook secret key." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
 
-    // B) Temporary Legacy Website Hook ?key= fallback if signature validation didn't pass
-    if (!isAuthorized && legacyWebhookSecret) {
-      if (providedKey && providedKey === legacyWebhookSecret) {
-        isAuthorized = true;
-      }
-    }
-
-    // C) If neither plugin secret nor legacy secret is configured, require one
-    if (!pluginHookSecret && !legacyWebhookSecret) {
-      console.error("Neither CRISP_PLUGIN_HOOK_SECRET nor CRISP_WEBHOOK_SECRET is configured.");
+    if (!authMode) {
       return new Response(
-        JSON.stringify({ error: "Server configuration missing: Crisp webhook secret is not configured." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!isAuthorized) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Invalid Crisp webhook signature or key parameter." }),
+        JSON.stringify({ error: "Unauthorized: Webhook authentication missing or failed." }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -110,52 +128,102 @@ serve(async (req) => {
 
     const eventType = String(body.event || "unknown").toLowerCase();
     const data = body.data || body;
-    const websiteId = body.website_id || data.website_id || Deno.env.get("CRISP_WEBSITE_ID");
+    const payloadWebsiteId = body.website_id || data.website_id;
 
-    if (!websiteId) {
-      return new Response(JSON.stringify({ message: "No website_id in payload, event ignored" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    let websiteId = "";
 
-    // 1. Auto-register or update crisp_workspaces
-    if (eventType === "plugin:subscription:updated") {
-      const isBound = data.bound === true;
-      await supabase
-        .from("crisp_workspaces")
-        .upsert(
-          {
-            crisp_website_id: websiteId,
-            enabled: isBound,
-            last_seen_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "crisp_website_id" }
+    if (authMode === "plugin") {
+      // PLUGIN MODE: website identity MUST come from verified payload website_id. Never infer from CRISP_WEBSITE_ID.
+      if (!payloadWebsiteId) {
+        return new Response(JSON.stringify({ message: "No website_id in plugin payload, event ignored" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      websiteId = payloadWebsiteId;
+    } else {
+      // LEGACY WEBSITE MODE: Only permit legacy configured website ID.
+      if (!legacyWebsiteIdConfig) {
+        return new Response(JSON.stringify({ error: "CRISP_WEBSITE_ID is not configured for legacy mode" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (payloadWebsiteId && payloadWebsiteId !== legacyWebsiteIdConfig) {
+        return new Response(
+          JSON.stringify({ error: "Legacy webhook secret can only be used for the configured CRISP_WEBSITE_ID" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
-      return new Response(JSON.stringify({ status: "success", event: eventType, bound: isBound }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      }
+      websiteId = legacyWebsiteIdConfig;
     }
 
-    // Ensure workspace record exists & update last_seen_at
-    await supabase
-      .from("crisp_workspaces")
-      .upsert(
-        {
-          crisp_website_id: websiteId,
-          enabled: true,
-          last_seen_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "crisp_website_id" }
-      );
+    // 2. WORKSPACE MANAGEMENT ACCORDING TO AUTH MODE
+    if (authMode === "plugin") {
+      if (eventType === "plugin:subscription:updated") {
+        const isBound = data.bound === true;
+        
+        if (isBound) {
+          await supabase
+            .from("crisp_workspaces")
+            .upsert(
+              {
+                crisp_website_id: websiteId,
+                enabled: true,
+                installed_at: new Date().toISOString(),
+                last_seen_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "crisp_website_id" }
+            );
+        } else {
+          // Unsubscribing/unbinding disables workspace without deleting conversations/messages/notes
+          await supabase
+            .from("crisp_workspaces")
+            .update({
+              enabled: false,
+              last_seen_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("crisp_website_id", websiteId);
+        }
+
+        return new Response(JSON.stringify({ status: "success", event: eventType, bound: isBound }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // For ordinary verified Plugin Hook events:
+      // Update last_seen_at, but DO NOT force enabled = true on an existing disabled workspace.
+      const { data: existingWorkspace } = await supabase
+        .from("crisp_workspaces")
+        .select("id, enabled")
+        .eq("crisp_website_id", websiteId)
+        .maybeSingle();
+
+      if (!existingWorkspace) {
+        // Register new workspace if first time seen
+        await supabase
+          .from("crisp_workspaces")
+          .insert({
+            crisp_website_id: websiteId,
+            enabled: true,
+            installed_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+          });
+      } else {
+        await supabase
+          .from("crisp_workspaces")
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq("crisp_website_id", websiteId);
+      }
+    }
 
     const sessionId = data.session_id || body.session_id;
 
     if (!sessionId) {
-      return new Response(JSON.stringify({ status: "success", message: "Workspace registered/updated" }), {
+      return new Response(JSON.stringify({ status: "success", message: "Event processed (no session_id)" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -164,7 +232,7 @@ serve(async (req) => {
     const fingerprint = data.fingerprint || data.timestamp || Date.now();
     const eventFingerprint = `${websiteId}_${eventType}_${sessionId}_${fingerprint}`;
 
-    // 2. Log webhook event idempotently
+    // 3. Log webhook event idempotently with website identity
     const { error: webhookLogErr } = await supabase
       .from("crisp_webhook_events")
       .insert({
@@ -182,7 +250,7 @@ serve(async (req) => {
       });
     }
 
-    // 3. Fetch existing conversation to preserve customer details without overwriting with null
+    // 4. Fetch existing conversation to preserve customer details without overwriting with null
     const { data: existingConv } = await supabase
       .from("crisp_conversations")
       .select("id, customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at, status")
@@ -216,7 +284,7 @@ serve(async (req) => {
     const lastMessage = isMessageEvent && messageContent.trim() ? messageContent.trim() : (existingConv?.last_message || null);
     const lastMessageAt = isMessageEvent && messageContent.trim() ? sentAt : (existingConv?.last_message_at || sentAt);
 
-    // 4. Upsert conversation
+    // 5. Upsert conversation
     const { data: convData, error: convErr } = await supabase
       .from("crisp_conversations")
       .upsert(
@@ -247,7 +315,7 @@ serve(async (req) => {
 
     const conversationId = convData.id;
 
-    // 5. Insert ONLY real message events into crisp_messages
+    // 6. Insert ONLY real message events into crisp_messages
     if (isMessageEvent && messageContent.trim()) {
       const crispMsgId = String(data.fingerprint || `${sessionId}_${sentAt}`);
       const rawFrom = String(data.from || "user").toLowerCase();
@@ -273,7 +341,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ status: "success", session_id: sessionId, website_id: websiteId }), {
+    return new Response(JSON.stringify({ status: "success", session_id: sessionId, website_id: websiteId, auth_mode: authMode }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

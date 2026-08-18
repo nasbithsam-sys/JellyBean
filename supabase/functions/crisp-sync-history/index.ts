@@ -71,7 +71,7 @@ serve(async (req) => {
     let totalSyncedMessages = 0;
 
     if (pluginTokenId && pluginTokenKey) {
-      // Plugin Mode
+      // Plugin Mode: Sync ONLY enabled crisp_workspaces
       let query = supabase.from("crisp_workspaces").select("crisp_website_id, workspace_name").eq("enabled", true);
       if (targetWebsiteId) {
         query = query.eq("crisp_website_id", targetWebsiteId);
@@ -80,8 +80,23 @@ serve(async (req) => {
       const { data: workspaces } = await query;
       const targetWorkspaces = workspaces || [];
 
-      if (targetWorkspaces.length === 0 && legacyWebsiteId) {
-        targetWorkspaces.push({ crisp_website_id: legacyWebsiteId, workspace_name: "Workspace 1" });
+      if (targetWebsiteId && targetWorkspaces.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "Workspace is not registered or is disabled." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (targetWorkspaces.length === 0) {
+        return new Response(
+          JSON.stringify({
+            status: "success",
+            synced_conversations: 0,
+            synced_messages: 0,
+            message: "No registered Crisp Plugin workspaces found.",
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       const headers = {
@@ -107,11 +122,24 @@ serve(async (req) => {
             if (!sessionId) continue;
 
             const customerMeta = session.meta || {};
-            const customerName = customerMeta.nickname || session.nickname || null;
-            const customerEmail = customerMeta.email || session.email || null;
-            const customerPhone = customerMeta.phone || session.phone || null;
-            const customerAvatar = customerMeta.avatar || session.avatar || null;
+            const incomingName = customerMeta.nickname || session.nickname || null;
+            const incomingEmail = customerMeta.email || session.email || null;
+            const incomingPhone = customerMeta.phone || session.phone || null;
+            const incomingAvatar = customerMeta.avatar || session.avatar || null;
             const state = session.state || "unresolved";
+
+            // Preserve existing customer details in Edge Function history sync too
+            const { data: existingConv } = await supabase
+              .from("crisp_conversations")
+              .select("customer_name, customer_email, customer_phone, customer_avatar")
+              .eq("crisp_website_id", websiteId)
+              .eq("crisp_session_id", sessionId)
+              .maybeSingle();
+
+            const finalName = incomingName || existingConv?.customer_name || null;
+            const finalEmail = incomingEmail || existingConv?.customer_email || null;
+            const finalPhone = incomingPhone || existingConv?.customer_phone || null;
+            const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
 
             const { data: convRecord, error: convErr } = await supabase
               .from("crisp_conversations")
@@ -119,10 +147,10 @@ serve(async (req) => {
                 {
                   crisp_website_id: websiteId,
                   crisp_session_id: sessionId,
-                  customer_name: customerName,
-                  customer_email: customerEmail,
-                  customer_phone: customerPhone,
-                  customer_avatar: customerAvatar,
+                  customer_name: finalName,
+                  customer_email: finalEmail,
+                  customer_phone: finalPhone,
+                  customer_avatar: finalAvatar,
                   status: state,
                   updated_at: new Date().toISOString(),
                 },
@@ -176,8 +204,15 @@ serve(async (req) => {
           .eq("crisp_website_id", websiteId);
       }
     } else if (legacyTokenId && legacyTokenKey && legacyWebsiteId) {
-      // Legacy Mode
+      // Legacy Mode: Sync ONLY CRISP_WEBSITE_ID using X-Crisp-Tier: website
       const websiteId = legacyWebsiteId;
+      if (targetWebsiteId && targetWebsiteId !== websiteId) {
+        return new Response(
+          JSON.stringify({ error: "Legacy credentials can only sync the configured CRISP_WEBSITE_ID." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const headers = {
         "Authorization": `Basic ${btoa(`${legacyTokenId}:${legacyTokenKey}`)}`,
         "X-Crisp-Tier": "website",
@@ -197,11 +232,23 @@ serve(async (req) => {
           if (!sessionId) continue;
 
           const customerMeta = session.meta || {};
-          const customerName = customerMeta.nickname || session.nickname || null;
-          const customerEmail = customerMeta.email || session.email || null;
-          const customerPhone = customerMeta.phone || session.phone || null;
-          const customerAvatar = customerMeta.avatar || session.avatar || null;
+          const incomingName = customerMeta.nickname || session.nickname || null;
+          const incomingEmail = customerMeta.email || session.email || null;
+          const incomingPhone = customerMeta.phone || session.phone || null;
+          const incomingAvatar = customerMeta.avatar || session.avatar || null;
           const state = session.state || "unresolved";
+
+          const { data: existingConv } = await supabase
+            .from("crisp_conversations")
+            .select("customer_name, customer_email, customer_phone, customer_avatar")
+            .eq("crisp_website_id", websiteId)
+            .eq("crisp_session_id", sessionId)
+            .maybeSingle();
+
+          const finalName = incomingName || existingConv?.customer_name || null;
+          const finalEmail = incomingEmail || existingConv?.customer_email || null;
+          const finalPhone = incomingPhone || existingConv?.customer_phone || null;
+          const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
 
           const { data: convRecord, error: convErr } = await supabase
             .from("crisp_conversations")
@@ -209,10 +256,10 @@ serve(async (req) => {
               {
                 crisp_website_id: websiteId,
                 crisp_session_id: sessionId,
-                customer_name: customerName,
-                customer_email: customerEmail,
-                customer_phone: customerPhone,
-                customer_avatar: customerAvatar,
+                customer_name: finalName,
+                customer_email: finalEmail,
+                customer_phone: finalPhone,
+                customer_avatar: finalAvatar,
                 status: state,
                 updated_at: new Date().toISOString(),
               },

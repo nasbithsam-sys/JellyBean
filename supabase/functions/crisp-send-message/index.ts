@@ -104,6 +104,20 @@ serve(async (req) => {
     let crispTier = "plugin";
 
     if (pluginTokenId && pluginTokenKey) {
+      // Validate that workspace exists in crisp_workspaces AND enabled = true
+      const { data: wsRecord } = await supabase
+        .from("crisp_workspaces")
+        .select("id, enabled")
+        .eq("crisp_website_id", websiteId)
+        .maybeSingle();
+
+      if (!wsRecord || !wsRecord.enabled) {
+        return new Response(
+          JSON.stringify({ error: "Workspace is disabled or not registered as a Crisp Plugin." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       authString = btoa(`${pluginTokenId}:${pluginTokenKey}`);
       crispTier = "plugin";
     } else if (legacyTokenId && legacyTokenKey && legacyWebsiteId === websiteId) {

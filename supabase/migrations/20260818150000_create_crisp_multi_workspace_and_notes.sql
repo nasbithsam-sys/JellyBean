@@ -40,8 +40,27 @@ SET crisp_website_id = c.crisp_website_id
 FROM public.crisp_conversations c
 WHERE m.conversation_id = c.id AND m.crisp_website_id IS NULL;
 
--- Make composite uniqueness for message deduplication per website
+-- Remove orphan messages that have no conversation match
+DELETE FROM public.crisp_messages WHERE crisp_website_id IS NULL;
+
+-- Deduplicate any existing duplicate messages on (crisp_website_id, crisp_message_id) before constraint creation
+DELETE FROM public.crisp_messages m1
+USING public.crisp_messages m2
+WHERE m1.id > m2.id
+  AND m1.crisp_website_id IS NOT NULL
+  AND m2.crisp_website_id IS NOT NULL
+  AND m1.crisp_message_id IS NOT NULL
+  AND m2.crisp_message_id IS NOT NULL
+  AND m1.crisp_website_id = m2.crisp_website_id
+  AND m1.crisp_message_id = m2.crisp_message_id;
+
+-- Make crisp_website_id NOT NULL after backfill & cleanup
+ALTER TABLE public.crisp_messages ALTER COLUMN crisp_website_id SET NOT NULL;
+
+-- Drop old single-column unique constraint on crisp_message_id if exists
 ALTER TABLE public.crisp_messages DROP CONSTRAINT IF EXISTS crisp_messages_crisp_message_id_key;
+
+-- Add composite unique constraint for message deduplication per website
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -49,8 +68,6 @@ BEGIN
     ) THEN
         ALTER TABLE public.crisp_messages ADD CONSTRAINT crisp_messages_website_message_key UNIQUE (crisp_website_id, crisp_message_id);
     END IF;
-EXCEPTION
-    WHEN OTHERS THEN NULL;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_crisp_messages_conversation_id ON public.crisp_messages(conversation_id);
@@ -79,26 +96,22 @@ CREATE INDEX IF NOT EXISTS idx_crisp_conversation_notes_conv_created ON public.c
 ALTER TABLE public.crisp_workspaces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.crisp_conversation_notes ENABLE ROW LEVEL SECURITY;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.crisp_workspaces TO authenticated;
+-- crisp_workspaces: SELECT ONLY for authenticated roles. Service role retains ALL.
+GRANT SELECT ON TABLE public.crisp_workspaces TO authenticated;
 GRANT ALL ON TABLE public.crisp_workspaces TO service_role;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.crisp_conversation_notes TO authenticated;
 GRANT ALL ON TABLE public.crisp_conversation_notes TO service_role;
 
--- RLS Policies for crisp_workspaces
+-- RLS Policy for crisp_workspaces (SELECT ONLY for admin, cs_admin, cs)
 DROP POLICY IF EXISTS "Crisp workspaces access for cs roles" ON public.crisp_workspaces;
-CREATE POLICY "Crisp workspaces access for cs roles"
+DROP POLICY IF EXISTS "Crisp workspaces select access for cs roles" ON public.crisp_workspaces;
+
+CREATE POLICY "Crisp workspaces select access for cs roles"
 ON public.crisp_workspaces
-FOR ALL
+FOR SELECT
 TO authenticated
 USING (
-    EXISTS (
-        SELECT 1 FROM public.user_roles
-        WHERE user_roles.user_id = auth.uid()
-        AND user_roles.role IN ('admin', 'cs_admin', 'cs')
-    )
-)
-WITH CHECK (
     EXISTS (
         SELECT 1 FROM public.user_roles
         WHERE user_roles.user_id = auth.uid()
@@ -108,9 +121,13 @@ WITH CHECK (
 
 -- RLS Policies for crisp_conversation_notes
 DROP POLICY IF EXISTS "Crisp conversation notes access for cs roles" ON public.crisp_conversation_notes;
-CREATE POLICY "Crisp conversation notes access for cs roles"
+DROP POLICY IF EXISTS "Crisp conversation notes select for cs roles" ON public.crisp_conversation_notes;
+DROP POLICY IF EXISTS "Crisp conversation notes insert for cs roles" ON public.crisp_conversation_notes;
+DROP POLICY IF EXISTS "Crisp conversation notes update/delete" ON public.crisp_conversation_notes;
+
+CREATE POLICY "Crisp conversation notes select for cs roles"
 ON public.crisp_conversation_notes
-FOR ALL
+FOR SELECT
 TO authenticated
 USING (
     EXISTS (
@@ -118,12 +135,39 @@ USING (
         WHERE user_roles.user_id = auth.uid()
         AND user_roles.role IN ('admin', 'cs_admin', 'cs')
     )
-)
+);
+
+CREATE POLICY "Crisp conversation notes insert for cs roles"
+ON public.crisp_conversation_notes
+FOR INSERT
+TO authenticated
 WITH CHECK (
-    EXISTS (
+    created_by = auth.uid()
+    AND EXISTS (
         SELECT 1 FROM public.user_roles
         WHERE user_roles.user_id = auth.uid()
         AND user_roles.role IN ('admin', 'cs_admin', 'cs')
+    )
+);
+
+CREATE POLICY "Crisp conversation notes update/delete"
+ON public.crisp_conversation_notes
+FOR ALL
+TO authenticated
+USING (
+    created_by = auth.uid()
+    OR EXISTS (
+        SELECT 1 FROM public.user_roles
+        WHERE user_roles.user_id = auth.uid()
+        AND user_roles.role IN ('admin', 'cs_admin')
+    )
+)
+WITH CHECK (
+    created_by = auth.uid()
+    OR EXISTS (
+        SELECT 1 FROM public.user_roles
+        WHERE user_roles.user_id = auth.uid()
+        AND user_roles.role IN ('admin', 'cs_admin')
     )
 );
 
