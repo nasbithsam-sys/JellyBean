@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow, format } from "date-fns";
@@ -24,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { syncCrispHistory, sendCrispMessage } from "@/lib/crisp.functions";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 
@@ -64,6 +66,8 @@ function CrispChatInbox() {
   const [syncing, setSyncing] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const syncHistoryFn = useServerFn(syncCrispHistory);
+  const sendMessageFn = useServerFn(sendCrispMessage);
 
   // 1. Fetch Crisp Conversations
   const conversationsQuery = useQuery({
