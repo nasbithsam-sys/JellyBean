@@ -38,6 +38,18 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
       return { ok: false as const, error: "Crisp integration is not configured. Missing Crisp API credentials." };
     }
 
+    // Helper to resolve workspace name via GET /v1/website/{website_id}
+    async function resolveWorkspaceName(websiteId: string, headers: Record<string, string>): Promise<string | null> {
+      try {
+        const res = await fetch(`https://api.crisp.chat/v1/website/${websiteId}`, { headers });
+        if (!res.ok) return null;
+        const json = (await res.json()) as { data?: { name?: string } };
+        return json?.data?.name || null;
+      } catch {
+        return null;
+      }
+    }
+
     let totalWorkspacesSynced = 0;
     let totalSyncedConversations = 0;
     let totalSyncedMessages = 0;
@@ -47,22 +59,33 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
     if (data.websiteId) {
       const targetWebsiteId = data.websiteId;
 
-      // Option A: Check if enabled in crisp_workspaces + pluginCreds exist
+      // Option A: Check if enabled in crisp_workspaces + connection_mode === "plugin" + pluginCreds exist
       let isPluginTarget = false;
+      let targetWsRecord: any = null;
+
       if (pluginCreds) {
         const { data: wsRecord } = await supabaseAdmin
           .from("crisp_workspaces")
-          .select("crisp_website_id, enabled")
+          .select("crisp_website_id, workspace_name, enabled, connection_mode")
           .eq("crisp_website_id", targetWebsiteId)
-          .eq("enabled", true)
           .maybeSingle();
 
-        if (wsRecord) isPluginTarget = true;
+        if (wsRecord && wsRecord.enabled && wsRecord.connection_mode === "plugin") {
+          isPluginTarget = true;
+          targetWsRecord = wsRecord;
+        }
       }
 
       if (isPluginTarget && pluginCreds) {
         // Sync target workspace via Plugin Token
         const headers = crispPluginHeaders(pluginCreds);
+        let wsName = targetWsRecord?.workspace_name || null;
+
+        // Resolve workspace name if missing
+        if (!wsName) {
+          wsName = await resolveWorkspaceName(targetWebsiteId, headers);
+        }
+
         let wsConversations = 0;
         let wsMessages = 0;
 
@@ -153,7 +176,10 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
 
         await supabaseAdmin
           .from("crisp_workspaces")
-          .update({ last_synced_at: new Date().toISOString() })
+          .update({
+            ...(wsName ? { workspace_name: wsName } : {}),
+            last_synced_at: new Date().toISOString(),
+          })
           .eq("crisp_website_id", targetWebsiteId);
 
         return {
@@ -168,6 +194,19 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
       // Option B: Check if target equals legacy CRISP_WEBSITE_ID + legacyCreds exist
       if (legacyCreds && targetWebsiteId === legacyCreds.websiteId) {
         const headers = crispWebsiteHeaders(legacyCreds);
+        
+        // Resolve legacy workspace name if missing
+        const { data: existingLegacyWs } = await supabaseAdmin
+          .from("crisp_workspaces")
+          .select("workspace_name, connection_mode")
+          .eq("crisp_website_id", targetWebsiteId)
+          .maybeSingle();
+
+        let wsName = existingLegacyWs?.workspace_name || null;
+        if (!wsName) {
+          wsName = await resolveWorkspaceName(targetWebsiteId, headers);
+        }
+
         let wsConversations = 0;
         let wsMessages = 0;
 
@@ -256,6 +295,20 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
           }
         }
 
+        // Store legacy workspace 1 in crisp_workspaces with connection_mode = legacy
+        await supabaseAdmin
+          .from("crisp_workspaces")
+          .upsert(
+            {
+              crisp_website_id: targetWebsiteId,
+              workspace_name: wsName,
+              connection_mode: existingLegacyWs?.connection_mode || "legacy",
+              enabled: true,
+              last_synced_at: new Date().toISOString(),
+            },
+            { onConflict: "crisp_website_id" }
+          );
+
         return {
           ok: true as const,
           workspaces_synced: 1,
@@ -270,21 +323,28 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
     }
 
     // ALL WORKSPACES SYNC REQUEST
-    const syncedWebsiteIds = new Set<string>();
+    const pluginSyncedWebsiteIds = new Set<string>();
 
     // 1. Sync every enabled Plugin workspace using Plugin Token
     if (pluginCreds) {
       const { data: workspaces } = await supabaseAdmin
         .from("crisp_workspaces")
-        .select("crisp_website_id, workspace_name")
-        .eq("enabled", true);
+        .select("crisp_website_id, workspace_name, connection_mode")
+        .eq("enabled", true)
+        .eq("connection_mode", "plugin");
 
       const targetWorkspaces = workspaces || [];
       const headers = crispPluginHeaders(pluginCreds);
 
       for (const ws of targetWorkspaces) {
         const websiteId = ws.crisp_website_id;
-        syncedWebsiteIds.add(websiteId);
+        pluginSyncedWebsiteIds.add(websiteId);
+        let wsName = ws.workspace_name;
+
+        if (!wsName) {
+          wsName = await resolveWorkspaceName(websiteId, headers);
+        }
+
         let wsConversations = 0;
         let wsMessages = 0;
 
@@ -369,7 +429,10 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
 
         await supabaseAdmin
           .from("crisp_workspaces")
-          .update({ last_synced_at: new Date().toISOString() })
+          .update({
+            ...(wsName ? { workspace_name: wsName } : {}),
+            last_synced_at: new Date().toISOString(),
+          })
           .eq("crisp_website_id", websiteId);
 
         totalWorkspacesSynced++;
@@ -380,9 +443,21 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
     }
 
     // 2. PLUS sync legacy CRISP_WEBSITE_ID using Website Token IF NOT ALREADY synced via Plugin mode
-    if (legacyCreds && !syncedWebsiteIds.has(legacyCreds.websiteId)) {
+    if (legacyCreds && !pluginSyncedWebsiteIds.has(legacyCreds.websiteId)) {
       const websiteId = legacyCreds.websiteId;
       const headers = crispWebsiteHeaders(legacyCreds);
+
+      const { data: existingLegacyWs } = await supabaseAdmin
+        .from("crisp_workspaces")
+        .select("workspace_name, connection_mode")
+        .eq("crisp_website_id", websiteId)
+        .maybeSingle();
+
+      let wsName = existingLegacyWs?.workspace_name || null;
+      if (!wsName) {
+        wsName = await resolveWorkspaceName(websiteId, headers);
+      }
+
       let wsConversations = 0;
       let wsMessages = 0;
 
@@ -465,6 +540,19 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
         }
       }
 
+      await supabaseAdmin
+        .from("crisp_workspaces")
+        .upsert(
+          {
+            crisp_website_id: websiteId,
+            workspace_name: wsName,
+            connection_mode: existingLegacyWs?.connection_mode || "legacy",
+            enabled: true,
+            last_synced_at: new Date().toISOString(),
+          },
+          { onConflict: "crisp_website_id" }
+        );
+
       totalWorkspacesSynced++;
       totalSyncedConversations += wsConversations;
       totalSyncedMessages += wsMessages;
@@ -531,24 +619,22 @@ export const sendCrispMessage = createServerFn({ method: "POST" })
     let requestHeaders: Record<string, string> | null = null;
     let errorMode: "plugin" | "website" = "plugin";
 
-    // ROUTING ORDER:
-    // A) If crisp_workspaces contains the conversation website and enabled=true, AND Plugin credentials exist -> use Plugin Token
-    if (pluginCreds) {
-      const { data: wsRecord } = await supabaseAdmin
-        .from("crisp_workspaces")
-        .select("id, enabled")
-        .eq("crisp_website_id", websiteId)
-        .eq("enabled", true)
-        .maybeSingle();
+    // FETCH WORKSPACE RECORD
+    const { data: wsRecord } = await supabaseAdmin
+      .from("crisp_workspaces")
+      .select("id, enabled, connection_mode")
+      .eq("crisp_website_id", websiteId)
+      .maybeSingle();
 
-      if (wsRecord) {
-        requestHeaders = crispPluginHeaders(pluginCreds);
-        errorMode = "plugin";
-      }
+    // ROUTING ORDER:
+    // A) Plugin Token: enabled=true AND connection_mode='plugin' AND Plugin credentials exist
+    if (pluginCreds && wsRecord && wsRecord.enabled && wsRecord.connection_mode === "plugin") {
+      requestHeaders = crispPluginHeaders(pluginCreds);
+      errorMode = "plugin";
     }
 
-    // B) Otherwise, if conversation.crisp_website_id === CRISP_WEBSITE_ID AND legacy credentials exist -> use legacy Website Token
-    if (!requestHeaders && legacyCreds && websiteId === legacyCreds.websiteId) {
+    // B) Legacy Website Token: conversation.crisp_website_id === CRISP_WEBSITE_ID AND legacy credentials exist AND (no wsRecord OR connection_mode='legacy')
+    if (!requestHeaders && legacyCreds && websiteId === legacyCreds.websiteId && (!wsRecord || wsRecord.connection_mode === "legacy")) {
       requestHeaders = crispWebsiteHeaders(legacyCreds);
       errorMode = "website";
     }

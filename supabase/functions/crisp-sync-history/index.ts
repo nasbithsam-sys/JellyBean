@@ -8,6 +8,22 @@ const corsHeaders = {
 
 const ALLOWED_ROLES = ["admin", "cs_admin", "cs"];
 
+async function resolveWorkspaceName(websiteId: string, authString: string, crispTier: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://api.crisp.chat/v1/website/${websiteId}`, {
+      headers: {
+        "Authorization": `Basic ${authString}`,
+        "X-Crisp-Tier": crispTier,
+      },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.data?.name || null;
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -69,31 +85,39 @@ serve(async (req) => {
 
     let totalSyncedConversations = 0;
     let totalSyncedMessages = 0;
-    const syncedWebsiteIds = new Set<string>();
+    const pluginSyncedWebsiteIds = new Set<string>();
 
     // SPECIFIC WORKSPACE REQUEST
     if (targetWebsiteId) {
       let isPluginTarget = false;
+      let targetWsRecord: any = null;
 
       if (pluginTokenId && pluginTokenKey) {
         const { data: wsRecord } = await supabase
           .from("crisp_workspaces")
-          .select("crisp_website_id, enabled")
+          .select("crisp_website_id, workspace_name, enabled, connection_mode")
           .eq("crisp_website_id", targetWebsiteId)
-          .eq("enabled", true)
           .maybeSingle();
 
-        if (wsRecord) isPluginTarget = true;
+        if (wsRecord && wsRecord.enabled && wsRecord.connection_mode === "plugin") {
+          isPluginTarget = true;
+          targetWsRecord = wsRecord;
+        }
       }
 
       if (isPluginTarget && pluginTokenId && pluginTokenKey) {
-        // Sync via Plugin Token
+        const pluginAuth = btoa(`${pluginTokenId}:${pluginTokenKey}`);
         const headers = {
-          "Authorization": `Basic ${btoa(`${pluginTokenId}:${pluginTokenKey}`)}`,
+          "Authorization": `Basic ${pluginAuth}`,
           "X-Crisp-Tier": "plugin",
         };
 
         const websiteId = targetWebsiteId;
+        let wsName = targetWsRecord?.workspace_name || null;
+
+        if (!wsName) {
+          wsName = await resolveWorkspaceName(websiteId, pluginAuth, "plugin");
+        }
 
         for (let page = 1; page <= 5; page++) {
           const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
@@ -186,7 +210,10 @@ serve(async (req) => {
 
         await supabase
           .from("crisp_workspaces")
-          .update({ last_synced_at: new Date().toISOString() })
+          .update({
+            ...(wsName ? { workspace_name: wsName } : {}),
+            last_synced_at: new Date().toISOString(),
+          })
           .eq("crisp_website_id", websiteId);
 
         return new Response(
@@ -201,12 +228,24 @@ serve(async (req) => {
 
       // Check legacy mode for specific target
       if (legacyTokenId && legacyTokenKey && legacyWebsiteId === targetWebsiteId) {
+        const legacyAuth = btoa(`${legacyTokenId}:${legacyTokenKey}`);
         const headers = {
-          "Authorization": `Basic ${btoa(`${legacyTokenId}:${legacyTokenKey}`)}`,
+          "Authorization": `Basic ${legacyAuth}`,
           "X-Crisp-Tier": "website",
         };
 
         const websiteId = targetWebsiteId;
+
+        const { data: existingLegacyWs } = await supabase
+          .from("crisp_workspaces")
+          .select("workspace_name, connection_mode")
+          .eq("crisp_website_id", websiteId)
+          .maybeSingle();
+
+        let wsName = existingLegacyWs?.workspace_name || null;
+        if (!wsName) {
+          wsName = await resolveWorkspaceName(websiteId, legacyAuth, "website");
+        }
 
         for (let page = 1; page <= 5; page++) {
           const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
@@ -296,6 +335,19 @@ serve(async (req) => {
             }
           }
         }
+
+        await supabase
+          .from("crisp_workspaces")
+          .upsert(
+            {
+              crisp_website_id: websiteId,
+              workspace_name: wsName,
+              connection_mode: existingLegacyWs?.connection_mode || "legacy",
+              enabled: true,
+              last_synced_at: new Date().toISOString(),
+            },
+            { onConflict: "crisp_website_id" }
+          );
 
         return new Response(
           JSON.stringify({
@@ -318,18 +370,25 @@ serve(async (req) => {
     if (pluginTokenId && pluginTokenKey) {
       const { data: workspaces } = await supabase
         .from("crisp_workspaces")
-        .select("crisp_website_id, workspace_name")
-        .eq("enabled", true);
+        .select("crisp_website_id, workspace_name, connection_mode")
+        .eq("enabled", true)
+        .eq("connection_mode", "plugin");
 
       const targetWorkspaces = workspaces || [];
+      const pluginAuth = btoa(`${pluginTokenId}:${pluginTokenKey}`);
       const headers = {
-        "Authorization": `Basic ${btoa(`${pluginTokenId}:${pluginTokenKey}`)}`,
+        "Authorization": `Basic ${pluginAuth}`,
         "X-Crisp-Tier": "plugin",
       };
 
       for (const ws of targetWorkspaces) {
         const websiteId = ws.crisp_website_id;
-        syncedWebsiteIds.add(websiteId);
+        pluginSyncedWebsiteIds.add(websiteId);
+        let wsName = ws.workspace_name;
+
+        if (!wsName) {
+          wsName = await resolveWorkspaceName(websiteId, pluginAuth, "plugin");
+        }
 
         for (let page = 1; page <= 5; page++) {
           const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
@@ -423,18 +482,33 @@ serve(async (req) => {
 
         await supabase
           .from("crisp_workspaces")
-          .update({ last_synced_at: new Date().toISOString() })
+          .update({
+            ...(wsName ? { workspace_name: wsName } : {}),
+            last_synced_at: new Date().toISOString(),
+          })
           .eq("crisp_website_id", websiteId);
       }
     }
 
     // 2. PLUS sync legacy CRISP_WEBSITE_ID using Website Token IF NOT ALREADY SYNCED via Plugin mode
-    if (legacyTokenId && legacyTokenKey && legacyWebsiteId && !syncedWebsiteIds.has(legacyWebsiteId)) {
+    if (legacyTokenId && legacyTokenKey && legacyWebsiteId && !pluginSyncedWebsiteIds.has(legacyWebsiteId)) {
       const websiteId = legacyWebsiteId;
+      const legacyAuth = btoa(`${legacyTokenId}:${legacyTokenKey}`);
       const headers = {
-        "Authorization": `Basic ${btoa(`${legacyTokenId}:${legacyTokenKey}`)}`,
+        "Authorization": `Basic ${legacyAuth}`,
         "X-Crisp-Tier": "website",
       };
+
+      const { data: existingLegacyWs } = await supabase
+        .from("crisp_workspaces")
+        .select("workspace_name, connection_mode")
+        .eq("crisp_website_id", websiteId)
+        .maybeSingle();
+
+      let wsName = existingLegacyWs?.workspace_name || null;
+      if (!wsName) {
+        wsName = await resolveWorkspaceName(websiteId, legacyAuth, "website");
+      }
 
       for (let page = 1; page <= 5; page++) {
         const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
@@ -524,6 +598,19 @@ serve(async (req) => {
           }
         }
       }
+
+      await supabase
+        .from("crisp_workspaces")
+        .upsert(
+          {
+            crisp_website_id: websiteId,
+            workspace_name: wsName,
+            connection_mode: existingLegacyWs?.connection_mode || "legacy",
+            enabled: true,
+            last_synced_at: new Date().toISOString(),
+          },
+          { onConflict: "crisp_website_id" }
+        );
     }
 
     return new Response(

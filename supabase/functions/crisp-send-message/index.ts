@@ -100,28 +100,25 @@ serve(async (req) => {
     const legacyTokenId = Deno.env.get("CRISP_TOKEN_ID");
     const legacyTokenKey = Deno.env.get("CRISP_TOKEN_KEY");
 
+    const { data: wsRecord } = await supabase
+      .from("crisp_workspaces")
+      .select("id, enabled, connection_mode")
+      .eq("crisp_website_id", websiteId)
+      .maybeSingle();
+
     let authString = "";
     let crispTier = "plugin";
     let isMatched = false;
 
-    // A) If crisp_workspaces contains the conversation website and enabled=true, AND Plugin credentials exist -> use Plugin Token
-    if (pluginTokenId && pluginTokenKey) {
-      const { data: wsRecord } = await supabase
-        .from("crisp_workspaces")
-        .select("id, enabled")
-        .eq("crisp_website_id", websiteId)
-        .eq("enabled", true)
-        .maybeSingle();
-
-      if (wsRecord) {
-        authString = btoa(`${pluginTokenId}:${pluginTokenKey}`);
-        crispTier = "plugin";
-        isMatched = true;
-      }
+    // A) Plugin Token: enabled=true AND connection_mode='plugin' AND Plugin credentials exist
+    if (pluginTokenId && pluginTokenKey && wsRecord && wsRecord.enabled && wsRecord.connection_mode === "plugin") {
+      authString = btoa(`${pluginTokenId}:${pluginTokenKey}`);
+      crispTier = "plugin";
+      isMatched = true;
     }
 
-    // B) Otherwise, if conversation.crisp_website_id === CRISP_WEBSITE_ID AND legacy Website Token credentials exist -> use legacy Website Token
-    if (!isMatched && legacyTokenId && legacyTokenKey && legacyWebsiteId === websiteId) {
+    // B) Legacy Website Token: conversation.crisp_website_id === CRISP_WEBSITE_ID AND legacy credentials exist AND (no wsRecord OR connection_mode='legacy')
+    if (!isMatched && legacyTokenId && legacyTokenKey && legacyWebsiteId === websiteId && (!wsRecord || wsRecord.connection_mode === "legacy")) {
       authString = btoa(`${legacyTokenId}:${legacyTokenKey}`);
       crispTier = "website";
       isMatched = true;

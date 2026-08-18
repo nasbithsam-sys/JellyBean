@@ -46,12 +46,36 @@ async function verifyCrispPluginSignature(secret: string, timestamp: string, raw
   }
 }
 
+// Helper to fetch Crisp website details (name, domain, logo) via Crisp API GET /v1/website/{website_id}
+async function fetchCrispWebsiteDetails(websiteId: string, authString: string, crispTier: string): Promise<{ name?: string; domain?: string; logo?: string } | null> {
+  try {
+    const res = await fetch(`https://api.crisp.chat/v1/website/${websiteId}`, {
+      headers: {
+        "Authorization": `Basic ${authString}`,
+        "X-Crisp-Tier": crispTier,
+      },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const data = json?.data || {};
+    return {
+      name: data.name || undefined,
+      domain: data.domain || undefined,
+      logo: data.logo || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
+    const pluginTokenId = Deno.env.get("CRISP_PLUGIN_TOKEN_ID");
+    const pluginTokenKey = Deno.env.get("CRISP_PLUGIN_TOKEN_KEY");
     const pluginHookSecret = Deno.env.get("CRISP_PLUGIN_HOOK_SECRET");
     const legacyWebhookSecret = Deno.env.get("CRISP_WEBHOOK_SECRET");
     const legacyWebsiteIdConfig = Deno.env.get("CRISP_WEBSITE_ID");
@@ -66,7 +90,6 @@ serve(async (req) => {
     let authMode: "plugin" | "legacy_website" | null = null;
 
     // 1. DETERMINE AUTH MODE
-    // If X-Crisp-Signature header is present, treat request STRICTLY as a Plugin Hook.
     if (crispSignature) {
       if (!pluginHookSecret || !crispTimestamp) {
         return new Response(
@@ -77,7 +100,6 @@ serve(async (req) => {
 
       const isValidPluginSig = await verifyCrispPluginSignature(pluginHookSecret, crispTimestamp, rawBody, crispSignature);
       if (!isValidPluginSig) {
-        // DO NOT fall back to legacy ?key= when Crisp signature is present!
         return new Response(
           JSON.stringify({ error: "Unauthorized: Invalid Crisp plugin hook signature." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -86,7 +108,6 @@ serve(async (req) => {
 
       authMode = "plugin";
     } else if (legacyWebhookSecret && providedKey) {
-      // Requests without X-Crisp-Signature may use legacy ?key= secret
       if (timingSafeEqual(providedKey, legacyWebhookSecret)) {
         authMode = "legacy_website";
       } else {
@@ -133,7 +154,6 @@ serve(async (req) => {
     let websiteId = "";
 
     if (authMode === "plugin") {
-      // PLUGIN MODE: website identity MUST come from verified payload website_id. Never infer from CRISP_WEBSITE_ID.
       if (!payloadWebsiteId) {
         return new Response(JSON.stringify({ message: "No website_id in plugin payload, event ignored" }), {
           status: 200,
@@ -142,7 +162,6 @@ serve(async (req) => {
       }
       websiteId = payloadWebsiteId;
     } else {
-      // LEGACY WEBSITE MODE: Only permit legacy configured website ID.
       if (!legacyWebsiteIdConfig) {
         return new Response(JSON.stringify({ error: "CRISP_WEBSITE_ID is not configured for legacy mode" }), {
           status: 400,
@@ -164,29 +183,44 @@ serve(async (req) => {
         const isBound = data.bound === true;
         
         if (isBound) {
-          // Preserve installed_at if already present
+          // Resolve real workspace name if plugin credentials are present
+          let wsDetails: { name?: string; domain?: string; logo?: string } | null = null;
+          if (pluginTokenId && pluginTokenKey) {
+            const pluginAuth = btoa(`${pluginTokenId}:${pluginTokenKey}`);
+            wsDetails = await fetchCrispWebsiteDetails(websiteId, pluginAuth, "plugin");
+          }
+
           const { data: existingWs } = await supabase
             .from("crisp_workspaces")
-            .select("installed_at")
+            .select("installed_at, workspace_name, metadata")
             .eq("crisp_website_id", websiteId)
             .maybeSingle();
 
           const installedAt = existingWs?.installed_at || new Date().toISOString();
+          const resolvedName = wsDetails?.name || existingWs?.workspace_name || null;
+          const existingMeta = (existingWs?.metadata as Record<string, any>) || {};
+          const newMeta = {
+            ...existingMeta,
+            ...(wsDetails?.domain ? { domain: wsDetails.domain } : {}),
+            ...(wsDetails?.logo ? { logo: wsDetails.logo } : {}),
+          };
 
           await supabase
             .from("crisp_workspaces")
             .upsert(
               {
                 crisp_website_id: websiteId,
+                workspace_name: resolvedName,
+                connection_mode: "plugin",
                 enabled: true,
                 installed_at: installedAt,
                 last_seen_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
+                metadata: newMeta,
               },
               { onConflict: "crisp_website_id" }
             );
         } else {
-          // Unsubscribing/unbinding disables workspace without deleting conversations/messages/notes
           await supabase
             .from("crisp_workspaces")
             .update({
@@ -204,22 +238,29 @@ serve(async (req) => {
       }
 
       // For ordinary verified Plugin Hook events:
-      // Update last_seen_at, but DO NOT force enabled = true on an existing disabled workspace.
       const { data: existingWorkspace } = await supabase
         .from("crisp_workspaces")
-        .select("id, enabled")
+        .select("id, enabled, workspace_name")
         .eq("crisp_website_id", websiteId)
         .maybeSingle();
 
       if (!existingWorkspace) {
-        // Register new workspace if first time seen
+        let wsDetails: { name?: string; domain?: string; logo?: string } | null = null;
+        if (pluginTokenId && pluginTokenKey) {
+          const pluginAuth = btoa(`${pluginTokenId}:${pluginTokenKey}`);
+          wsDetails = await fetchCrispWebsiteDetails(websiteId, pluginAuth, "plugin");
+        }
+
         await supabase
           .from("crisp_workspaces")
           .insert({
             crisp_website_id: websiteId,
+            workspace_name: wsDetails?.name || null,
+            connection_mode: "plugin",
             enabled: true,
             installed_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
+            metadata: wsDetails ? { domain: wsDetails.domain, logo: wsDetails.logo } : {},
           });
       } else {
         await supabase

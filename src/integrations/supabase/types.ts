@@ -296,6 +296,7 @@ export type Database = {
       }
       crisp_workspaces: {
         Row: {
+          connection_mode: string
           created_at: string
           crisp_website_id: string
           enabled: boolean
@@ -308,6 +309,7 @@ export type Database = {
           workspace_name: string | null
         }
         Insert: {
+          connection_mode?: string
           created_at?: string
           crisp_website_id: string
           enabled?: boolean
@@ -320,6 +322,7 @@ export type Database = {
           workspace_name?: string | null
         }
         Update: {
+          connection_mode?: string
           created_at?: string
           crisp_website_id?: string
           enabled?: boolean
