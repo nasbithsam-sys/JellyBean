@@ -1331,6 +1331,7 @@ export type Database = {
         | "wrong_lead"
         | "wrong_service"
         | "wrong_person"
+        | "small_service"
       raw_lead_cancel_reason:
         | "not_a_lead"
         | "general_post"
@@ -1497,6 +1498,7 @@ export const Constants = {
         "wrong_lead",
         "wrong_service",
         "wrong_person",
+        "small_service",
       ],
       raw_lead_cancel_reason: [
         "not_a_lead",
