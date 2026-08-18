@@ -69,36 +69,259 @@ serve(async (req) => {
 
     let totalSyncedConversations = 0;
     let totalSyncedMessages = 0;
+    const syncedWebsiteIds = new Set<string>();
 
-    if (pluginTokenId && pluginTokenKey) {
-      // Plugin Mode: Sync ONLY enabled crisp_workspaces
-      let query = supabase.from("crisp_workspaces").select("crisp_website_id, workspace_name").eq("enabled", true);
-      if (targetWebsiteId) {
-        query = query.eq("crisp_website_id", targetWebsiteId);
+    // SPECIFIC WORKSPACE REQUEST
+    if (targetWebsiteId) {
+      let isPluginTarget = false;
+
+      if (pluginTokenId && pluginTokenKey) {
+        const { data: wsRecord } = await supabase
+          .from("crisp_workspaces")
+          .select("crisp_website_id, enabled")
+          .eq("crisp_website_id", targetWebsiteId)
+          .eq("enabled", true)
+          .maybeSingle();
+
+        if (wsRecord) isPluginTarget = true;
       }
 
-      const { data: workspaces } = await query;
-      const targetWorkspaces = workspaces || [];
+      if (isPluginTarget && pluginTokenId && pluginTokenKey) {
+        // Sync via Plugin Token
+        const headers = {
+          "Authorization": `Basic ${btoa(`${pluginTokenId}:${pluginTokenKey}`)}`,
+          "X-Crisp-Tier": "plugin",
+        };
 
-      if (targetWebsiteId && targetWorkspaces.length === 0) {
-        return new Response(
-          JSON.stringify({ error: "Workspace is not registered or is disabled." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+        const websiteId = targetWebsiteId;
 
-      if (targetWorkspaces.length === 0) {
+        for (let page = 1; page <= 5; page++) {
+          const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
+          const listRes = await fetch(listUrl, { headers });
+          if (!listRes.ok) break;
+
+          const listData = await listRes.json();
+          const sessions = listData.data || [];
+          if (!Array.isArray(sessions) || sessions.length === 0) break;
+
+          for (const session of sessions) {
+            const sessionId = session.session_id;
+            if (!sessionId) continue;
+
+            const customerMeta = session.meta || {};
+            const incomingName = customerMeta.nickname || session.nickname || null;
+            const incomingEmail = customerMeta.email || session.email || null;
+            const incomingPhone = customerMeta.phone || session.phone || null;
+            const incomingAvatar = customerMeta.avatar || session.avatar || null;
+            const state = session.state || "unresolved";
+
+            const { data: existingConv } = await supabase
+              .from("crisp_conversations")
+              .select("customer_name, customer_email, customer_phone, customer_avatar")
+              .eq("crisp_website_id", websiteId)
+              .eq("crisp_session_id", sessionId)
+              .maybeSingle();
+
+            const finalName = incomingName || existingConv?.customer_name || null;
+            const finalEmail = incomingEmail || existingConv?.customer_email || null;
+            const finalPhone = incomingPhone || existingConv?.customer_phone || null;
+            const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
+
+            const { data: convRecord, error: convErr } = await supabase
+              .from("crisp_conversations")
+              .upsert(
+                {
+                  crisp_website_id: websiteId,
+                  crisp_session_id: sessionId,
+                  customer_name: finalName,
+                  customer_email: finalEmail,
+                  customer_phone: finalPhone,
+                  customer_avatar: finalAvatar,
+                  status: state,
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: "crisp_website_id,crisp_session_id" }
+              )
+              .select("id")
+              .single();
+
+            if (convErr || !convRecord) continue;
+            totalSyncedConversations++;
+
+            const msgsUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/messages`;
+            const msgsRes = await fetch(msgsUrl, { headers });
+
+            if (msgsRes.ok) {
+              const msgsData = await msgsRes.json();
+              const messagesList = msgsData.data || [];
+
+              for (const msg of messagesList) {
+                const rawContent = msg.content;
+                let textContent = "";
+                if (typeof rawContent === "string") textContent = rawContent;
+                else if (rawContent && typeof rawContent === "object") textContent = rawContent.text || JSON.stringify(rawContent);
+
+                const crispMsgId = String(msg.fingerprint || `${sessionId}_${msg.timestamp}`);
+                const isOperator = String(msg.from).toLowerCase() === "operator";
+                const sentAt = msg.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+
+                const { error: msgErr } = await supabase.from("crisp_messages").insert({
+                  conversation_id: convRecord.id,
+                  crisp_website_id: websiteId,
+                  crisp_session_id: sessionId,
+                  crisp_message_id: crispMsgId,
+                  sender_type: isOperator ? "operator" : "customer",
+                  direction: isOperator ? "outgoing" : "incoming",
+                  content: textContent || "[Attachment/Content]",
+                  message_type: msg.type || "text",
+                  sent_at: sentAt,
+                  raw_payload: msg,
+                });
+
+                if (!msgErr) totalSyncedMessages++;
+              }
+            }
+          }
+        }
+
+        await supabase
+          .from("crisp_workspaces")
+          .update({ last_synced_at: new Date().toISOString() })
+          .eq("crisp_website_id", websiteId);
+
         return new Response(
           JSON.stringify({
             status: "success",
-            synced_conversations: 0,
-            synced_messages: 0,
-            message: "No registered Crisp Plugin workspaces found.",
+            synced_conversations: totalSyncedConversations,
+            synced_messages: totalSyncedMessages,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      // Check legacy mode for specific target
+      if (legacyTokenId && legacyTokenKey && legacyWebsiteId === targetWebsiteId) {
+        const headers = {
+          "Authorization": `Basic ${btoa(`${legacyTokenId}:${legacyTokenKey}`)}`,
+          "X-Crisp-Tier": "website",
+        };
+
+        const websiteId = targetWebsiteId;
+
+        for (let page = 1; page <= 5; page++) {
+          const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
+          const listRes = await fetch(listUrl, { headers });
+          if (!listRes.ok) break;
+
+          const listData = await listRes.json();
+          const sessions = listData.data || [];
+          if (!Array.isArray(sessions) || sessions.length === 0) break;
+
+          for (const session of sessions) {
+            const sessionId = session.session_id;
+            if (!sessionId) continue;
+
+            const customerMeta = session.meta || {};
+            const incomingName = customerMeta.nickname || session.nickname || null;
+            const incomingEmail = customerMeta.email || session.email || null;
+            const incomingPhone = customerMeta.phone || session.phone || null;
+            const incomingAvatar = customerMeta.avatar || session.avatar || null;
+            const state = session.state || "unresolved";
+
+            const { data: existingConv } = await supabase
+              .from("crisp_conversations")
+              .select("customer_name, customer_email, customer_phone, customer_avatar")
+              .eq("crisp_website_id", websiteId)
+              .eq("crisp_session_id", sessionId)
+              .maybeSingle();
+
+            const finalName = incomingName || existingConv?.customer_name || null;
+            const finalEmail = incomingEmail || existingConv?.customer_email || null;
+            const finalPhone = incomingPhone || existingConv?.customer_phone || null;
+            const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
+
+            const { data: convRecord, error: convErr } = await supabase
+              .from("crisp_conversations")
+              .upsert(
+                {
+                  crisp_website_id: websiteId,
+                  crisp_session_id: sessionId,
+                  customer_name: finalName,
+                  customer_email: finalEmail,
+                  customer_phone: finalPhone,
+                  customer_avatar: finalAvatar,
+                  status: state,
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: "crisp_website_id,crisp_session_id" }
+              )
+              .select("id")
+              .single();
+
+            if (convErr || !convRecord) continue;
+            totalSyncedConversations++;
+
+            const msgsUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/messages`;
+            const msgsRes = await fetch(msgsUrl, { headers });
+
+            if (msgsRes.ok) {
+              const msgsData = await msgsRes.json();
+              const messagesList = msgsData.data || [];
+
+              for (const msg of messagesList) {
+                const rawContent = msg.content;
+                let textContent = "";
+                if (typeof rawContent === "string") textContent = rawContent;
+                else if (rawContent && typeof rawContent === "object") textContent = rawContent.text || JSON.stringify(rawContent);
+
+                const crispMsgId = String(msg.fingerprint || `${sessionId}_${msg.timestamp}`);
+                const isOperator = String(msg.from).toLowerCase() === "operator";
+                const sentAt = msg.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+
+                const { error: msgErr } = await supabase.from("crisp_messages").insert({
+                  conversation_id: convRecord.id,
+                  crisp_website_id: websiteId,
+                  crisp_session_id: sessionId,
+                  crisp_message_id: crispMsgId,
+                  sender_type: isOperator ? "operator" : "customer",
+                  direction: isOperator ? "outgoing" : "incoming",
+                  content: textContent || "[Attachment/Content]",
+                  message_type: msg.type || "text",
+                  sent_at: sentAt,
+                  raw_payload: msg,
+                });
+
+                if (!msgErr) totalSyncedMessages++;
+              }
+            }
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            status: "success",
+            synced_conversations: totalSyncedConversations,
+            synced_messages: totalSyncedMessages,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ error: "Workspace is not registered, enabled, or configured." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ALL WORKSPACES REQUEST
+    // 1. Sync all enabled Plugin workspaces using Plugin Token
+    if (pluginTokenId && pluginTokenKey) {
+      const { data: workspaces } = await supabase
+        .from("crisp_workspaces")
+        .select("crisp_website_id, workspace_name")
+        .eq("enabled", true);
+
+      const targetWorkspaces = workspaces || [];
       const headers = {
         "Authorization": `Basic ${btoa(`${pluginTokenId}:${pluginTokenKey}`)}`,
         "X-Crisp-Tier": "plugin",
@@ -106,6 +329,7 @@ serve(async (req) => {
 
       for (const ws of targetWorkspaces) {
         const websiteId = ws.crisp_website_id;
+        syncedWebsiteIds.add(websiteId);
 
         for (let page = 1; page <= 5; page++) {
           const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
@@ -128,7 +352,6 @@ serve(async (req) => {
             const incomingAvatar = customerMeta.avatar || session.avatar || null;
             const state = session.state || "unresolved";
 
-            // Preserve existing customer details in Edge Function history sync too
             const { data: existingConv } = await supabase
               .from("crisp_conversations")
               .select("customer_name, customer_email, customer_phone, customer_avatar")
@@ -203,16 +426,11 @@ serve(async (req) => {
           .update({ last_synced_at: new Date().toISOString() })
           .eq("crisp_website_id", websiteId);
       }
-    } else if (legacyTokenId && legacyTokenKey && legacyWebsiteId) {
-      // Legacy Mode: Sync ONLY CRISP_WEBSITE_ID using X-Crisp-Tier: website
-      const websiteId = legacyWebsiteId;
-      if (targetWebsiteId && targetWebsiteId !== websiteId) {
-        return new Response(
-          JSON.stringify({ error: "Legacy credentials can only sync the configured CRISP_WEBSITE_ID." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    }
 
+    // 2. PLUS sync legacy CRISP_WEBSITE_ID using Website Token IF NOT ALREADY SYNCED via Plugin mode
+    if (legacyTokenId && legacyTokenKey && legacyWebsiteId && !syncedWebsiteIds.has(legacyWebsiteId)) {
+      const websiteId = legacyWebsiteId;
       const headers = {
         "Authorization": `Basic ${btoa(`${legacyTokenId}:${legacyTokenKey}`)}`,
         "X-Crisp-Tier": "website",

@@ -102,30 +102,35 @@ serve(async (req) => {
 
     let authString = "";
     let crispTier = "plugin";
+    let isMatched = false;
 
+    // A) If crisp_workspaces contains the conversation website and enabled=true, AND Plugin credentials exist -> use Plugin Token
     if (pluginTokenId && pluginTokenKey) {
-      // Validate that workspace exists in crisp_workspaces AND enabled = true
       const { data: wsRecord } = await supabase
         .from("crisp_workspaces")
         .select("id, enabled")
         .eq("crisp_website_id", websiteId)
+        .eq("enabled", true)
         .maybeSingle();
 
-      if (!wsRecord || !wsRecord.enabled) {
-        return new Response(
-          JSON.stringify({ error: "Workspace is disabled or not registered as a Crisp Plugin." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (wsRecord) {
+        authString = btoa(`${pluginTokenId}:${pluginTokenKey}`);
+        crispTier = "plugin";
+        isMatched = true;
       }
+    }
 
-      authString = btoa(`${pluginTokenId}:${pluginTokenKey}`);
-      crispTier = "plugin";
-    } else if (legacyTokenId && legacyTokenKey && legacyWebsiteId === websiteId) {
+    // B) Otherwise, if conversation.crisp_website_id === CRISP_WEBSITE_ID AND legacy Website Token credentials exist -> use legacy Website Token
+    if (!isMatched && legacyTokenId && legacyTokenKey && legacyWebsiteId === websiteId) {
       authString = btoa(`${legacyTokenId}:${legacyTokenKey}`);
       crispTier = "website";
-    } else {
+      isMatched = true;
+    }
+
+    // C) Otherwise, return clear error
+    if (!isMatched) {
       return new Response(
-        JSON.stringify({ error: "Crisp API credentials not configured for this workspace." }),
+        JSON.stringify({ error: "Workspace is disabled, not registered as a Crisp Plugin, or not configured for legacy access." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

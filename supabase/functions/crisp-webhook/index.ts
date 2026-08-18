@@ -164,13 +164,22 @@ serve(async (req) => {
         const isBound = data.bound === true;
         
         if (isBound) {
+          // Preserve installed_at if already present
+          const { data: existingWs } = await supabase
+            .from("crisp_workspaces")
+            .select("installed_at")
+            .eq("crisp_website_id", websiteId)
+            .maybeSingle();
+
+          const installedAt = existingWs?.installed_at || new Date().toISOString();
+
           await supabase
             .from("crisp_workspaces")
             .upsert(
               {
                 crisp_website_id: websiteId,
                 enabled: true,
-                installed_at: new Date().toISOString(),
+                installed_at: installedAt,
                 last_seen_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               },

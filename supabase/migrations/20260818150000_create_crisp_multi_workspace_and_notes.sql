@@ -31,7 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_crisp_conversations_website_session ON public.cri
 CREATE INDEX IF NOT EXISTS idx_crisp_conversations_last_message_at ON public.crisp_conversations(last_message_at DESC);
 CREATE INDEX IF NOT EXISTS idx_crisp_conversations_status ON public.crisp_conversations(status);
 
--- 3. Modify crisp_messages for multi-workspace safety
+-- 3. Modify crisp_messages for multi-workspace safety (NO DELETE statements)
 ALTER TABLE public.crisp_messages ADD COLUMN IF NOT EXISTS crisp_website_id TEXT;
 
 -- Backfill crisp_website_id in existing messages from parent crisp_conversations
@@ -40,21 +40,30 @@ SET crisp_website_id = c.crisp_website_id
 FROM public.crisp_conversations c
 WHERE m.conversation_id = c.id AND m.crisp_website_id IS NULL;
 
--- Remove orphan messages that have no conversation match
-DELETE FROM public.crisp_messages WHERE crisp_website_id IS NULL;
+-- Validation 1: Fail if any orphan messages exist without matching workspace
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM public.crisp_messages WHERE crisp_website_id IS NULL
+    ) THEN
+        RAISE EXCEPTION 'Crisp migration stopped: messages exist without a matching conversation/workspace.';
+    END IF;
+END $$;
 
--- Deduplicate any existing duplicate messages on (crisp_website_id, crisp_message_id) before constraint creation
-DELETE FROM public.crisp_messages m1
-USING public.crisp_messages m2
-WHERE m1.id > m2.id
-  AND m1.crisp_website_id IS NOT NULL
-  AND m2.crisp_website_id IS NOT NULL
-  AND m1.crisp_message_id IS NOT NULL
-  AND m2.crisp_message_id IS NOT NULL
-  AND m1.crisp_website_id = m2.crisp_website_id
-  AND m1.crisp_message_id = m2.crisp_message_id;
+-- Validation 2: Fail if duplicate messages exist for (crisp_website_id, crisp_message_id)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM public.crisp_messages
+        WHERE crisp_website_id IS NOT NULL AND crisp_message_id IS NOT NULL
+        GROUP BY crisp_website_id, crisp_message_id
+        HAVING COUNT(*) > 1
+    ) THEN
+        RAISE EXCEPTION 'Crisp migration stopped: duplicate crisp_messages found for (crisp_website_id, crisp_message_id).';
+    END IF;
+END $$;
 
--- Make crisp_website_id NOT NULL after backfill & cleanup
+-- Make crisp_website_id NOT NULL after validation passes
 ALTER TABLE public.crisp_messages ALTER COLUMN crisp_website_id SET NOT NULL;
 
 -- Drop old single-column unique constraint on crisp_message_id if exists
@@ -171,15 +180,22 @@ WITH CHECK (
     )
 );
 
--- 7. Add new tables to Realtime Publication
+-- 7. Add new tables to Realtime Publication safely
 DO $$
 BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime'
-    ) THEN
-        ALTER PUBLICATION supabase_realtime ADD TABLE public.crisp_workspaces;
-        ALTER PUBLICATION supabase_realtime ADD TABLE public.crisp_conversation_notes;
+    IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_publication_tables 
+            WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'crisp_workspaces'
+        ) THEN
+            ALTER PUBLICATION supabase_realtime ADD TABLE public.crisp_workspaces;
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_publication_tables 
+            WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'crisp_conversation_notes'
+        ) THEN
+            ALTER PUBLICATION supabase_realtime ADD TABLE public.crisp_conversation_notes;
+        END IF;
     END IF;
-EXCEPTION
-    WHEN OTHERS THEN NULL;
 END $$;
