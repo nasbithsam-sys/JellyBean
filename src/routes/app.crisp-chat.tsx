@@ -175,9 +175,13 @@ function CrispChatInbox() {
     setConfigError(null);
 
     try {
-      await sendMessageFn({
+      const result = await sendMessageFn({
         data: { sessionId: selectedSessionId, content: messageInput.trim() },
       });
+      if (!result.ok) {
+        setConfigError(result.error);
+        return;
+      }
       setMessageInput("");
       void queryClient.invalidateQueries({ queryKey: ["crisp-messages", selectedSessionId] });
       void queryClient.invalidateQueries({ queryKey: ["crisp-conversations"] });
@@ -203,6 +207,10 @@ function CrispChatInbox() {
 
     try {
       const result = await syncHistoryFn({});
+      if (!result.ok) {
+        setConfigError(result.error);
+        return;
+      }
       alert(
         `Crisp history sync completed! Synced ${result?.synced_conversations ?? 0} conversations.`,
       );

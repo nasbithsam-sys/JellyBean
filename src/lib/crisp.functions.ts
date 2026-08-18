@@ -2,8 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const ALLOWED_ROLES = ["admin", "cs_admin", "cs"];
-
 export const syncCrispHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -15,11 +13,11 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
       .eq("user_id", userId);
     if (roleErr) throw new Error("Could not verify user roles");
     const roles = (roleRows ?? []).map((r) => String(r.role));
-    if (!roles.some((r) => ALLOWED_ROLES.includes(r))) {
+    if (!roles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
       throw new Error("Forbidden: Crisp Chat is restricted to admin, cs_admin and cs roles.");
     }
 
-    const { getCrispCredentials, crispHeaders, messageText } = await import("./crisp.server");
+    const { getCrispCredentials, crispHeaders, crispApiError, messageText } = await import("./crisp.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const creds = getCrispCredentials();
     const headers = crispHeaders(creds);
@@ -34,8 +32,12 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
       );
       if (!listRes.ok) {
         if (page === 1) {
-          const err = (await listRes.json().catch(() => ({}))) as { reason?: string };
-          throw new Error(err.reason || `Crisp API returned status ${listRes.status}`);
+          const err = (await listRes.json().catch(() => ({}))) as Record<string, unknown>;
+          console.error("[Crisp] History sync rejected", {
+            status: listRes.status,
+            reason: err["reason"] ?? err["message"] ?? "unknown",
+          });
+          return { ok: false as const, error: crispApiError(listRes.status, err) };
         }
         break;
       }
@@ -97,7 +99,11 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
       }
     }
 
-    return { synced_conversations: syncedConversations, synced_messages: syncedMessages };
+    return {
+      ok: true as const,
+      synced_conversations: syncedConversations,
+      synced_messages: syncedMessages,
+    };
   });
 
 export const sendCrispMessage = createServerFn({ method: "POST" })
@@ -117,11 +123,11 @@ export const sendCrispMessage = createServerFn({ method: "POST" })
       .eq("user_id", userId);
     if (roleErr) throw new Error("Could not verify user roles");
     const roles = (roleRows ?? []).map((r) => String(r.role));
-    if (!roles.some((r) => ALLOWED_ROLES.includes(r))) {
+    if (!roles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
       throw new Error("Forbidden: Crisp Chat is restricted to admin, cs_admin and cs roles.");
     }
 
-    const { getCrispCredentials, crispHeaders } = await import("./crisp.server");
+    const { getCrispCredentials, crispHeaders, crispApiError } = await import("./crisp.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const creds = getCrispCredentials();
 
@@ -141,11 +147,11 @@ export const sendCrispMessage = createServerFn({ method: "POST" })
 
     const payload = (await res.json().catch(() => ({}))) as Record<string, any>;
     if (!res.ok) {
-      throw new Error(
-        (payload["reason"] as string) ||
-          (payload["message"] as string) ||
-          `Crisp API returned status ${res.status}`,
-      );
+      console.error("[Crisp] Send message rejected", {
+        status: res.status,
+        reason: payload["reason"] ?? payload["message"] ?? "unknown",
+      });
+      return { ok: false as const, error: crispApiError(res.status, payload) };
     }
 
     const msgData = (payload["data"] ?? payload) as Record<string, any>;
@@ -183,5 +189,5 @@ export const sendCrispMessage = createServerFn({ method: "POST" })
       });
     }
 
-    return { crisp_message_id: crispMsgId, sent_at: sentAt };
+    return { ok: true as const, crisp_message_id: crispMsgId, sent_at: sentAt };
   });
