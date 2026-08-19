@@ -95,7 +95,8 @@ serve(async (req) => {
       let wsConversations = 0;
       let wsMessages = 0;
 
-      for (let page = 1; page <= 5; page++) {
+      // Paginate Crisp history until empty (safety cap: 50 pages)
+      for (let page = 1; page <= 50; page++) {
         const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
         const listRes = await fetch(listUrl, { headers });
         if (!listRes.ok) {
@@ -121,7 +122,7 @@ serve(async (req) => {
 
           const { data: existingConv } = await supabase
             .from("crisp_conversations")
-            .select("customer_name, customer_email, customer_phone, customer_avatar")
+            .select("customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at")
             .eq("crisp_website_id", websiteId)
             .eq("crisp_session_id", sessionId)
             .maybeSingle();
@@ -157,32 +158,56 @@ serve(async (req) => {
 
           if (msgsRes.ok) {
             const msgsData = await msgsRes.json();
-            const messagesList = msgsData.data || [];
+            const messagesList: any[] = msgsData.data || [];
 
-            for (const msg of messagesList) {
-              const rawContent = msg.content;
-              let textContent = "";
-              if (typeof rawContent === "string") textContent = rawContent;
-              else if (rawContent && typeof rawContent === "object") textContent = rawContent.text || JSON.stringify(rawContent);
+            if (messagesList.length > 0) {
+              // Sort messages chronologically ascending
+              messagesList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-              const crispMsgId = String(msg.fingerprint || `${sessionId}_${msg.timestamp}`);
-              const isOperator = String(msg.from).toLowerCase() === "operator";
-              const sentAt = msg.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+              for (const msg of messagesList) {
+                const rawContent = msg.content;
+                let textContent = "";
+                if (typeof rawContent === "string") textContent = rawContent;
+                else if (rawContent && typeof rawContent === "object") textContent = rawContent.text || JSON.stringify(rawContent);
 
-              const { error: msgErr } = await supabase.from("crisp_messages").insert({
-                conversation_id: convRecord.id,
-                crisp_website_id: websiteId,
-                crisp_session_id: sessionId,
-                crisp_message_id: crispMsgId,
-                sender_type: isOperator ? "operator" : "customer",
-                direction: isOperator ? "outgoing" : "incoming",
-                content: textContent || "[Attachment/Content]",
-                message_type: msg.type || "text",
-                sent_at: sentAt,
-                raw_payload: msg,
-              });
+                const crispMsgId = String(msg.fingerprint || `${sessionId}_${msg.timestamp}`);
+                const isOperator = String(msg.from).toLowerCase() === "operator";
+                const sentAt = msg.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
 
-              if (!msgErr) wsMessages++;
+                const { error: msgErr } = await supabase.from("crisp_messages").insert({
+                  conversation_id: convRecord.id,
+                  crisp_website_id: websiteId,
+                  crisp_session_id: sessionId,
+                  crisp_message_id: crispMsgId,
+                  sender_type: isOperator ? "operator" : "customer",
+                  direction: isOperator ? "outgoing" : "incoming",
+                  content: textContent || "[Attachment/Content]",
+                  message_type: msg.type || "text",
+                  sent_at: sentAt,
+                  raw_payload: msg,
+                });
+
+                if (!msgErr) wsMessages++;
+              }
+
+              // Save newest message details into crisp_conversations
+              const newestMsg = messagesList[messagesList.length - 1];
+              let newestText = "";
+              if (typeof newestMsg.content === "string") newestText = newestMsg.content;
+              else if (newestMsg.content && typeof newestMsg.content === "object") newestText = newestMsg.content.text || JSON.stringify(newestMsg.content);
+
+              const newestSentAt = newestMsg.timestamp ? new Date(newestMsg.timestamp).toISOString() : new Date().toISOString();
+
+              if (newestText.trim()) {
+                await supabase
+                  .from("crisp_conversations")
+                  .update({
+                    last_message: newestText.trim(),
+                    last_message_at: newestSentAt,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", convRecord.id);
+              }
             }
           }
         }
@@ -199,75 +224,77 @@ serve(async (req) => {
       return { conversations: wsConversations, messages: wsMessages };
     }
 
-    // SPECIFIC WORKSPACE REQUEST
     if (targetWebsiteId) {
-      const { data: wsRecord } = await supabase
+      // Sync target workspace
+      const { data: wsRecord, error: wsErr } = await supabase
         .from("crisp_workspaces")
         .select("crisp_website_id, workspace_name, enabled, credential_secret_id")
         .eq("crisp_website_id", targetWebsiteId)
         .maybeSingle();
 
-      if (!wsRecord?.enabled || !wsRecord.credential_secret_id) {
+      if (wsErr || !wsRecord?.enabled || !wsRecord.credential_secret_id) {
         return new Response(
-          JSON.stringify({ error: "Workspace is missing, disabled, or not configured in Supabase Vault." }),
+          JSON.stringify({ error: `Workspace ${targetWebsiteId} is missing, disabled, or unconfigured.` }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const { data: secretData, error: secretErr } = await supabase.rpc("crisp_get_workspace_secret", {
+      const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
         p_secret_id: wsRecord.credential_secret_id,
       });
 
-      if (secretErr || !secretData?.token_id || !secretData?.token_key) {
+      if (!secretData?.token_id || !secretData?.token_key) {
         return new Response(
-          JSON.stringify({ error: `Workspace Vault credentials are unavailable: ${secretErr?.message ?? "missing token"}` }),
+          JSON.stringify({ error: `Workspace Vault credentials missing for ${targetWebsiteId}` }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       const res = await syncSingleWorkspace(
-        targetWebsiteId,
+        wsRecord.crisp_website_id,
         secretData.token_id,
         secretData.token_key,
-        wsRecord.workspace_name || null,
+        wsRecord.workspace_name
       );
-      totalSyncedConversations = res.conversations;
-      totalSyncedMessages = res.messages;
 
-      return new Response(
-        JSON.stringify({
-          status: "success",
-          synced_conversations: totalSyncedConversations,
-          synced_messages: totalSyncedMessages,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // ALL WORKSPACES REQUEST
-    const { data: workspaces } = await supabase
-      .from("crisp_workspaces")
-      .select("crisp_website_id, workspace_name, credential_secret_id")
-      .eq("enabled", true);
-
-    const targetWorkspaces = workspaces || [];
-
-    for (const ws of targetWorkspaces) {
-      const websiteId = ws.crisp_website_id;
-      if (!ws.credential_secret_id) continue;
-
-      const { data: secretData, error: secretErr } = await supabase.rpc("crisp_get_workspace_secret", {
-        p_secret_id: ws.credential_secret_id,
-      });
-
-      if (secretErr || !secretData?.token_id || !secretData?.token_key) {
-        console.error(`[Crisp Sync] Missing Vault credentials for ${websiteId}:`, secretErr);
-        continue;
-      }
-
-      const res = await syncSingleWorkspace(websiteId, secretData.token_id, secretData.token_key, ws.workspace_name);
       totalSyncedConversations += res.conversations;
       totalSyncedMessages += res.messages;
+    } else {
+      // Sync all enabled workspaces
+      const { data: activeWorkspaces, error: listErr } = await supabase
+        .from("crisp_workspaces")
+        .select("crisp_website_id, workspace_name, enabled, credential_secret_id")
+        .eq("enabled", true);
+
+      if (listErr) {
+        return new Response(JSON.stringify({ error: listErr.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      for (const ws of activeWorkspaces || []) {
+        if (!ws.credential_secret_id) continue;
+
+        const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
+          p_secret_id: ws.credential_secret_id,
+        });
+
+        if (!secretData?.token_id || !secretData?.token_key) continue;
+
+        try {
+          const res = await syncSingleWorkspace(
+            ws.crisp_website_id,
+            secretData.token_id,
+            secretData.token_key,
+            ws.workspace_name
+          );
+          totalSyncedConversations += res.conversations;
+          totalSyncedMessages += res.messages;
+        } catch (err: any) {
+          console.error(`Sync error for workspace ${ws.crisp_website_id}:`, err);
+        }
+      }
     }
 
     return new Response(
@@ -279,7 +306,7 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
-    console.error("Crisp history sync error:", err);
+    console.error("Crisp History Sync Error:", err);
     return new Response(JSON.stringify({ error: err.message || "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
