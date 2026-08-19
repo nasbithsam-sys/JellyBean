@@ -24,8 +24,6 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const legacyWebhookSecret = Deno.env.get("CRISP_WEBHOOK_SECRET");
-    const legacyWebsiteIdConfig = Deno.env.get("CRISP_WEBSITE_ID");
 
     if (!supabaseUrl || !supabaseServiceKey) {
       return new Response(JSON.stringify({ error: "Server configuration missing" }), {
@@ -69,49 +67,36 @@ serve(async (req) => {
     }
 
     // 1. LOOKUP WORKSPACE IN DATABASE
-    const { data: wsRecord } = await supabase
+    const { data: wsRecord, error: wsErr } = await supabase
       .from("crisp_workspaces")
       .select("id, enabled, credential_secret_id")
       .eq("crisp_website_id", websiteId)
       .maybeSingle();
 
-    let authenticated = false;
-
-    if (wsRecord && wsRecord.enabled && wsRecord.credential_secret_id) {
-      // Retrieve secret from Vault
-      const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
-        p_secret_id: wsRecord.credential_secret_id,
-      });
-
-      const storedWebhookSecret = secretData?.webhook_secret || secretData?.webhookSecret;
-      if (storedWebhookSecret && timingSafeEqual(providedKey, storedWebhookSecret)) {
-        authenticated = true;
-      }
-    }
-
-    // 2. TEMPORARY LEGACY WORKSPACE 1 FALLBACK
-    if (!authenticated && (!wsRecord || !wsRecord.credential_secret_id)) {
-      if (legacyWebsiteIdConfig && websiteId === legacyWebsiteIdConfig && legacyWebhookSecret) {
-        if (timingSafeEqual(providedKey, legacyWebhookSecret)) {
-          authenticated = true;
-        }
-      }
-    }
-
-    if (!authenticated) {
+    if (wsErr || !wsRecord?.enabled || !wsRecord.credential_secret_id) {
       return new Response(
-        JSON.stringify({ error: "Unauthorized: Webhook key mismatch or workspace disabled." }),
+        JSON.stringify({ error: "Unauthorized: workspace is missing, disabled, or not configured." }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Update last_seen_at for registered workspace
-    if (wsRecord) {
-      await supabase
-        .from("crisp_workspaces")
-        .update({ last_seen_at: new Date().toISOString() })
-        .eq("id", wsRecord.id);
+    const { data: secretData, error: secretErr } = await supabase.rpc("crisp_get_workspace_secret", {
+      p_secret_id: wsRecord.credential_secret_id,
+    });
+
+    const storedWebhookSecret = secretData?.webhook_secret || secretData?.webhookSecret;
+
+    if (secretErr || !storedWebhookSecret || !timingSafeEqual(providedKey, storedWebhookSecret)) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized: webhook key mismatch." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    await supabase
+      .from("crisp_workspaces")
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq("id", wsRecord.id);
 
     const sessionId = data.session_id || body.session_id;
 

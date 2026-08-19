@@ -93,44 +93,32 @@ serve(async (req) => {
     const sessionId = conv.crisp_session_id;
 
     // FIND WORKSPACE & VAULT CREDENTIALS
-    const { data: wsRecord } = await supabase
+    const { data: wsRecord, error: wsErr } = await supabase
       .from("crisp_workspaces")
       .select("id, enabled, credential_secret_id")
       .eq("crisp_website_id", websiteId)
       .maybeSingle();
 
-    let tokenId = "";
-    let tokenKey = "";
-
-    if (wsRecord && wsRecord.enabled && wsRecord.credential_secret_id) {
-      const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
-        p_secret_id: wsRecord.credential_secret_id,
-      });
-
-      if (secretData?.token_id && secretData?.token_key) {
-        tokenId = secretData.token_id;
-        tokenKey = secretData.token_key;
-      }
-    }
-
-    // TEMPORARY LEGACY WORKSPACE 1 FALLBACK
-    if (!tokenId || !tokenKey) {
-      const legacyWebsiteId = Deno.env.get("CRISP_WEBSITE_ID");
-      const legacyTokenId = Deno.env.get("CRISP_TOKEN_ID");
-      const legacyTokenKey = Deno.env.get("CRISP_TOKEN_KEY");
-
-      if (legacyWebsiteId && websiteId === legacyWebsiteId && legacyTokenId && legacyTokenKey) {
-        tokenId = legacyTokenId;
-        tokenKey = legacyTokenKey;
-      }
-    }
-
-    if (!tokenId || !tokenKey) {
+    if (wsErr || !wsRecord?.enabled || !wsRecord.credential_secret_id) {
       return new Response(
-        JSON.stringify({ error: "Workspace is disabled or not configured with Crisp Website Tokens." }),
+        JSON.stringify({ error: "Workspace is missing, disabled, or not configured in Supabase Vault." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { data: secretData, error: secretErr } = await supabase.rpc("crisp_get_workspace_secret", {
+      p_secret_id: wsRecord.credential_secret_id,
+    });
+
+    if (secretErr || !secretData?.token_id || !secretData?.token_key) {
+      return new Response(
+        JSON.stringify({ error: `Workspace Vault credentials are unavailable: ${secretErr?.message ?? "missing token"}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const tokenId = secretData.token_id;
+    const tokenKey = secretData.token_key;
 
     const authString = btoa(`${tokenId}:${tokenKey}`);
     const crispUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/message`;
@@ -150,12 +138,18 @@ serve(async (req) => {
       }),
     });
 
-    const responseData = await crispResponse.json();
+    const responseData = await crispResponse.json().catch(() => ({}));
 
     if (!crispResponse.ok) {
       console.error("Crisp API Error:", crispResponse.status, responseData);
+      const reason =
+        responseData?.reason ||
+        responseData?.data?.message ||
+        responseData?.message ||
+        `Crisp API status ${crispResponse.status}`;
+
       return new Response(
-        JSON.stringify({ error: responseData.reason || responseData.message || `Crisp API status ${crispResponse.status}` }),
+        JSON.stringify({ error: reason }),
         { status: crispResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

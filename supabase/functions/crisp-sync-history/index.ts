@@ -76,13 +76,8 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const targetWebsiteId = body.website_id || body.websiteId;
 
-    const legacyWebsiteId = Deno.env.get("CRISP_WEBSITE_ID");
-    const legacyTokenId = Deno.env.get("CRISP_TOKEN_ID");
-    const legacyTokenKey = Deno.env.get("CRISP_TOKEN_KEY");
-
     let totalSyncedConversations = 0;
     let totalSyncedMessages = 0;
-    const syncedWebsiteIds = new Set<string>();
 
     // Helper to sync single workspace
     async function syncSingleWorkspace(websiteId: string, tokenId: string, tokenKey: string, existingWsName: string | null) {
@@ -103,7 +98,11 @@ serve(async (req) => {
       for (let page = 1; page <= 5; page++) {
         const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
         const listRes = await fetch(listUrl, { headers });
-        if (!listRes.ok) break;
+        if (!listRes.ok) {
+          const errJson = await listRes.json().catch(() => ({}));
+          const reason = errJson?.reason || errJson?.data?.message || `HTTP ${listRes.status}`;
+          throw new Error(`Crisp history sync failed for ${websiteId}: ${reason}`);
+        }
 
         const listData = await listRes.json();
         const sessions = listData.data || [];
@@ -208,35 +207,30 @@ serve(async (req) => {
         .eq("crisp_website_id", targetWebsiteId)
         .maybeSingle();
 
-      let tokenId = "";
-      let tokenKey = "";
-
-      if (wsRecord && wsRecord.enabled && wsRecord.credential_secret_id) {
-        const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
-          p_secret_id: wsRecord.credential_secret_id,
-        });
-        if (secretData?.token_id && secretData?.token_key) {
-          tokenId = secretData.token_id;
-          tokenKey = secretData.token_key;
-        }
-      }
-
-      // Legacy fallback
-      if (!tokenId || !tokenKey) {
-        if (legacyWebsiteId && targetWebsiteId === legacyWebsiteId && legacyTokenId && legacyTokenKey) {
-          tokenId = legacyTokenId;
-          tokenKey = legacyTokenKey;
-        }
-      }
-
-      if (!tokenId || !tokenKey) {
+      if (!wsRecord?.enabled || !wsRecord.credential_secret_id) {
         return new Response(
-          JSON.stringify({ error: "Workspace is disabled or not configured with Crisp Website Tokens." }),
+          JSON.stringify({ error: "Workspace is missing, disabled, or not configured in Supabase Vault." }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const res = await syncSingleWorkspace(targetWebsiteId, tokenId, tokenKey, wsRecord?.workspace_name || null);
+      const { data: secretData, error: secretErr } = await supabase.rpc("crisp_get_workspace_secret", {
+        p_secret_id: wsRecord.credential_secret_id,
+      });
+
+      if (secretErr || !secretData?.token_id || !secretData?.token_key) {
+        return new Response(
+          JSON.stringify({ error: `Workspace Vault credentials are unavailable: ${secretErr?.message ?? "missing token"}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const res = await syncSingleWorkspace(
+        targetWebsiteId,
+        secretData.token_id,
+        secretData.token_key,
+        wsRecord.workspace_name || null,
+      );
       totalSyncedConversations = res.conversations;
       totalSyncedMessages = res.messages;
 
@@ -260,24 +254,18 @@ serve(async (req) => {
 
     for (const ws of targetWorkspaces) {
       const websiteId = ws.crisp_website_id;
-      syncedWebsiteIds.add(websiteId);
-
       if (!ws.credential_secret_id) continue;
 
-      const { data: secretData } = await supabase.rpc("crisp_get_workspace_secret", {
+      const { data: secretData, error: secretErr } = await supabase.rpc("crisp_get_workspace_secret", {
         p_secret_id: ws.credential_secret_id,
       });
 
-      if (!secretData?.token_id || !secretData?.token_key) continue;
+      if (secretErr || !secretData?.token_id || !secretData?.token_key) {
+        console.error(`[Crisp Sync] Missing Vault credentials for ${websiteId}:`, secretErr);
+        continue;
+      }
 
       const res = await syncSingleWorkspace(websiteId, secretData.token_id, secretData.token_key, ws.workspace_name);
-      totalSyncedConversations += res.conversations;
-      totalSyncedMessages += res.messages;
-    }
-
-    // TEMPORARY LEGACY WORKSPACE 1 TRANSITION: Sync legacy CRISP_WEBSITE_ID if not in crisp_workspaces
-    if (legacyWebsiteId && legacyTokenId && legacyTokenKey && !syncedWebsiteIds.has(legacyWebsiteId)) {
-      const res = await syncSingleWorkspace(legacyWebsiteId, legacyTokenId, legacyTokenKey, null);
       totalSyncedConversations += res.conversations;
       totalSyncedMessages += res.messages;
     }

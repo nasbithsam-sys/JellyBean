@@ -101,37 +101,41 @@ function newWebhookSecret() {
 }
 
 function webhookUrlFor(secret: string) {
-  const url = process.env["SUPABASE_URL"] ?? "";
+  const url = process.env["SUPABASE_URL"]?.trim();
+  if (!url) throw new Error("SUPABASE_URL is not configured");
   const ref = url.replace("https://", "").split(".")[0];
   return `https://${ref}.supabase.co/functions/v1/crisp-webhook?key=${secret}`;
 }
 
-/** Validate credentials against the Crisp API, trying both auth tiers. */
+/** Validate a Crisp Website Token against the website it belongs to. */
 async function verifyCrispCredentials(websiteId: string, tokenId: string, tokenKey: string) {
   const auth = btoa(`${tokenId}:${tokenKey}`);
-  let lastError = "Crisp rejected these credentials.";
 
-  for (const tier of ["plugin", "website"]) {
-    const res = await fetch(`https://api.crisp.chat/v1/website/${websiteId}`, {
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "X-Crisp-Tier": tier,
-        "Content-Type": "application/json",
-      },
-    });
-    if (res.ok) {
-      const json: any = await res.json().catch(() => ({}));
-      return { ok: true as const, tier, info: json?.data ?? {} };
-    }
-    const errJson: any = await res.json().catch(() => ({}));
-    const reason = errJson?.reason || errJson?.data?.message || `HTTP ${res.status}`;
-    lastError =
-      reason === "invalid_session" || res.status === 401
-        ? "Crisp rejected these credentials (invalid_session). Check the Website ID, Token Identifier and Token Key, and make sure the token has access to this website."
-        : `Crisp API error: ${reason}`;
+  const res = await fetch(`https://api.crisp.chat/v1/website/${websiteId}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Basic ${auth}`,
+      "X-Crisp-Tier": "website",
+      "Content-Type": "application/json",
+    },
+  });
+
+  const json: any = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const reason = json?.reason || json?.data?.message || json?.message || `HTTP ${res.status}`;
+    const details = json?.data?.message && json?.data?.message !== reason ? ` — ${json.data.message}` : "";
+
+    return {
+      ok: false as const,
+      error:
+        res.status === 401 || reason === "invalid_session"
+          ? `Crisp rejected this Website Token (${reason}${details}). Verify the Website ID, Token Identifier and Token Key all belong to the same workspace and that the token is still valid.`
+          : `Crisp API error (${res.status}): ${reason}${details}`,
+    };
   }
 
-  return { ok: false as const, error: lastError };
+  return { ok: true as const, info: json?.data ?? {} };
 }
 
 export const addCrispWorkspace = createServerFn({ method: "POST" })
@@ -152,27 +156,46 @@ export const addCrispWorkspace = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: existingWs } = await supabaseAdmin
+    const { data: existingWs, error: existingWsErr } = await supabaseAdmin
       .from("crisp_workspaces")
       .select("id, credential_secret_id")
       .eq("crisp_website_id", data.websiteId)
       .maybeSingle();
 
+    if (existingWsErr) {
+      return { ok: false as const, error: `Failed to read workspace record: ${existingWsErr.message}` };
+    }
+
     let secretId = existingWs?.credential_secret_id ?? null;
     let webhookSecret = newWebhookSecret();
 
     if (secretId) {
-      const { data: current } = await supabaseAdmin.rpc("crisp_get_workspace_secret", {
+      const { data: current, error: currentErr } = await supabaseAdmin.rpc("crisp_get_workspace_secret", {
         p_secret_id: secretId,
       });
+
+      if (currentErr || !current) {
+        return {
+          ok: false as const,
+          error: `Failed to read stored Vault credentials: ${currentErr?.message ?? "secret not found"}`,
+        };
+      }
+
       webhookSecret = (current as any)?.webhook_secret || webhookSecret;
-      const { error: updErr } = await supabaseAdmin.rpc("crisp_update_workspace_secret", {
+
+      const { data: updated, error: updErr } = await supabaseAdmin.rpc("crisp_update_workspace_secret", {
         p_secret_id: secretId,
         p_token_id: data.tokenId,
         p_token_key: data.tokenKey,
         p_webhook_secret: webhookSecret,
       });
-      if (updErr) return { ok: false as const, error: `Failed to update stored credentials: ${updErr.message}` };
+
+      if (updErr || updated !== true) {
+        return {
+          ok: false as const,
+          error: `Failed to update stored credentials: ${updErr?.message ?? "Vault update returned false"}`,
+        };
+      }
     } else {
       const { data: newSecretId, error: vaultErr } = await supabaseAdmin.rpc("crisp_create_workspace_secret", {
         p_website_id: data.websiteId,
@@ -199,7 +222,7 @@ export const addCrispWorkspace = createServerFn({ method: "POST" })
         installed_at: new Date().toISOString(),
         last_seen_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        metadata: { domain: info.domain ?? null, logo: info.logo ?? null, tier: verified.tier },
+        metadata: { domain: info.domain ?? null, logo: info.logo ?? null, tier: "website" },
       },
       { onConflict: "crisp_website_id" },
     );
@@ -256,17 +279,31 @@ export const regenerateCrispWebhookSecret = createServerFn({ method: "POST" })
       return { ok: false as const, error: "Workspace credentials not found. Re-connect the workspace first." };
     }
 
-    const { data: current } = await supabaseAdmin.rpc("crisp_get_workspace_secret", {
+    const { data: current, error: currentErr } = await supabaseAdmin.rpc("crisp_get_workspace_secret", {
       p_secret_id: ws.credential_secret_id,
     });
+
+    const currentTokenId = (current as any)?.token_id ?? "";
+    const currentTokenKey = (current as any)?.token_key ?? "";
+
+    if (currentErr || !currentTokenId || !currentTokenKey) {
+      return {
+        ok: false as const,
+        error: `Stored workspace credentials are missing: ${currentErr?.message ?? "re-connect the workspace"}`,
+      };
+    }
+
     const secret = newWebhookSecret();
-    const { error: updErr } = await supabaseAdmin.rpc("crisp_update_workspace_secret", {
+    const { data: updated, error: updErr } = await supabaseAdmin.rpc("crisp_update_workspace_secret", {
       p_secret_id: ws.credential_secret_id,
-      p_token_id: (current as any)?.token_id ?? "",
-      p_token_key: (current as any)?.token_key ?? "",
+      p_token_id: currentTokenId,
+      p_token_key: currentTokenKey,
       p_webhook_secret: secret,
     });
-    if (updErr) return { ok: false as const, error: updErr.message };
+
+    if (updErr || updated !== true) {
+      return { ok: false as const, error: updErr?.message ?? "Vault update returned false" };
+    }
 
     return { ok: true as const, webhook_url: webhookUrlFor(secret) };
   });
