@@ -13,7 +13,7 @@ async function resolveWorkspaceName(websiteId: string, authString: string): Prom
     const res = await fetch(`https://api.crisp.chat/v1/website/${websiteId}`, {
       headers: {
         "Authorization": `Basic ${authString}`,
-        "X-Crisp-Tier": "plugin",
+        "X-Crisp-Tier": "website",
       },
     });
     if (!res.ok) return null;
@@ -84,7 +84,7 @@ serve(async (req) => {
       const authString = btoa(`${tokenId}:${tokenKey}`);
       const headers = {
         "Authorization": `Basic ${authString}`,
-        "X-Crisp-Tier": "plugin",
+        "X-Crisp-Tier": "website",
       };
 
       let wsName = existingWsName;
