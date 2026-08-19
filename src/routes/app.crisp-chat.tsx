@@ -4,10 +4,8 @@ import {
   Building2,
   Check,
   CheckCircle2,
-  Clock,
   Copy,
   Globe,
-  Key,
   Loader2,
   MessageSquare,
   MoreVertical,
@@ -17,7 +15,6 @@ import {
   Send,
   ShieldAlert,
   Trash2,
-  User,
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
@@ -33,7 +30,6 @@ import {
   regenerateCrispWebhookSecret,
   sendCrispMessage,
   syncCrispHistory,
-  toggleCrispWorkspace,
 } from "@/lib/crisp.functions";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -55,10 +51,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { PageBody, PageHeader, RoleGate } from "@/components/page";
+import { PageHeader, RoleGate } from "@/components/page";
 
 export const Route = createFileRoute("/app/crisp-chat")({
   component: CrispChatPage,
@@ -127,20 +122,20 @@ function getWorkspaceDisplayName(websiteId: string, workspacesMap: Map<string, s
 function CrispChatPage() {
   const auth = useAuth();
   return (
-    <div className="flex h-full w-full flex-col bg-background text-foreground overflow-hidden">
+    <div className="h-full w-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
       <PageHeader
         title="Crisp Chat Inbox"
         description="Unified multi-workspace customer support portal."
         className="shrink-0 my-2 py-3 px-4 md:px-5"
       />
-      <PageBody className="flex-1 min-h-0 p-0 overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col px-3 md:px-5 pb-3">
         <RoleGate
           allow={["admin", "cs_admin", "cs"]}
           current={auth.primaryRole}
         >
           <CrispInboxInner />
         </RoleGate>
-      </PageBody>
+      </div>
     </div>
   );
 }
@@ -160,7 +155,6 @@ function CrispInboxInner() {
   const [notes, setNotes] = useState<NoteRecord[]>([]);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusTab, setStatusTab] = useState<"all" | "unresolved" | "resolved">("all");
   const [messageInput, setMessageInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
 
@@ -418,12 +412,9 @@ function CrispInboxInner() {
     return map;
   }, [workspaces]);
 
-  // Filtered conversations
+  // Filtered conversations (NO status tabs, search only)
   const filteredConversations = useMemo(() => {
     return conversations.filter((c) => {
-      if (statusTab === "unresolved" && c.status === "resolved") return false;
-      if (statusTab === "resolved" && c.status !== "resolved") return false;
-
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const nameMatch = c.customer_name?.toLowerCase().includes(query);
@@ -435,7 +426,7 @@ function CrispInboxInner() {
 
       return true;
     });
-  }, [conversations, statusTab, searchQuery]);
+  }, [conversations, searchQuery]);
 
   const activeConversation = useMemo(() => {
     return conversations.find((c) => c.id === selectedConversationId) || null;
@@ -639,7 +630,7 @@ function CrispInboxInner() {
   };
 
   return (
-    <div className="flex flex-1 min-h-0 w-full overflow-hidden border-t border-border/40">
+    <div className="h-full min-h-0 flex-1 w-full flex overflow-hidden border border-border/40 rounded-2xl bg-card/20 shadow-sm">
       {/* ========================================================================= */}
       {/* COLUMN 1: CRISP WORKSPACES (~220px) */}
       {/* ========================================================================= */}
@@ -665,7 +656,7 @@ function CrispInboxInner() {
           )}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-2">
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 overscroll-contain">
           <div className="space-y-1">
             {/* All Workspaces */}
             <button
@@ -768,7 +759,7 @@ function CrispInboxInner() {
       {/* ========================================================================= */}
       <div className="w-80 shrink-0 border-r border-border/40 bg-card/20 flex flex-col h-full overflow-hidden">
         {/* Search & Sync Header */}
-        <div className="p-3 border-b border-border/40 space-y-2 shrink-0">
+        <div className="p-3 border-b border-border/40 shrink-0">
           <div className="flex items-center justify-between gap-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
@@ -790,18 +781,10 @@ function CrispInboxInner() {
               <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
             </Button>
           </div>
-
-          <Tabs value={statusTab} onValueChange={(v: any) => setStatusTab(v)} className="w-full">
-            <TabsList className="w-full grid grid-cols-3 h-8 text-xs">
-              <TabsTrigger value="all" className="text-xs py-1">All</TabsTrigger>
-              <TabsTrigger value="unresolved" className="text-xs py-1">Unresolved</TabsTrigger>
-              <TabsTrigger value="resolved" className="text-xs py-1">Resolved</TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
 
         {/* Conversations Scroll Area */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1 overscroll-contain">
           {filteredConversations.length === 0 ? (
             <div className="p-6 text-center text-muted-foreground text-xs">
               No conversations found.
@@ -901,7 +884,7 @@ function CrispInboxInner() {
             </div>
 
             {/* Messages Scroll Area */}
-            <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4">
+            <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 overscroll-contain">
               <div className="space-y-3 max-w-3xl mx-auto">
                 {messages.map((msg) => {
                   const isOperator = msg.sender_type === "operator" || msg.direction === "outgoing";
@@ -933,8 +916,8 @@ function CrispInboxInner() {
               </div>
             </div>
 
-            {/* Message Composer */}
-            <form onSubmit={handleSendMessage} className="p-3 border-t border-border/40 flex items-center gap-2 bg-card/20 shrink-0">
+            {/* Message Composer - Anchored to Bottom */}
+            <form onSubmit={handleSendMessage} className="p-3 border-t border-border/40 flex items-center gap-2 bg-card/20 shrink-0 mt-auto">
               <Textarea
                 placeholder="Type a message to send to Crisp visitor..."
                 value={messageInput}
@@ -978,7 +961,7 @@ function CrispInboxInner() {
       {showRightPanel && (
         <div className="w-72 shrink-0 border-l border-border/40 bg-card/30 flex flex-col h-full overflow-hidden hidden lg:flex">
           {activeConversation ? (
-            <div className="flex-1 min-h-0 overflow-y-auto p-4">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 overscroll-contain">
               <div className="space-y-6">
                 {/* Customer & Chat Details */}
                 <div className="space-y-3">
