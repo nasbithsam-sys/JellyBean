@@ -459,10 +459,11 @@ function CrispInboxInner() {
     return map;
   }, [workspaces]);
 
-  // Sorted Workspaces based ON UNREAD STATUS/ACTIVITY (NOT total chat count)
+  // Sorted Workspaces Priority:
   // 1. All Workspaces stays pinned first
-  // 2. Workspaces with at least one unread chat come next (sorted by newest unread activity DESC)
-  // 3. Workspaces with zero unread chats come after (sorted alphabetically by name ASC)
+  // 2. Workspaces with at least one unread chat come next (sorted by newest unread customer activity DESC)
+  // 3. Workspaces with NO unread chats come after (sorted by TOTAL CHAT COUNT DESC)
+  // 4. Final tie-breaker: Workspace name ASC
   const sortedWorkspaces = useMemo(() => {
     return [...workspaces].sort((a, b) => {
       const hasUnreadA = workspaceHasUnreadMap.get(a.crisp_website_id) || false;
@@ -473,7 +474,7 @@ function CrispInboxInner() {
         return hasUnreadA ? -1 : 1;
       }
 
-      // Secondary: If both have unread chats, sort by newest unread customer activity DESC
+      // Secondary (Unread Workspaces): Sort by newest unread customer activity DESC
       if (hasUnreadA && hasUnreadB) {
         const timeA = workspaceLatestUnreadAtMap.get(a.crisp_website_id) || "";
         const timeB = workspaceLatestUnreadAtMap.get(b.crisp_website_id) || "";
@@ -482,12 +483,21 @@ function CrispInboxInner() {
         }
       }
 
-      // Tertiary: Stable alphabetical ordering by workspace name ASC
+      // Secondary (Read-Only Workspaces): Sort by TOTAL CHAT COUNT DESC
+      if (!hasUnreadA && !hasUnreadB) {
+        const countA = workspaceTotalChatsMap.get(a.crisp_website_id) || 0;
+        const countB = workspaceTotalChatsMap.get(b.crisp_website_id) || 0;
+        if (countA !== countB) {
+          return countB - countA;
+        }
+      }
+
+      // Final tie-breaker: Workspace name ASC (alphabetical)
       const nameA = getWorkspaceDisplayName(a.crisp_website_id, workspacesMap).toLowerCase();
       const nameB = getWorkspaceDisplayName(b.crisp_website_id, workspacesMap).toLowerCase();
       return nameA.localeCompare(nameB);
     });
-  }, [workspaces, workspaceHasUnreadMap, workspaceLatestUnreadAtMap, workspacesMap]);
+  }, [workspaces, workspaceHasUnreadMap, workspaceLatestUnreadAtMap, workspaceTotalChatsMap, workspacesMap]);
 
   // Filtered & Sorted Conversations (Unread conversations first, then newest last_message_at)
   const filteredConversations = useMemo(() => {
