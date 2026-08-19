@@ -151,8 +151,8 @@ export const addCrispWorkspace = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     await assertAdmin(supabase, userId);
 
-    // const verified = await verifyCrispCredentials(data.websiteId, data.tokenId, data.tokenKey);
-    // if (!verified.ok) return { ok: false as const, error: verified.error };
+    const verified = await verifyCrispCredentials(data.websiteId, data.tokenId, data.tokenKey);
+    if (!verified.ok) return { ok: false as const, error: verified.error };
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
