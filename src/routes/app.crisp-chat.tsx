@@ -18,6 +18,7 @@ import {
   Trash2,
   PanelRightClose,
   PanelRightOpen,
+  Info,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -1221,17 +1222,20 @@ function CrispInboxInner() {
                     >
                       <div
                         className={cn(
-                          "px-3.5 py-2.5 rounded-2xl text-xs break-words shadow-sm space-y-1",
-                          isOperator
+                          "px-3.5 py-2.5 rounded-2xl text-xs break-words shadow-xs space-y-1",
+                          isMasked
+                            ? "bg-muted/80 border border-border text-foreground rounded-2xl"
+                            : isOperator
                             ? "bg-primary text-primary-foreground rounded-br-xs"
-                            : isMasked
-                            ? "bg-muted/70 border border-border/60 text-muted-foreground rounded-bl-xs"
                             : "bg-muted text-foreground rounded-bl-xs"
                         )}
                       >
                         {isMasked ? (
-                          <div className="italic text-[11px] text-muted-foreground leading-relaxed">
-                            Message unavailable — older message history is hidden by the current Crisp plan.
+                          <div className="flex items-start gap-2 py-0.5 text-foreground">
+                            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+                            <p className="italic text-xs leading-relaxed text-foreground">
+                              Message unavailable — older message history is hidden by the current Crisp plan.
+                            </p>
                           </div>
                         ) : (
                           <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
