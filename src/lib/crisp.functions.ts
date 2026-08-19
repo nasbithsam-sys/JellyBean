@@ -151,6 +151,12 @@ export const addCrispWorkspace = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     await assertAdmin(supabase, userId);
 
+    console.log("DEBUG ADD WORKSPACE:");
+    console.log("Website ID:", data.websiteId);
+    console.log("Token ID:", data.tokenId);
+    console.log("Token Key:", data.tokenKey);
+    console.log("Token Key Length:", data.tokenKey.length);
+
     const verified = await verifyCrispCredentials(data.websiteId, data.tokenId, data.tokenKey);
     if (!verified.ok) return { ok: false as const, error: verified.error };
 

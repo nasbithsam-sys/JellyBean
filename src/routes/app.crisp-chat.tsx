@@ -976,7 +976,8 @@ function CrispInboxInner() {
                   </Label>
                   <Input
                     id="ws-token-key"
-                    type="password"
+                    type="text"
+                    autoComplete="off"
                     placeholder="e.g. 81a9f012b..."
                     value={addTokenKey}
                     onChange={(e) => setAddTokenKey(e.target.value)}
