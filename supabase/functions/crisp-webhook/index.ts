@@ -110,7 +110,7 @@ serve(async (req) => {
     const fingerprint = data.fingerprint || data.timestamp || Date.now();
     const eventFingerprint = `${websiteId}_${eventType}_${sessionId}_${fingerprint}`;
 
-    // 3. Log webhook event idempotently with website identity
+    // 3. Log webhook event idempotently with website identity (Duplicate webhook detection)
     const { error: webhookLogErr } = await supabase
       .from("crisp_webhook_events")
       .insert({
@@ -128,10 +128,10 @@ serve(async (req) => {
       });
     }
 
-    // 4. Fetch existing conversation to preserve customer details without overwriting with null
+    // 4. Fetch existing conversation to preserve customer details and calculate unread count
     const { data: existingConv } = await supabase
       .from("crisp_conversations")
-      .select("id, customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at, status")
+      .select("id, customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at, status, unread_count")
       .eq("crisp_website_id", websiteId)
       .eq("crisp_session_id", sessionId)
       .maybeSingle();
@@ -157,12 +157,19 @@ serve(async (req) => {
     }
 
     const isMessageEvent = eventType.startsWith("message:");
-    const sentAt = data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString();
+    const rawFrom = String(data.from || "user").toLowerCase();
+    const isOperator = rawFrom === "operator";
+    const isCustomerMessage = isMessageEvent && !isOperator && Boolean(messageContent.trim());
 
+    const currentUnread = Number(existingConv?.unread_count || 0);
+    // Increment unread_count ONLY for genuine incoming customer messages
+    const updatedUnread = isCustomerMessage ? currentUnread + 1 : currentUnread;
+
+    const sentAt = data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString();
     const lastMessage = isMessageEvent && messageContent.trim() ? messageContent.trim() : (existingConv?.last_message || null);
     const lastMessageAt = isMessageEvent && messageContent.trim() ? sentAt : (existingConv?.last_message_at || sentAt);
 
-    // 5. Upsert conversation
+    // 5. Upsert conversation with updated unread_count
     const { data: convData, error: convErr } = await supabase
       .from("crisp_conversations")
       .upsert(
@@ -176,6 +183,7 @@ serve(async (req) => {
           status: finalState,
           last_message: lastMessage,
           last_message_at: lastMessageAt,
+          unread_count: updatedUnread,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "crisp_website_id,crisp_session_id" }
@@ -196,8 +204,6 @@ serve(async (req) => {
     // 6. Insert ONLY real message events into crisp_messages
     if (isMessageEvent && messageContent.trim()) {
       const crispMsgId = String(data.fingerprint || `${sessionId}_${sentAt}`);
-      const rawFrom = String(data.from || "user").toLowerCase();
-      const isOperator = rawFrom === "operator";
       const senderType = isOperator ? "operator" : "customer";
       const direction = isOperator ? "outgoing" : "incoming";
 
