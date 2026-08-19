@@ -223,14 +223,20 @@ function CrispInboxInner() {
     workspacesRef.current = workspaces;
   }, [workspaces]);
 
-  // Load active enabled registered workspaces
-  const loadWorkspaces = async () => {
+  // Load active enabled registered workspaces.
+  // Returns the fetched rows AND immediately updates workspacesRef.current so that
+  // callers can pass the returned ids into loadConversations without waiting for
+  // a React state re-render (fixes the "no conversations on initial All Workspaces load" race).
+  const loadWorkspaces = async (): Promise<WorkspaceRecord[]> => {
     const { data } = await supabase
       .from("crisp_workspaces")
       .select("*")
       .eq("enabled", true)
       .order("created_at", { ascending: true });
-    if (data) setWorkspaces(data as any);
+    const rows = (data as WorkspaceRecord[] | null) ?? [];
+    workspacesRef.current = rows; // update ref immediately before React re-render
+    setWorkspaces(rows);
+    return rows;
   };
 
   // Load aggregate workspace stats using efficient RPC (ENABLED workspaces only)
@@ -266,13 +272,27 @@ function CrispInboxInner() {
     }
   };
 
-  // Fetch initial conversations page (Only from active enabled workspaces)
-  const loadConversations = async (targetWebsiteId?: string, isReset = true) => {
+  // Fetch conversations page using the get_crisp_conversations_page RPC.
+  //
+  // KEY DESIGN DECISIONS:
+  //   1. Ordering is done globally by the DB (unread_count > 0 DESC, last_message_at DESC).
+  //      React-side sort is only a display fallback; it must NOT override the server order.
+  //   2. When searchQuery is present, the search runs server-side across ALL conversations
+  //      in the active workspace(s) — not just the currently loaded page.
+  //   3. activeWebsiteIdsOverride lets the initial mount pass freshly-fetched IDs
+  //      without waiting for a React state update (fixes the race condition).
+  const loadConversations = async (
+    targetWebsiteId?: string,
+    isReset = true,
+    activeWebsiteIdsOverride?: string[],
+    searchOverride?: string,
+  ) => {
     const wsId = targetWebsiteId !== undefined ? targetWebsiteId : selectedWebsiteIdRef.current;
     const pageToLoad = isReset ? 0 : convPage + 1;
     setIsLoadingConvs(true);
 
-    const activeWebsiteIds = workspacesRef.current.map((w) => w.crisp_website_id);
+    // Use override (initial load) or ref (subsequent calls)
+    const activeWebsiteIds = activeWebsiteIdsOverride ?? workspacesRef.current.map((w) => w.crisp_website_id);
     if (activeWebsiteIds.length === 0) {
       setConversations([]);
       setHasMoreConvs(false);
@@ -280,19 +300,16 @@ function CrispInboxInner() {
       return;
     }
 
-    let query = supabase
-      .from("crisp_conversations")
-      .select("*")
-      .order("last_message_at", { ascending: false })
-      .range(pageToLoad * PAGE_SIZE_CONVS, (pageToLoad + 1) * PAGE_SIZE_CONVS - 1);
+    const targetIds = wsId !== "all" ? [wsId] : activeWebsiteIds;
+    const search = searchOverride !== undefined ? searchOverride : searchQuery;
 
-    if (wsId !== "all") {
-      query = query.eq("crisp_website_id", wsId);
-    } else {
-      query = query.in("crisp_website_id", activeWebsiteIds);
-    }
+    const { data, error } = await supabase.rpc("get_crisp_conversations_page", {
+      p_website_ids: targetIds,
+      p_limit: PAGE_SIZE_CONVS,
+      p_offset: pageToLoad * PAGE_SIZE_CONVS,
+      p_search: search.trim() || null,
+    });
 
-    const { data, error } = await query;
     setIsLoadingConvs(false);
 
     if (!error && data) {
@@ -303,7 +320,7 @@ function CrispInboxInner() {
         setConversations((prev) => [...prev, ...(data as any[])]);
         setConvPage(pageToLoad);
       }
-      setHasMoreConvs(data.length === PAGE_SIZE_CONVS);
+      setHasMoreConvs((data as any[]).length === PAGE_SIZE_CONVS);
     }
   };
 
@@ -426,11 +443,19 @@ function CrispInboxInner() {
 
   // Initial load
   useEffect(() => {
-    loadWorkspaces().then(() => {
+    loadWorkspaces().then((fetchedWorkspaces) => {
+      const activeIds = fetchedWorkspaces.map((w) => w.crisp_website_id);
       loadWorkspaceCounts();
-      loadConversations();
+      // Pass freshly-fetched IDs directly — avoids race where workspacesRef.current
+      // has not yet been populated when loadConversations reads it.
+      loadConversations("all", true, activeIds);
     });
   }, []);
+
+  // Re-run server-side search whenever searchQuery changes
+  useEffect(() => {
+    loadConversations(selectedWebsiteId, true, undefined, searchQuery);
+  }, [searchQuery]);
 
   // Reload conversations when selected workspace filter changes
   useEffect(() => {
@@ -497,9 +522,63 @@ function CrispInboxInner() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "crisp_conversations" },
-        () => {
-          loadConversations(selectedWebsiteIdRef.current, true);
+        (payload) => {
+          // ── Preserve loaded pages ──────────────────────────────────────────
+          // Do NOT reset the conversation list to page 1 on every update.
+          // Instead, surgically update or insert the affected row in our
+          // existing conversations array. This preserves infinite-scroll state
+          // and scroll position.
+          //
+          // For INSERT events we prepend/re-sort locally; for UPDATE we patch
+          // in place. For DELETE we remove. Counts are always refreshed.
           loadWorkspaceCounts();
+
+          const changedRow = (payload.new ?? payload.old) as ConversationRecord | undefined;
+          if (!changedRow?.id) {
+            // Fallback: no row data — full reload (should be rare)
+            loadConversations(selectedWebsiteIdRef.current, true);
+            return;
+          }
+
+          if (payload.eventType === "DELETE") {
+            setConversations((prev) => prev.filter((c) => c.id !== changedRow.id));
+            return;
+          }
+
+          // UPDATE or INSERT
+          setConversations((prev) => {
+            const idx = prev.findIndex((c) => c.id === changedRow.id);
+            if (idx !== -1) {
+              // Patch existing row
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx], ...changedRow };
+              // Re-sort: unread first, then last_message_at DESC
+              updated.sort((a, b) => {
+                const ua = (a.unread_count || 0) > 0 ? 1 : 0;
+                const ub = (b.unread_count || 0) > 0 ? 1 : 0;
+                if (ua !== ub) return ub - ua;
+                return (b.last_message_at || "").localeCompare(a.last_message_at || "");
+              });
+              return updated;
+            } else {
+              // New row — only include if it belongs to the active view
+              const activeIds = workspacesRef.current.map((w) => w.crisp_website_id);
+              const activeView = selectedWebsiteIdRef.current;
+              const belongsHere =
+                activeView === "all"
+                  ? activeIds.includes(changedRow.crisp_website_id)
+                  : changedRow.crisp_website_id === activeView;
+              if (!belongsHere) return prev;
+              const updated = [changedRow, ...prev];
+              updated.sort((a, b) => {
+                const ua = (a.unread_count || 0) > 0 ? 1 : 0;
+                const ub = (b.unread_count || 0) > 0 ? 1 : 0;
+                if (ua !== ub) return ub - ua;
+                return (b.last_message_at || "").localeCompare(a.last_message_at || "");
+              });
+              return updated;
+            }
+          });
         }
       )
       .on(
@@ -507,15 +586,25 @@ function CrispInboxInner() {
         { event: "INSERT", schema: "public", table: "crisp_messages" },
         (payload) => {
           const activeId = selectedConversationIdRef.current;
-          const newMsg = payload.new as any;
+          const newMsg = payload.new as MessageRecord;
 
           if (activeId && newMsg && newMsg.conversation_id === activeId) {
             const nearBottom = isNearBottom();
-            loadMessages(activeId).then(() => {
-              if (nearBottom) scrollToBottom("smooth");
+
+            // ── Append new message without discarding loaded older pages ──────
+            // Simply append the new row to the existing messages array instead
+            // of calling loadMessages() which would discard all older pages.
+            setMessages((prev) => {
+              // Guard against duplicate (e.g. sent by this user)
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
             });
 
-            // If active user is currently viewing this conversation, acknowledge new message as read!
+            if (nearBottom) {
+              setTimeout(() => scrollToBottom("smooth"), 30);
+            }
+
+            // Acknowledge new message as read (active user is viewing this conversation)
             markCrispConversationRead({ data: { conversationId: activeId } }).then((res) => {
               if (res.ok) {
                 setConversations((prev) =>
@@ -606,32 +695,13 @@ function CrispInboxInner() {
     });
   }, [workspaces, workspaceHasUnreadMap, workspaceLatestUnreadAtMap, workspaceTotalChatsMap, workspacesMap]);
 
-  // Filtered & Sorted Conversations (Unread conversations first, then newest last_message_at)
-  const filteredConversations = useMemo(() => {
-    let list = conversations.filter((c) => {
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const nameMatch = c.customer_name?.toLowerCase().includes(query);
-        const emailMatch = c.customer_email?.toLowerCase().includes(query);
-        const lastMsgMatch = c.last_message?.toLowerCase().includes(query);
-        const sessionMatch = c.crisp_session_id.toLowerCase().includes(query);
-        return nameMatch || emailMatch || lastMsgMatch || sessionMatch;
-      }
-      return true;
-    });
+  // Conversations for display — the DB RPC already returns globally ordered results
+  // (unread_count > 0 DESC, last_message_at DESC) and server-side search is applied.
+  // We preserve that order and only apply local re-sort when realtime patches rows
+  // in-place (the realtime handler already re-sorts before calling setConversations).
+  // NOTE: Do NOT apply a local search filter here — search is server-side via RPC.
+  const filteredConversations = conversations;
 
-    // Primary: Unread state (unread_count > 0) DESC; Secondary: last_message_at DESC
-    return list.sort((a, b) => {
-      const unreadA = (a.unread_count || 0) > 0 ? 1 : 0;
-      const unreadB = (b.unread_count || 0) > 0 ? 1 : 0;
-      if (unreadA !== unreadB) {
-        return unreadB - unreadA;
-      }
-      const timeA = a.last_message_at || "";
-      const timeB = b.last_message_at || "";
-      return timeB.localeCompare(timeA);
-    });
-  }, [conversations, searchQuery]);
 
   const activeConversation = useMemo(() => {
     return conversations.find((c) => c.id === selectedConversationId) || null;

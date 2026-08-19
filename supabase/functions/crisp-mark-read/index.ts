@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const ALLOWED_ROLES = new Set(["admin", "cs_admin", "cs"]);
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -14,13 +16,64 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
-    if (!supabaseUrl || !supabaseServiceKey) {
+    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
       return new Response(JSON.stringify({ error: "Server configuration missing" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // ── CALLER AUTHENTICATION ──────────────────────────────────────────────────
+    // Independently verify the caller's JWT and role — do not rely on the
+    // server wrapper having already checked this.
+    const authHeader = req.headers.get("authorization") || "";
+    const callerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+
+    if (!callerToken) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Missing authorization token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Use a caller-scoped client (anon key + user JWT) to verify identity
+    const callerClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${callerToken}` } },
+    });
+
+    const { data: { user }, error: userErr } = await callerClient.auth.getUser();
+
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Invalid session" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Look up the caller's primary role from the profiles table
+    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: profile, error: profileErr } = await serviceClient
+      .from("profiles")
+      .select("primary_role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileErr || !profile) {
+      return new Response(JSON.stringify({ error: "Unauthorized: Could not resolve user role" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!ALLOWED_ROLES.has(profile.primary_role)) {
+      return new Response(JSON.stringify({ error: "Forbidden: Insufficient role" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // ──────────────────────────────────────────────────────────────────────────
 
     const body = await req.json().catch(() => ({}));
     const conversationId = String(body.conversationId || "").trim();
@@ -32,10 +85,8 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     // 1. Fetch conversation details
-    const { data: conv, error: convErr } = await supabase
+    const { data: conv, error: convErr } = await serviceClient
       .from("crisp_conversations")
       .select("id, crisp_website_id, crisp_session_id")
       .eq("id", conversationId)
@@ -52,20 +103,20 @@ serve(async (req) => {
     const sessionId = conv.crisp_session_id;
 
     // 2. Fetch workspace secret reference from Vault
-    const { data: ws, error: wsErr } = await supabase
+    const { data: ws, error: wsErr } = await serviceClient
       .from("crisp_workspaces")
-      .select("credential_secret_id")
+      .select("credential_secret_id, enabled")
       .eq("crisp_website_id", websiteId)
       .maybeSingle();
 
-    if (wsErr || !ws?.credential_secret_id) {
-      return new Response(JSON.stringify({ error: "Workspace secret reference missing" }), {
+    if (wsErr || !ws?.credential_secret_id || !ws.enabled) {
+      return new Response(JSON.stringify({ error: "Workspace not found, disabled, or secret reference missing" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { data: secretData, error: secretErr } = await supabase.rpc("crisp_get_workspace_secret", {
+    const { data: secretData, error: secretErr } = await serviceClient.rpc("crisp_get_workspace_secret", {
       p_secret_id: ws.credential_secret_id,
     });
 
@@ -79,21 +130,26 @@ serve(async (req) => {
       });
     }
 
-    // 3. Call Crisp REST API to mark conversation as read for operator
+    // 3. Call Crisp REST API — correct documented payload for acknowledging visitor messages
+    //    PATCH /v1/website/{website_id}/conversation/{session_id}/read
+    //    Body: { "from": "user", "origin": "chat" }
     const auth = btoa(`${tokenId}:${tokenKey}`);
-    const crispRes = await fetch(`https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/read`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "X-Crisp-Tier": "website",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ read: { operator: true } }),
-    });
+    const crispRes = await fetch(
+      `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/read`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "X-Crisp-Tier": "website",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ from: "user", origin: "chat" }),
+      }
+    );
 
     if (!crispRes.ok) {
       const errJson = await crispRes.json().catch(() => ({}));
-      const reason = errJson?.reason || errJson?.data?.message || `HTTP ${crispRes.status}`;
+      const reason = (errJson as any)?.reason || (errJson as any)?.data?.message || `HTTP ${crispRes.status}`;
       console.error(`Crisp mark-read API failed for session ${sessionId}:`, reason);
       return new Response(JSON.stringify({ error: `Crisp API error: ${reason}` }), {
         status: crispRes.status,
@@ -102,7 +158,7 @@ serve(async (req) => {
     }
 
     // 4. Update Supabase crisp_conversations: unread_count = 0, last_customer_unread_at = null
-    const { error: updErr } = await supabase
+    const { error: updErr } = await serviceClient
       .from("crisp_conversations")
       .update({
         unread_count: 0,
@@ -112,6 +168,7 @@ serve(async (req) => {
       .eq("id", conversationId);
 
     if (updErr) {
+      console.error("crisp-mark-read: DB update failed:", updErr.message);
       return new Response(JSON.stringify({ error: `Database update failed: ${updErr.message}` }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
