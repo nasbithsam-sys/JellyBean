@@ -80,6 +80,41 @@ export const sendCrispMessage = createServerFn({ method: "POST" })
     };
   });
 
+export const markCrispConversationRead = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { conversationId: string }) => {
+    const conversationId = String(input?.conversationId ?? "").trim();
+    if (!conversationId) throw new Error("conversationId is required");
+    return { conversationId };
+  })
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    const { data: roleRows, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    if (roleErr) throw new Error("Could not verify user roles");
+    const roles = (roleRows ?? []).map((r) => String(r.role));
+    if (!roles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
+      throw new Error("Forbidden: Crisp Chat is restricted to admin, cs_admin and cs roles.");
+    }
+
+    const { data: resData, error: fnErr } = await supabase.functions.invoke("crisp-mark-read", {
+      body: { conversationId: data.conversationId },
+    });
+
+    if (fnErr) {
+      return { ok: false as const, error: fnErr.message || "Failed to invoke mark read function" };
+    }
+
+    if (resData?.error) {
+      return { ok: false as const, error: resData.error };
+    }
+
+    return { ok: true as const };
+  });
+
 async function assertAdmin(supabase: any, userId: string) {
   const { data: roleRows, error: roleErr } = await supabase
     .from("user_roles")
@@ -150,12 +185,6 @@ export const addCrispWorkspace = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     await assertAdmin(supabase, userId);
-
-    console.log("DEBUG ADD WORKSPACE:");
-    console.log("Website ID:", data.websiteId);
-    console.log("Token ID:", data.tokenId);
-    console.log("Token Key:", data.tokenKey);
-    console.log("Token Key Length:", data.tokenKey.length);
 
     const verified = await verifyCrispCredentials(data.websiteId, data.tokenId, data.tokenKey);
     if (!verified.ok) return { ok: false as const, error: verified.error };
@@ -263,6 +292,44 @@ export const toggleCrispWorkspace = createServerFn({ method: "POST" })
     return { ok: true as const, enabled: data.enabled };
   });
 
+export const getCrispWorkspaceWebhookUrl = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { websiteId: string }) => {
+    const websiteId = String(input?.websiteId ?? "").trim();
+    if (!websiteId) throw new Error("websiteId is required");
+    return { websiteId };
+  })
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    await assertAdmin(supabase, userId);
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: ws, error: fetchErr } = await supabaseAdmin
+      .from("crisp_workspaces")
+      .select("credential_secret_id")
+      .eq("crisp_website_id", data.websiteId)
+      .maybeSingle();
+
+    if (fetchErr || !ws?.credential_secret_id) {
+      return { ok: false as const, error: "Workspace credentials not found in Vault." };
+    }
+
+    const { data: current, error: currentErr } = await supabaseAdmin.rpc("crisp_get_workspace_secret", {
+      p_secret_id: ws.credential_secret_id,
+    });
+
+    const secret = (current as any)?.webhook_secret || (current as any)?.webhookSecret;
+
+    if (currentErr || !secret) {
+      return {
+        ok: false as const,
+        error: `Stored Webhook Secret is unavailable: ${currentErr?.message ?? "missing secret"}`,
+      };
+    }
+
+    return { ok: true as const, webhook_url: webhookUrlFor(secret) };
+  });
+
 export const regenerateCrispWebhookSecret = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { websiteId: string }) => {
@@ -314,6 +381,56 @@ export const regenerateCrispWebhookSecret = createServerFn({ method: "POST" })
     return { ok: true as const, webhook_url: webhookUrlFor(secret) };
   });
 
+export const deleteCrispWorkspace = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { websiteId: string }) => {
+    const websiteId = String(input?.websiteId ?? "").trim();
+    if (!websiteId) throw new Error("websiteId is required");
+    return { websiteId };
+  })
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    await assertAdmin(supabase, userId);
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Fetch workspace
+    const { data: ws, error: fetchErr } = await supabaseAdmin
+      .from("crisp_workspaces")
+      .select("id, credential_secret_id")
+      .eq("crisp_website_id", data.websiteId)
+      .maybeSingle();
+
+    if (fetchErr) {
+      return { ok: false as const, error: `Failed to find workspace: ${fetchErr.message}` };
+    }
+
+    if (ws?.credential_secret_id) {
+      // Remove Vault secret if present & verify result (Abort deletion if Vault secret cleanup fails)
+      const { data: deletedSecret, error: secretDelErr } = await supabaseAdmin.rpc("crisp_delete_workspace_secret", {
+        p_secret_id: ws.credential_secret_id,
+      });
+
+      if (secretDelErr || deletedSecret !== true) {
+        return {
+          ok: false as const,
+          error: `Failed to clean up workspace Vault secret: ${secretDelErr?.message ?? "Vault secret deletion returned false"}. Workspace deletion aborted.`,
+        };
+      }
+    }
+
+    // Delete workspace registration row (Preserves historical crisp_conversations and crisp_messages)
+    const { error: delErr } = await supabaseAdmin
+      .from("crisp_workspaces")
+      .delete()
+      .eq("crisp_website_id", data.websiteId);
+
+    if (delErr) {
+      return { ok: false as const, error: `Failed to delete workspace record: ${delErr.message}` };
+    }
+
+    return { ok: true as const };
+  });
 
 export const addCrispConversationNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

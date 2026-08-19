@@ -4,19 +4,20 @@ import {
   Building2,
   Check,
   CheckCircle2,
-  Clock,
+  ChevronUp,
   Copy,
   Globe,
-  Key,
   Loader2,
   MessageSquare,
+  MoreVertical,
   Plus,
   RefreshCw,
   Search,
   Send,
   ShieldAlert,
   Trash2,
-  User,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -25,10 +26,12 @@ import {
   addCrispConversationNote,
   addCrispWorkspace,
   deleteCrispConversationNote,
+  deleteCrispWorkspace,
+  getCrispWorkspaceWebhookUrl,
+  markCrispConversationRead,
   regenerateCrispWebhookSecret,
   sendCrispMessage,
   syncCrispHistory,
-  toggleCrispWorkspace,
 } from "@/lib/crisp.functions";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -41,13 +44,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { PageBody, PageHeader, RoleGate } from "@/components/page";
+import { PageHeader, RoleGate } from "@/components/page";
 
 export const Route = createFileRoute("/app/crisp-chat")({
   component: CrispChatPage,
@@ -64,6 +72,7 @@ type ConversationRecord = {
   status: string | null;
   last_message: string | null;
   last_message_at: string | null;
+  last_customer_unread_at: string | null;
   unread_count: number | null;
   metadata: any;
   created_at: string | null;
@@ -116,44 +125,63 @@ function getWorkspaceDisplayName(websiteId: string, workspacesMap: Map<string, s
 function CrispChatPage() {
   const auth = useAuth();
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col bg-background text-foreground overflow-hidden">
+    <div className="h-full w-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
       <PageHeader
         title="Crisp Chat Inbox"
         description="Unified multi-workspace customer support portal."
+        className="shrink-0 my-2 py-3 px-4 md:px-5"
       />
-      <PageBody className="flex-1 p-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col px-3 md:px-5 pb-3">
         <RoleGate
           allow={["admin", "cs_admin", "cs"]}
           current={auth.primaryRole}
         >
           <CrispInboxInner />
         </RoleGate>
-      </PageBody>
+      </div>
     </div>
   );
 }
+
+const PAGE_SIZE_CONVS = 30;
+const PAGE_SIZE_MSGS = 40;
 
 function CrispInboxInner() {
   const auth = useAuth();
   const isAdmin = auth.primaryRole === "admin";
 
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
+  const [workspaceTotalChatsMap, setWorkspaceTotalChatsMap] = useState<Map<string, number>>(new Map());
+  const [workspaceHasUnreadMap, setWorkspaceHasUnreadMap] = useState<Map<string, boolean>>(new Map());
+  const [workspaceLatestUnreadAtMap, setWorkspaceLatestUnreadAtMap] = useState<Map<string, string>>(new Map());
+  const [totalChatsCount, setTotalChatsCount] = useState<number>(0);
+  const [hasAnyUnread, setHasAnyUnread] = useState<boolean>(false);
+
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string>("all");
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [notes, setNotes] = useState<NoteRecord[]>([]);
 
+  // Pagination states for Conversation list
+  const [convPage, setConvPage] = useState<number>(0);
+  const [hasMoreConvs, setHasMoreConvs] = useState<boolean>(true);
+  const [isLoadingConvs, setIsLoadingConvs] = useState<boolean>(false);
+
+  // Pagination states for Messages thread
+  const [hasMoreMessages, setHasMoreMessages] = useState<boolean>(false);
+  const [isLoadingOlderMsgs, setIsLoadingOlderMsgs] = useState<boolean>(false);
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusTab, setStatusTab] = useState<"all" | "unresolved" | "resolved">("all");
   const [messageInput, setMessageInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
 
   const [isSending, setIsSending] = useState(false);
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showRightPanel, setShowRightPanel] = useState(true);
 
-  // Admin Add Workspace State
+  // Admin Workspace Management Modals State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addWebsiteId, setAddWebsiteId] = useState("");
   const [addTokenId, setAddTokenId] = useState("");
@@ -162,41 +190,203 @@ function CrispInboxInner() {
   const [addSuccessResult, setAddSuccessResult] = useState<{ workspaceName: string; webhookUrl: string } | null>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // View Webhook Modal
+  const [viewWebhookWs, setViewWebhookWs] = useState<WorkspaceRecord | null>(null);
+  const [viewWebhookUrl, setViewWebhookUrl] = useState<string | null>(null);
+  const [isFetchingWebhook, setIsFetchingWebhook] = useState(false);
 
-  // Fetch workspaces
-  const loadWorkspaces = async () => {
+  // Regenerate Webhook Dialog
+  const [regenWebhookWs, setRegenWebhookWs] = useState<WorkspaceRecord | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenResultUrl, setRegenResultUrl] = useState<string | null>(null);
+
+  // Delete Workspace Dialog
+  const [deleteWs, setDeleteWs] = useState<WorkspaceRecord | null>(null);
+  const [isDeletingWs, setIsDeletingWs] = useState(false);
+
+  // Refs for message container, conversation scroll container, and stable realtime access
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const convScrollRef = useRef<HTMLDivElement>(null);
+  const selectedConversationIdRef = useRef(selectedConversationId);
+  const selectedWebsiteIdRef = useRef(selectedWebsiteId);
+  const workspacesRef = useRef(workspaces);
+
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
+  useEffect(() => {
+    selectedWebsiteIdRef.current = selectedWebsiteId;
+  }, [selectedWebsiteId]);
+
+  useEffect(() => {
+    workspacesRef.current = workspaces;
+  }, [workspaces]);
+
+  // Load active enabled registered workspaces.
+  // Returns the fetched rows AND immediately updates workspacesRef.current so that
+  // callers can pass the returned ids into loadConversations without waiting for
+  // a React state re-render (fixes the "no conversations on initial All Workspaces load" race).
+  const loadWorkspaces = async (): Promise<WorkspaceRecord[]> => {
     const { data } = await supabase
       .from("crisp_workspaces")
       .select("*")
+      .eq("enabled", true)
       .order("created_at", { ascending: true });
-    if (data) setWorkspaces(data as any);
+    const rows = (data as WorkspaceRecord[] | null) ?? [];
+    workspacesRef.current = rows; // update ref immediately before React re-render
+    setWorkspaces(rows);
+    return rows;
   };
 
-  // Fetch conversations
-  const loadConversations = async () => {
-    let query = supabase
-      .from("crisp_conversations")
-      .select("*")
-      .order("last_message_at", { ascending: false });
+  // Load aggregate workspace stats using efficient RPC (ENABLED workspaces only)
+  const loadWorkspaceCounts = async () => {
+    const { data, error } = await supabase.rpc("get_crisp_workspace_summaries");
 
-    if (selectedWebsiteId !== "all") {
-      query = query.eq("crisp_website_id", selectedWebsiteId);
+    if (!error && data) {
+      const totalMap = new Map<string, number>();
+      const hasUnreadMap = new Map<string, boolean>();
+      const latestUnreadMap = new Map<string, string>();
+      let grandTotal = 0;
+      let anyUnread = false;
+
+      (data as any[]).forEach((item) => {
+        const wsId = item.crisp_website_id;
+        const total = Number(item.total_chat_count || 0);
+        const unread = Boolean(item.has_unread);
+        const latestTime = item.latest_unread_at ? String(item.latest_unread_at) : "";
+
+        totalMap.set(wsId, total);
+        hasUnreadMap.set(wsId, unread);
+        if (latestTime) latestUnreadMap.set(wsId, latestTime);
+
+        grandTotal += total;
+        if (unread) anyUnread = true;
+      });
+
+      setWorkspaceTotalChatsMap(totalMap);
+      setWorkspaceHasUnreadMap(hasUnreadMap);
+      setWorkspaceLatestUnreadAtMap(latestUnreadMap);
+      setTotalChatsCount(grandTotal);
+      setHasAnyUnread(anyUnread);
+    }
+  };
+
+  // Fetch conversations page using the get_crisp_conversations_page RPC.
+  //
+  // KEY DESIGN DECISIONS:
+  //   1. Ordering is done globally by the DB (unread_count > 0 DESC, last_message_at DESC).
+  //      React-side sort is only a display fallback; it must NOT override the server order.
+  //   2. When searchQuery is present, the search runs server-side across ALL conversations
+  //      in the active workspace(s) — not just the currently loaded page.
+  //   3. activeWebsiteIdsOverride lets the initial mount pass freshly-fetched IDs
+  //      without waiting for a React state update (fixes the race condition).
+  const loadConversations = async (
+    targetWebsiteId?: string,
+    isReset = true,
+    activeWebsiteIdsOverride?: string[],
+    searchOverride?: string,
+  ) => {
+    const wsId = targetWebsiteId !== undefined ? targetWebsiteId : selectedWebsiteIdRef.current;
+    const pageToLoad = isReset ? 0 : convPage + 1;
+    setIsLoadingConvs(true);
+
+    // Use override (initial load) or ref (subsequent calls)
+    const activeWebsiteIds = activeWebsiteIdsOverride ?? workspacesRef.current.map((w) => w.crisp_website_id);
+    if (activeWebsiteIds.length === 0) {
+      setConversations([]);
+      setHasMoreConvs(false);
+      setIsLoadingConvs(false);
+      return;
     }
 
-    const { data } = await query;
-    if (data) setConversations(data as any);
+    const targetIds = wsId !== "all" ? [wsId] : activeWebsiteIds;
+    const search = searchOverride !== undefined ? searchOverride : searchQuery;
+
+    const { data, error } = await supabase.rpc("get_crisp_conversations_page", {
+      p_website_ids: targetIds,
+      p_limit: PAGE_SIZE_CONVS,
+      p_offset: pageToLoad * PAGE_SIZE_CONVS,
+      p_search: search.trim() || null,
+    });
+
+    setIsLoadingConvs(false);
+
+    if (!error && data) {
+      if (isReset) {
+        setConversations(data as any);
+        setConvPage(0);
+      } else {
+        setConversations((prev) => [...prev, ...(data as any[])]);
+        setConvPage(pageToLoad);
+      }
+      setHasMoreConvs((data as any[]).length === PAGE_SIZE_CONVS);
+    }
   };
 
-  // Fetch messages for active conversation
-  const loadMessages = async (convId: string) => {
+  // Handle infinite scrolling in Column 2 conversation list
+  const handleConvScroll = () => {
+    const el = convScrollRef.current;
+    if (!el || isLoadingConvs || !hasMoreConvs) return;
+
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= 100) {
+      loadConversations(selectedWebsiteId, false);
+    }
+  };
+
+  // Fetch initial messages batch for active conversation (Newest 40 messages)
+  const loadMessages = async (convId: string, shouldScrollBottom = false) => {
     const { data } = await supabase
       .from("crisp_messages")
       .select("*")
       .eq("conversation_id", convId)
-      .order("sent_at", { ascending: true });
+      .order("sent_at", { ascending: false })
+      .limit(PAGE_SIZE_MSGS);
 
-    if (data) setMessages(data as any);
+    if (data) {
+      const sortedAsc = (data as any[]).reverse();
+      setMessages(sortedAsc);
+      setHasMoreMessages(data.length === PAGE_SIZE_MSGS);
+
+      if (shouldScrollBottom) {
+        setTimeout(() => scrollToBottom("auto"), 50);
+      }
+    }
+  };
+
+  // Load older messages for message pagination
+  const loadOlderMessages = async () => {
+    if (!selectedConversationId || messages.length === 0 || isLoadingOlderMsgs) return;
+    setIsLoadingOlderMsgs(true);
+
+    const oldestSentAt = messages[0].sent_at;
+    const { data } = await supabase
+      .from("crisp_messages")
+      .select("*")
+      .eq("conversation_id", selectedConversationId)
+      .lt("sent_at", oldestSentAt)
+      .order("sent_at", { ascending: false })
+      .limit(PAGE_SIZE_MSGS);
+
+    setIsLoadingOlderMsgs(false);
+
+    if (data && data.length > 0) {
+      const olderSorted = (data as any[]).reverse();
+      const container = messagesContainerRef.current;
+      const oldScrollHeight = container?.scrollHeight || 0;
+
+      setMessages((prev) => [...olderSorted, ...prev]);
+      setHasMoreMessages(data.length === PAGE_SIZE_MSGS);
+
+      // Preserve scroll position relative to top
+      setTimeout(() => {
+        if (container) {
+          container.scrollTop = container.scrollHeight - oldScrollHeight;
+        }
+      }, 30);
+    } else {
+      setHasMoreMessages(false);
+    }
   };
 
   // Fetch internal notes for active conversation
@@ -233,21 +423,59 @@ function CrispInboxInner() {
     }
   };
 
+  // Scroll message thread container to bottom without moving outer page
+  const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior,
+      });
+    }
+  };
+
+  // Check if message viewport is near bottom
+  const isNearBottom = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    const threshold = 120;
+    return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+  };
+
   // Initial load
   useEffect(() => {
-    loadWorkspaces();
-    loadConversations();
+    loadWorkspaces().then((fetchedWorkspaces) => {
+      const activeIds = fetchedWorkspaces.map((w) => w.crisp_website_id);
+      loadWorkspaceCounts();
+      // Pass freshly-fetched IDs directly — avoids race where workspacesRef.current
+      // has not yet been populated when loadConversations reads it.
+      loadConversations("all", true, activeIds);
+    });
   }, []);
 
-  // Reload conversations on workspace filter change
+  // Re-run server-side search whenever searchQuery changes
   useEffect(() => {
-    loadConversations();
+    loadConversations(selectedWebsiteId, true, undefined, searchQuery);
+  }, [searchQuery]);
+
+  // Reload conversations when selected workspace filter changes
+  useEffect(() => {
+    loadConversations(selectedWebsiteId, true);
+
+    // Clear active conversation if it does not belong to newly selected workspace
+    if (selectedWebsiteId !== "all" && selectedConversationId) {
+      const activeConv = conversations.find((c) => c.id === selectedConversationId);
+      if (activeConv && activeConv.crisp_website_id !== selectedWebsiteId) {
+        setSelectedConversationId(null);
+        setMessages([]);
+        setNotes([]);
+      }
+    }
   }, [selectedWebsiteId]);
 
-  // Load messages & notes when conversation selection changes
+  // Load messages & notes when active conversation selection changes
   useEffect(() => {
     if (selectedConversationId) {
-      loadMessages(selectedConversationId);
+      loadMessages(selectedConversationId, true);
       loadNotes(selectedConversationId);
     } else {
       setMessages([]);
@@ -255,33 +483,136 @@ function CrispInboxInner() {
     }
   }, [selectedConversationId]);
 
-  // Auto-scroll messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  // Handle selecting a conversation (Marks unread conversation as READ in Crisp + Supabase with error recovery)
+  const handleSelectConversation = (convId: string) => {
+    setSelectedConversationId(convId);
 
-  // Realtime Subscriptions
+    const targetConv = conversations.find((c) => c.id === convId);
+    if (targetConv && targetConv.unread_count && targetConv.unread_count > 0) {
+      const prevUnread = targetConv.unread_count;
+      const prevLastUnreadAt = targetConv.last_customer_unread_at;
+
+      // 1. Optimistically update local conversations state so unread dot disappears instantly
+      setConversations((prev) =>
+        prev.map((c) => (c.id === convId ? { ...c, unread_count: 0, last_customer_unread_at: null } : c))
+      );
+
+      // 2. Call Crisp + Supabase markRead server function asynchronously
+      markCrispConversationRead({ data: { conversationId: convId } }).then((res) => {
+        if (!res.ok) {
+          // Revert local UI state if Crisp or DB mark-read failed!
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === convId ? { ...c, unread_count: prevUnread, last_customer_unread_at: prevLastUnreadAt } : c
+            )
+          );
+          loadWorkspaceCounts();
+          toast.error(res.error || "Could not mark chat read on Crisp");
+        } else {
+          loadWorkspaceCounts();
+        }
+      });
+    }
+  };
+
+  // Stable Realtime Subscriptions (Single channel created ONCE on mount)
   useEffect(() => {
     const channel = supabase
-      .channel("crisp_inbox_realtime")
+      .channel("crisp_inbox_realtime_stable")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "crisp_conversations" },
-        () => {
-          loadConversations();
+        (payload) => {
+          // ── Preserve loaded pages ──────────────────────────────────────────
+          // Do NOT reset the conversation list to page 1 on every update.
+          // Instead, surgically update or insert the affected row in our
+          // existing conversations array. This preserves infinite-scroll state
+          // and scroll position.
+          //
+          // For INSERT events we prepend/re-sort locally; for UPDATE we patch
+          // in place. For DELETE we remove. Counts are always refreshed.
+          loadWorkspaceCounts();
+
+          const changedRow = (payload.new ?? payload.old) as ConversationRecord | undefined;
+          if (!changedRow?.id) {
+            // Fallback: no row data — full reload (should be rare)
+            loadConversations(selectedWebsiteIdRef.current, true);
+            return;
+          }
+
+          if (payload.eventType === "DELETE") {
+            setConversations((prev) => prev.filter((c) => c.id !== changedRow.id));
+            return;
+          }
+
+          // UPDATE or INSERT
+          setConversations((prev) => {
+            const idx = prev.findIndex((c) => c.id === changedRow.id);
+            if (idx !== -1) {
+              // Patch existing row
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx], ...changedRow };
+              // Re-sort: unread first, then last_message_at DESC
+              updated.sort((a, b) => {
+                const ua = (a.unread_count || 0) > 0 ? 1 : 0;
+                const ub = (b.unread_count || 0) > 0 ? 1 : 0;
+                if (ua !== ub) return ub - ua;
+                return (b.last_message_at || "").localeCompare(a.last_message_at || "");
+              });
+              return updated;
+            } else {
+              // New row — only include if it belongs to the active view
+              const activeIds = workspacesRef.current.map((w) => w.crisp_website_id);
+              const activeView = selectedWebsiteIdRef.current;
+              const belongsHere =
+                activeView === "all"
+                  ? activeIds.includes(changedRow.crisp_website_id)
+                  : changedRow.crisp_website_id === activeView;
+              if (!belongsHere) return prev;
+              const updated = [changedRow, ...prev];
+              updated.sort((a, b) => {
+                const ua = (a.unread_count || 0) > 0 ? 1 : 0;
+                const ub = (b.unread_count || 0) > 0 ? 1 : 0;
+                if (ua !== ub) return ub - ua;
+                return (b.last_message_at || "").localeCompare(a.last_message_at || "");
+              });
+              return updated;
+            }
+          });
         }
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "crisp_messages" },
+        { event: "INSERT", schema: "public", table: "crisp_messages" },
         (payload) => {
-          loadConversations();
-          if (
-            selectedConversationId &&
-            payload.new &&
-            (payload.new as any).conversation_id === selectedConversationId
-          ) {
-            loadMessages(selectedConversationId);
+          const activeId = selectedConversationIdRef.current;
+          const newMsg = payload.new as MessageRecord;
+
+          if (activeId && newMsg && newMsg.conversation_id === activeId) {
+            const nearBottom = isNearBottom();
+
+            // ── Append new message without discarding loaded older pages ──────
+            // Simply append the new row to the existing messages array instead
+            // of calling loadMessages() which would discard all older pages.
+            setMessages((prev) => {
+              // Guard against duplicate (e.g. sent by this user)
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+
+            if (nearBottom) {
+              setTimeout(() => scrollToBottom("smooth"), 30);
+            }
+
+            // Acknowledge new message as read (active user is viewing this conversation)
+            markCrispConversationRead({ data: { conversationId: activeId } }).then((res) => {
+              if (res.ok) {
+                setConversations((prev) =>
+                  prev.map((c) => (c.id === activeId ? { ...c, unread_count: 0, last_customer_unread_at: null } : c))
+                );
+                loadWorkspaceCounts();
+              }
+            });
           }
         }
       )
@@ -289,12 +620,13 @@ function CrispInboxInner() {
         "postgres_changes",
         { event: "*", schema: "public", table: "crisp_conversation_notes" },
         (payload) => {
+          const activeId = selectedConversationIdRef.current;
           if (
-            selectedConversationId &&
+            activeId &&
             payload.new &&
-            (payload.new as any).conversation_id === selectedConversationId
+            (payload.new as any).conversation_id === activeId
           ) {
-            loadNotes(selectedConversationId);
+            loadNotes(activeId);
           }
         }
       )
@@ -310,7 +642,7 @@ function CrispInboxInner() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedConversationId]);
+  }, []);
 
   // Map of workspace website_id -> workspace_name
   const workspacesMap = useMemo(() => {
@@ -323,34 +655,53 @@ function CrispInboxInner() {
     return map;
   }, [workspaces]);
 
-  // Workspace counts
-  const workspaceCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    conversations.forEach((c) => {
-      const current = counts.get(c.crisp_website_id) || 0;
-      counts.set(c.crisp_website_id, current + 1);
-    });
-    return counts;
-  }, [conversations]);
+  // Sorted Workspaces Priority:
+  // 1. All Workspaces stays pinned first
+  // 2. Workspaces with at least one unread chat come next (sorted by newest unread customer activity DESC)
+  // 3. Workspaces with NO unread chats come after (sorted by TOTAL CHAT COUNT DESC)
+  // 4. Final tie-breaker: Workspace name ASC
+  const sortedWorkspaces = useMemo(() => {
+    return [...workspaces].sort((a, b) => {
+      const hasUnreadA = workspaceHasUnreadMap.get(a.crisp_website_id) || false;
+      const hasUnreadB = workspaceHasUnreadMap.get(b.crisp_website_id) || false;
 
-  // Filtered conversations
-  const filteredConversations = useMemo(() => {
-    return conversations.filter((c) => {
-      if (statusTab === "unresolved" && c.status === "resolved") return false;
-      if (statusTab === "resolved" && c.status !== "resolved") return false;
-
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const nameMatch = c.customer_name?.toLowerCase().includes(query);
-        const emailMatch = c.customer_email?.toLowerCase().includes(query);
-        const lastMsgMatch = c.last_message?.toLowerCase().includes(query);
-        const sessionMatch = c.crisp_session_id.toLowerCase().includes(query);
-        return nameMatch || emailMatch || lastMsgMatch || sessionMatch;
+      // Primary: Unread workspaces come before read-only workspaces
+      if (hasUnreadA !== hasUnreadB) {
+        return hasUnreadA ? -1 : 1;
       }
 
-      return true;
+      // Secondary (Unread Workspaces): Sort by newest unread customer activity DESC
+      if (hasUnreadA && hasUnreadB) {
+        const timeA = workspaceLatestUnreadAtMap.get(a.crisp_website_id) || "";
+        const timeB = workspaceLatestUnreadAtMap.get(b.crisp_website_id) || "";
+        if (timeA !== timeB) {
+          return timeB.localeCompare(timeA);
+        }
+      }
+
+      // Secondary (Read-Only Workspaces): Sort by TOTAL CHAT COUNT DESC
+      if (!hasUnreadA && !hasUnreadB) {
+        const countA = workspaceTotalChatsMap.get(a.crisp_website_id) || 0;
+        const countB = workspaceTotalChatsMap.get(b.crisp_website_id) || 0;
+        if (countA !== countB) {
+          return countB - countA;
+        }
+      }
+
+      // Final tie-breaker: Workspace name ASC (alphabetical)
+      const nameA = getWorkspaceDisplayName(a.crisp_website_id, workspacesMap).toLowerCase();
+      const nameB = getWorkspaceDisplayName(b.crisp_website_id, workspacesMap).toLowerCase();
+      return nameA.localeCompare(nameB);
     });
-  }, [conversations, statusTab, searchQuery]);
+  }, [workspaces, workspaceHasUnreadMap, workspaceLatestUnreadAtMap, workspaceTotalChatsMap, workspacesMap]);
+
+  // Conversations for display — the DB RPC already returns globally ordered results
+  // (unread_count > 0 DESC, last_message_at DESC) and server-side search is applied.
+  // We preserve that order and only apply local re-sort when realtime patches rows
+  // in-place (the realtime handler already re-sorts before calling setConversations).
+  // NOTE: Do NOT apply a local search filter here — search is server-side via RPC.
+  const filteredConversations = conversations;
+
 
   const activeConversation = useMemo(() => {
     return conversations.find((c) => c.id === selectedConversationId) || null;
@@ -371,7 +722,8 @@ function CrispInboxInner() {
         toast.error(res.error || "Could not send message");
         setMessageInput(content);
       } else {
-        loadMessages(selectedConversationId);
+        await loadMessages(selectedConversationId);
+        scrollToBottom("smooth");
       }
     } catch (err: any) {
       toast.error(err.message || "An unexpected error occurred");
@@ -431,7 +783,8 @@ function CrispInboxInner() {
       } else {
         toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages.`);
         loadWorkspaces();
-        loadConversations();
+        loadWorkspaceCounts();
+        loadConversations(selectedWebsiteId, true);
         if (selectedConversationId) loadMessages(selectedConversationId);
       }
     } catch (err: any) {
@@ -476,46 +829,91 @@ function CrispInboxInner() {
     }
   };
 
-  const handleCopyWebhookUrl = (url: string) => {
-    navigator.clipboard.writeText(url);
+  // Handle View Webhook URL (Admin Only, reads existing URL without regenerating)
+  const handleOpenViewWebhook = async (ws: WorkspaceRecord) => {
+    setViewWebhookWs(ws);
+    setViewWebhookUrl(null);
+    setIsFetchingWebhook(true);
+
+    try {
+      const res = await getCrispWorkspaceWebhookUrl({ data: { websiteId: ws.crisp_website_id } });
+      if (!res.ok || !res.webhook_url) {
+        toast.error(res.error || "Could not fetch Webhook URL");
+      } else {
+        setViewWebhookUrl(res.webhook_url);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to retrieve Webhook URL");
+    } finally {
+      setIsFetchingWebhook(false);
+    }
+  };
+
+  // Handle Regenerate Webhook URL
+  const handleConfirmRegenerateWebhook = async () => {
+    if (!regenWebhookWs || isRegenerating) return;
+    setIsRegenerating(true);
+
+    try {
+      const res = await regenerateCrispWebhookSecret({ data: { websiteId: regenWebhookWs.crisp_website_id } });
+      if (!res.ok || !res.webhook_url) {
+        toast.error(res.error || "Could not regenerate Webhook Secret");
+      } else {
+        setRegenResultUrl(res.webhook_url);
+        toast.success("Webhook URL regenerated successfully!");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to regenerate Webhook Secret");
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
+  // Handle Delete Workspace (Verified Vault secret cleanup before workspace row deletion)
+  const handleConfirmDeleteWorkspace = async () => {
+    if (!deleteWs || isDeletingWs) return;
+    setIsDeletingWs(true);
+
+    try {
+      const res = await deleteCrispWorkspace({ data: { websiteId: deleteWs.crisp_website_id } });
+      if (!res.ok) {
+        toast.error(res.error || "Could not delete workspace");
+      } else {
+        toast.success(`Disconnected workspace "${deleteWs.workspace_name || deleteWs.crisp_website_id}"`);
+
+        if (selectedWebsiteId === deleteWs.crisp_website_id) {
+          setSelectedWebsiteId("all");
+        }
+
+        setDeleteWs(null);
+        loadWorkspaces().then(() => {
+          loadWorkspaceCounts();
+          loadConversations("all", true);
+        });
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete workspace");
+    } finally {
+      setIsDeletingWs(false);
+    }
+  };
+
+  const handleCopyText = (text: string) => {
+    navigator.clipboard.writeText(text);
     setCopiedUrl(true);
-    toast.success("Webhook URL copied to clipboard!");
+    toast.success("Copied to clipboard!");
     setTimeout(() => setCopiedUrl(false), 2500);
   };
 
-  // Extract unique workspaces from conversations if crisp_workspaces is empty
-  const availableWorkspacesList = useMemo(() => {
-    const knownSet = new Set(workspaces.map((w) => w.crisp_website_id));
-    const list = [...workspaces];
-
-    conversations.forEach((c) => {
-      if (!knownSet.has(c.crisp_website_id)) {
-        knownSet.add(c.crisp_website_id);
-        list.push({
-          id: c.crisp_website_id,
-          crisp_website_id: c.crisp_website_id,
-          workspace_name: null,
-          enabled: true,
-          credential_secret_id: null,
-          installed_at: null,
-          last_seen_at: null,
-          last_synced_at: null,
-        });
-      }
-    });
-
-    return list;
-  }, [workspaces, conversations]);
-
   return (
-    <div className="flex h-full w-full overflow-hidden border-t border-border/40">
+    <div className="h-full min-h-0 flex-1 w-full flex overflow-hidden border border-border/40 rounded-2xl bg-card/20 shadow-sm">
       {/* ========================================================================= */}
-      {/* COLUMN 1: CRISP WORKSPACES (~200px) */}
+      {/* COLUMN 1: CRISP WORKSPACES (~220px) */}
       {/* ========================================================================= */}
-      <div className="w-52 shrink-0 border-r border-border/40 bg-card/40 flex flex-col">
-        <div className="p-3 border-b border-border/40 flex items-center justify-between font-medium text-xs text-muted-foreground uppercase tracking-wider">
+      <div className="w-56 shrink-0 border-r border-border/40 bg-card/40 flex flex-col h-full overflow-hidden">
+        <div className="p-3 border-b border-border/40 flex items-center justify-between font-medium text-xs text-muted-foreground uppercase tracking-wider shrink-0">
           <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-primary" />
+            <Building2 className="w-4 h-4 text-primary shrink-0" />
             <span>Workspaces</span>
           </div>
           {isAdmin && (
@@ -534,9 +932,9 @@ function CrispInboxInner() {
           )}
         </div>
 
-        <ScrollArea className="flex-1 p-2">
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 overscroll-contain">
           <div className="space-y-1">
-            {/* All Workspaces */}
+            {/* All Workspaces (Pinned First) */}
             <button
               onClick={() => setSelectedWebsiteId("all")}
               className={cn(
@@ -549,51 +947,105 @@ function CrispInboxInner() {
               <div className="flex items-center gap-2 truncate">
                 <Globe className="w-4 h-4 shrink-0" />
                 <span className="truncate">All Workspaces</span>
+                {hasAnyUnread && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse ml-0.5" title="Has unread conversations" />
+                )}
               </div>
-              <Badge variant="secondary" className="ml-1 shrink-0 text-xs px-1.5 py-0">
-                {conversations.length}
+              <Badge
+                variant={selectedWebsiteId === "all" ? "secondary" : "outline"}
+                className="ml-1 shrink-0 text-xs px-1.5 py-0 font-semibold border-border/60"
+              >
+                {totalChatsCount}
               </Badge>
             </button>
 
             <div className="my-2 border-t border-border/40" />
 
-            {/* Individual Workspaces */}
-            {availableWorkspacesList.map((ws) => {
-              const count = workspaceCounts.get(ws.crisp_website_id) || 0;
+            {/* Individual Active Workspaces List */}
+            {sortedWorkspaces.map((ws) => {
+              const totalChats = workspaceTotalChatsMap.get(ws.crisp_website_id) || 0;
+              const hasUnread = workspaceHasUnreadMap.get(ws.crisp_website_id) || false;
               const displayName = getWorkspaceDisplayName(ws.crisp_website_id, workspacesMap);
               const isSelected = selectedWebsiteId === ws.crisp_website_id;
 
               return (
-                <button
+                <div
                   key={ws.crisp_website_id}
-                  onClick={() => setSelectedWebsiteId(ws.crisp_website_id)}
                   className={cn(
-                    "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors text-left group",
+                    "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-sm transition-colors group",
                     isSelected
                       ? "bg-primary text-primary-foreground font-medium shadow-sm"
                       : "hover:bg-accent hover:text-accent-foreground text-muted-foreground"
                   )}
                 >
-                  <div className="flex items-center gap-2 truncate">
-                    <span className={cn("w-2 h-2 rounded-full shrink-0", ws.enabled ? "bg-emerald-500" : "bg-muted")} />
+                  <button
+                    onClick={() => setSelectedWebsiteId(ws.crisp_website_id)}
+                    className="flex-1 flex items-center gap-2 min-w-0 text-left py-0.5"
+                  >
+                    <span className={cn("w-2 h-2 rounded-full shrink-0", ws.enabled ? "bg-emerald-500/60" : "bg-muted")} />
                     <span className="truncate">{displayName}</span>
+                    {hasUnread && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse ml-0.5" title="Has unread conversations" />
+                    )}
+                  </button>
+
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <Badge
+                      variant={isSelected ? "secondary" : "outline"}
+                      className="text-xs px-1.5 py-0 font-semibold border-border/60"
+                    >
+                      {totalChats}
+                    </Badge>
+
+                    {isAdmin && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              "h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity rounded-md",
+                              isSelected ? "hover:bg-primary-foreground/20 text-primary-foreground" : "hover:bg-accent text-muted-foreground"
+                            )}
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 text-xs">
+                          <DropdownMenuItem onClick={() => handleOpenViewWebhook(ws)} className="cursor-pointer">
+                            <Copy className="w-3.5 h-3.5 mr-2 text-primary" />
+                            <span>View Webhook URL</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleCopyWebhookUrlFromWs(ws)} className="cursor-pointer">
+                            <Check className="w-3.5 h-3.5 mr-2 text-emerald-500" />
+                            <span>Copy Webhook URL</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setRegenWebhookWs(ws); setRegenResultUrl(null); }} className="cursor-pointer">
+                            <RefreshCw className="w-3.5 h-3.5 mr-2 text-amber-500" />
+                            <span>Regenerate Webhook URL</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setDeleteWs(ws)} className="cursor-pointer text-destructive focus:text-destructive">
+                            <Trash2 className="w-3.5 h-3.5 mr-2" />
+                            <span>Delete Workspace</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
-                  <Badge variant="outline" className="ml-1 shrink-0 text-xs px-1.5 py-0 border-border/60">
-                    {count}
-                  </Badge>
-                </button>
+                </div>
               );
             })}
           </div>
-        </ScrollArea>
+        </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* COLUMN 2: CONVERSATIONS LIST (~300px) */}
+      {/* COLUMN 2: CONVERSATIONS LIST (~320px) */}
       {/* ========================================================================= */}
-      <div className="w-80 shrink-0 border-r border-border/40 bg-card/20 flex flex-col">
+      <div className="w-80 shrink-0 border-r border-border/40 bg-card/20 flex flex-col h-full overflow-hidden">
         {/* Search & Sync Header */}
-        <div className="p-3 border-b border-border/40 space-y-2">
+        <div className="p-3 border-b border-border/40 shrink-0">
           <div className="flex items-center justify-between gap-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
@@ -615,85 +1067,82 @@ function CrispInboxInner() {
               <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
             </Button>
           </div>
-
-          <Tabs value={statusTab} onValueChange={(v: any) => setStatusTab(v)} className="w-full">
-            <TabsList className="w-full grid grid-cols-3 h-8 text-xs">
-              <TabsTrigger value="all" className="text-xs py-1">All</TabsTrigger>
-              <TabsTrigger value="unresolved" className="text-xs py-1">Unresolved</TabsTrigger>
-              <TabsTrigger value="resolved" className="text-xs py-1">Resolved</TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
 
-        {/* Conversations List */}
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
-            {filteredConversations.length === 0 ? (
-              <div className="p-6 text-center text-muted-foreground text-xs">
-                No conversations found.
-              </div>
-            ) : (
-              filteredConversations.map((conv) => {
+        {/* Conversations Scroll Area with Infinite Scroll */}
+        <div ref={convScrollRef} onScroll={handleConvScroll} className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1 overscroll-contain">
+          {filteredConversations.length === 0 ? (
+            <div className="p-6 text-center text-muted-foreground text-xs">
+              {isLoadingConvs ? "Loading conversations..." : "No conversations found."}
+            </div>
+          ) : (
+            <>
+              {filteredConversations.map((conv) => {
                 const isSelected = selectedConversationId === conv.id;
+                const isUnread = (conv.unread_count || 0) > 0;
                 const wsLabel = getWorkspaceDisplayName(conv.crisp_website_id, workspacesMap);
 
                 return (
                   <button
                     key={conv.id}
-                    onClick={() => setSelectedConversationId(conv.id)}
+                    onClick={() => handleSelectConversation(conv.id)}
                     className={cn(
                       "w-full text-left p-3 rounded-lg border transition-all space-y-1.5",
                       isSelected
                         ? "bg-accent/80 border-primary/50 shadow-sm"
+                        : isUnread
+                        ? "bg-primary/5 border-primary/20 hover:bg-accent/40"
                         : "border-transparent hover:bg-accent/40"
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-sm truncate text-foreground">
-                        {conv.customer_name || "Visitor"}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground shrink-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isUnread && (
+                          <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />
+                        )}
+                        <span className={cn("text-sm truncate text-foreground", isUnread ? "font-bold" : "font-semibold")}>
+                          {conv.customer_name || "Visitor"}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
                         {conv.last_message_at
                           ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                           : ""}
                       </span>
                     </div>
 
-                    <p className="text-xs text-muted-foreground line-clamp-2 break-words">
+                    <p className={cn("text-xs line-clamp-2 break-words leading-relaxed", isUnread ? "text-foreground font-medium" : "text-muted-foreground")}>
                       {conv.last_message || "No messages yet"}
                     </p>
 
                     <div className="flex items-center justify-between gap-2 pt-1">
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 truncate border-border/60">
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 truncate border-border/60 font-normal">
                         {wsLabel}
                       </Badge>
-                      <span
-                        className={cn(
-                          "text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded",
-                          conv.status === "resolved"
-                            ? "bg-emerald-500/10 text-emerald-500"
-                            : "bg-amber-500/10 text-amber-500"
-                        )}
-                      >
-                        {conv.status || "unresolved"}
-                      </span>
                     </div>
                   </button>
                 );
-              })
-            )}
-          </div>
-        </ScrollArea>
+              })}
+
+              {isLoadingConvs && (
+                <div className="p-3 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                  <span>Loading more...</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* COLUMN 3: ACTIVE CHAT THREAD (~flex-1) */}
+      {/* COLUMN 3: ACTIVE CHAT THREAD (Flex-1) */}
       {/* ========================================================================= */}
-      <div className="flex-1 flex flex-col bg-background min-w-0">
+      <div className="flex-1 flex flex-col bg-background min-w-0 h-full overflow-hidden">
         {activeConversation ? (
           <>
-            {/* Header */}
-            <div className="p-3 border-b border-border/40 flex items-center justify-between bg-card/20">
+            {/* Chat Header */}
+            <div className="p-3 border-b border-border/40 flex items-center justify-between bg-card/20 shrink-0">
               <div className="flex items-center gap-3 truncate">
                 <Avatar className="w-8 h-8">
                   <AvatarImage src={activeConversation.customer_avatar || undefined} />
@@ -715,12 +1164,41 @@ function CrispInboxInner() {
                 <Badge variant="secondary" className="text-xs">
                   {getWorkspaceDisplayName(activeConversation.crisp_website_id, workspacesMap)}
                 </Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground hidden lg:flex"
+                  onClick={() => setShowRightPanel((prev) => !prev)}
+                  title={showRightPanel ? "Hide Details Panel" : "Show Details Panel"}
+                >
+                  {showRightPanel ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+                </Button>
               </div>
             </div>
 
-            {/* Messages Scroll Area */}
-            <ScrollArea className="flex-1 p-4">
+            {/* Messages Scroll Area with Pagination */}
+            <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 overscroll-contain">
               <div className="space-y-3 max-w-3xl mx-auto">
+                {/* Load Older Messages Button */}
+                {hasMoreMessages && (
+                  <div className="text-center py-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={loadOlderMessages}
+                      disabled={isLoadingOlderMsgs}
+                      className="text-xs text-muted-foreground hover:text-foreground h-7 gap-1.5"
+                    >
+                      {isLoadingOlderMsgs ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      )}
+                      <span>Load Older Messages</span>
+                    </Button>
+                  </div>
+                )}
+
                 {messages.map((msg) => {
                   const isOperator = msg.sender_type === "operator" || msg.direction === "outgoing";
 
@@ -740,20 +1218,19 @@ function CrispInboxInner() {
                             : "bg-muted text-foreground rounded-bl-xs"
                         )}
                       >
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                       </div>
-                      <span className="text-[10px] text-muted-foreground px-1 mt-0.5">
+                      <span className="text-[10px] text-muted-foreground px-1 mt-0.5 font-medium">
                         {new Date(msg.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
                   );
                 })}
-                <div ref={messagesEndRef} />
               </div>
-            </ScrollArea>
+            </div>
 
-            {/* Message Composer */}
-            <form onSubmit={handleSendMessage} className="p-3 border-t border-border/40 flex items-center gap-2 bg-card/20">
+            {/* Message Composer - Anchored to Bottom */}
+            <form onSubmit={handleSendMessage} className="p-3 border-t border-border/40 flex items-center gap-2 bg-card/20 shrink-0 mt-auto">
               <Textarea
                 placeholder="Type a message to send to Crisp visitor..."
                 value={messageInput}
@@ -794,132 +1271,134 @@ function CrispInboxInner() {
       {/* ========================================================================= */}
       {/* COLUMN 4: CHAT DETAILS & INTERNAL NOTES (~280px) */}
       {/* ========================================================================= */}
-      <div className="w-72 shrink-0 border-l border-border/40 bg-card/30 flex flex-col">
-        {activeConversation ? (
-          <ScrollArea className="flex-1">
-            <div className="p-4 space-y-6">
-              {/* Customer & Chat Details */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 pb-3 border-b border-border/40">
-                  <Avatar className="w-10 h-10">
-                    <AvatarImage src={activeConversation.customer_avatar || undefined} />
-                    <AvatarFallback className="bg-primary/20 text-primary font-semibold">
-                      {(activeConversation.customer_name || "V")[0].toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="truncate">
-                    <h4 className="font-semibold text-sm truncate">
-                      {activeConversation.customer_name || "Visitor"}
-                    </h4>
-                    <p className="text-xs text-muted-foreground capitalize">
-                      {activeConversation.status || "unresolved"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Workspace</span>
-                    <span className="font-medium text-foreground">
-                      {getWorkspaceDisplayName(activeConversation.crisp_website_id, workspacesMap)}
-                    </span>
-                  </div>
-
-                  {activeConversation.customer_email && (
-                    <div>
-                      <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Email</span>
-                      <span className="font-medium text-foreground break-all">{activeConversation.customer_email}</span>
+      {showRightPanel && (
+        <div className="w-72 shrink-0 border-l border-border/40 bg-card/30 flex flex-col h-full overflow-hidden hidden lg:flex">
+          {activeConversation ? (
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 overscroll-contain">
+              <div className="space-y-6">
+                {/* Customer & Chat Details */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 pb-3 border-b border-border/40">
+                    <Avatar className="w-10 h-10">
+                      <AvatarImage src={activeConversation.customer_avatar || undefined} />
+                      <AvatarFallback className="bg-primary/20 text-primary font-semibold">
+                        {(activeConversation.customer_name || "V")[0].toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="truncate">
+                      <h4 className="font-semibold text-sm truncate">
+                        {activeConversation.customer_name || "Visitor"}
+                      </h4>
+                      <p className="text-xs text-muted-foreground font-mono truncate">
+                        {activeConversation.crisp_session_id.slice(0, 14)}...
+                      </p>
                     </div>
-                  )}
+                  </div>
 
-                  {activeConversation.customer_phone && (
+                  <div className="space-y-2 text-xs">
                     <div>
-                      <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Phone</span>
-                      <span className="font-medium text-foreground">{activeConversation.customer_phone}</span>
+                      <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Workspace</span>
+                      <span className="font-medium text-foreground">
+                        {getWorkspaceDisplayName(activeConversation.crisp_website_id, workspacesMap)}
+                      </span>
                     </div>
-                  )}
 
-                  <div>
-                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Crisp Session ID</span>
-                    <span className="font-mono text-[11px] text-muted-foreground break-all">{activeConversation.crisp_session_id}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Crisp Website ID</span>
-                    <span className="font-mono text-[11px] text-muted-foreground break-all">{activeConversation.crisp_website_id}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Internal Notes Section */}
-              <div className="border-t border-border/40 pt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Internal Notes</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-400">
-                    JellyBean Only
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Internal team notes. Never visible to customers or sent to Crisp.
-                </p>
-
-                {/* Add Note Input */}
-                <form onSubmit={handleAddNote} className="space-y-2">
-                  <Textarea
-                    placeholder="Add an internal note..."
-                    value={noteInput}
-                    onChange={(e) => setNoteInput(e.target.value)}
-                    className="min-h-[60px] text-xs resize-none bg-background/60"
-                  />
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={isAddingNote || !noteInput.trim()}
-                    className="w-full h-8 text-xs gap-1"
-                  >
-                    {isAddingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                    <span>Add Note</span>
-                  </Button>
-                </form>
-
-                {/* Notes List */}
-                <div className="space-y-2 pt-2">
-                  {notes.length === 0 ? (
-                    <p className="text-xs text-muted-foreground italic text-center py-2">
-                      No internal notes added yet.
-                    </p>
-                  ) : (
-                    notes.map((note) => (
-                      <div key={note.id} className="p-2.5 rounded bg-muted/40 border border-border/40 space-y-1 relative group">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-[11px] text-primary">
-                            {note.author_name || "Team Member"}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {new Date(note.created_at).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        </div>
-                        <p className="text-xs whitespace-pre-wrap break-words">{note.note}</p>
-                        <button
-                          onClick={() => handleDeleteNote(note.id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 text-muted-foreground hover:text-destructive"
-                          title="Delete note"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                    {activeConversation.customer_email && (
+                      <div>
+                        <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Email</span>
+                        <span className="font-medium text-foreground break-all">{activeConversation.customer_email}</span>
                       </div>
-                    ))
-                  )}
+                    )}
+
+                    {activeConversation.customer_phone && (
+                      <div>
+                        <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Phone</span>
+                        <span className="font-medium text-foreground">{activeConversation.customer_phone}</span>
+                      </div>
+                    )}
+
+                    <div>
+                      <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Crisp Session ID</span>
+                      <span className="font-mono text-[11px] text-muted-foreground break-all">{activeConversation.crisp_session_id}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Crisp Website ID</span>
+                      <span className="font-mono text-[11px] text-muted-foreground break-all">{activeConversation.crisp_website_id}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Internal Notes Section */}
+                <div className="border-t border-border/40 pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">Internal Notes</span>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-400">
+                      JellyBean Only
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Internal team notes. Never visible to customers or sent to Crisp.
+                  </p>
+
+                  {/* Add Note Input */}
+                  <form onSubmit={handleAddNote} className="space-y-2">
+                    <Textarea
+                      placeholder="Add an internal note..."
+                      value={noteInput}
+                      onChange={(e) => setNoteInput(e.target.value)}
+                      className="min-h-[60px] text-xs resize-none bg-background/60"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={isAddingNote || !noteInput.trim()}
+                      className="w-full h-8 text-xs gap-1"
+                    >
+                      {isAddingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      <span>Add Note</span>
+                    </Button>
+                  </form>
+
+                  {/* Notes List */}
+                  <div className="space-y-2 pt-2">
+                    {notes.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic text-center py-2">
+                        No internal notes added yet.
+                      </p>
+                    ) : (
+                      notes.map((note) => (
+                        <div key={note.id} className="p-2.5 rounded bg-muted/40 border border-border/40 space-y-1 relative group">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-[11px] text-primary">
+                              {note.author_name || "Team Member"}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {new Date(note.created_at).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                          <p className="text-xs whitespace-pre-wrap break-words">{note.note}</p>
+                          <button
+                            onClick={() => handleDeleteNote(note.id)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 text-muted-foreground hover:text-destructive"
+                            title="Delete note"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </ScrollArea>
-        ) : (
-          <div className="p-8 text-center text-muted-foreground text-xs">
-            Select a conversation to view customer details & internal notes.
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="p-8 text-center text-muted-foreground text-xs">
+              Select a conversation to view customer details & internal notes.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* ADMIN ADD WORKSPACE MODAL */}
@@ -1036,13 +1515,13 @@ function CrispInboxInner() {
                       variant="outline"
                       size="icon"
                       className="shrink-0 h-9 w-9"
-                      onClick={() => handleCopyWebhookUrl(addSuccessResult.webhookUrl)}
+                      onClick={() => handleCopyText(addSuccessResult.webhookUrl)}
                     >
                       {copiedUrl ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                     </Button>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Add this URL as a Website Hook in this Crisp workspace under <strong>Settings → Advanced configuration → Webhooks</strong>.
+                    Add this URL as a Website Hook in Crisp under <strong>Settings → Advanced configuration → Webhooks</strong>.
                   </p>
                 </div>
 
@@ -1063,6 +1542,190 @@ function CrispInboxInner() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* ========================================================================= */}
+      {/* ADMIN VIEW WEBHOOK URL MODAL */}
+      {/* ========================================================================= */}
+      {isAdmin && viewWebhookWs && (
+        <Dialog open={Boolean(viewWebhookWs)} onOpenChange={(open) => !open && setViewWebhookWs(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+                <Globe className="w-5 h-5 text-primary" />
+                <span>Webhook URL</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Current Webhook URL for <strong>{getWorkspaceDisplayName(viewWebhookWs.crisp_website_id, workspacesMap)}</strong>.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 pt-2">
+              {isFetchingWebhook ? (
+                <div className="flex items-center justify-center p-6">
+                  <Loader2 className="w-5 h-5 animate-spin text-primary mr-2" />
+                  <span className="text-xs text-muted-foreground">Retrieving Webhook Secret from Vault...</span>
+                </div>
+              ) : viewWebhookUrl ? (
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Website Hook Setup URL</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      readOnly
+                      value={viewWebhookUrl}
+                      className="text-xs font-mono bg-muted/50 select-all"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="shrink-0 h-9 w-9"
+                      onClick={() => handleCopyText(viewWebhookUrl)}
+                    >
+                      {copiedUrl ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    This is the existing Webhook URL for this workspace. Paste it into Crisp under <strong>Settings → Advanced configuration → Webhooks</strong>.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-destructive">Could not retrieve Webhook URL.</p>
+              )}
+
+              <div className="flex justify-end pt-2 border-t border-border/40">
+                <Button type="button" size="sm" onClick={() => setViewWebhookWs(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ADMIN REGENERATE WEBHOOK DIALOG */}
+      {/* ========================================================================= */}
+      {isAdmin && regenWebhookWs && (
+        <Dialog open={Boolean(regenWebhookWs)} onOpenChange={(open) => !open && setRegenWebhookWs(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base font-semibold text-amber-500">
+                <ShieldAlert className="w-5 h-5" />
+                <span>Regenerate Webhook URL?</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+                Regenerating the webhook URL will invalidate the previous URL. You will need to replace the URL inside Crisp immediately.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 pt-2">
+              {!regenResultUrl ? (
+                <div className="flex justify-end gap-2 border-t border-border/40 pt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRegenWebhookWs(null)}
+                    disabled={isRegenerating}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    className="bg-amber-500 hover:bg-amber-600 text-white"
+                    onClick={handleConfirmRegenerateWebhook}
+                    disabled={isRegenerating}
+                  >
+                    {isRegenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+                    <span>Regenerate Webhook URL</span>
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                    New Webhook URL Generated. Replace it inside Crisp immediately.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input readOnly value={regenResultUrl} className="text-xs font-mono bg-muted/50 select-all" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="shrink-0 h-9 w-9"
+                      onClick={() => handleCopyText(regenResultUrl)}
+                    >
+                      {copiedUrl ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                  <div className="flex justify-end pt-2 border-t border-border/40">
+                    <Button type="button" size="sm" onClick={() => setRegenWebhookWs(null)}>
+                      Done
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ADMIN DELETE WORKSPACE DIALOG */}
+      {/* ========================================================================= */}
+      {isAdmin && deleteWs && (
+        <Dialog open={Boolean(deleteWs)} onOpenChange={(open) => !open && setDeleteWs(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base font-semibold text-destructive">
+                <Trash2 className="w-5 h-5" />
+                <span>Delete Crisp Workspace?</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+                This will disconnect <strong>"{getWorkspaceDisplayName(deleteWs.crisp_website_id, workspacesMap)}"</strong> from JellyBean.
+                The Crisp credentials and webhook configuration stored for this workspace will no longer be used.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex justify-end gap-2 border-t border-border/40 pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteWs(null)}
+                disabled={isDeletingWs}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleConfirmDeleteWorkspace}
+                disabled={isDeletingWs}
+              >
+                {isDeletingWs ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+                <span>Delete Workspace</span>
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
+
+  // Helper to copy existing Webhook URL directly from action menu
+  async function handleCopyWebhookUrlFromWs(ws: WorkspaceRecord) {
+    try {
+      const res = await getCrispWorkspaceWebhookUrl({ data: { websiteId: ws.crisp_website_id } });
+      if (!res.ok || !res.webhook_url) {
+        toast.error(res.error || "Could not fetch Webhook URL");
+      } else {
+        handleCopyText(res.webhook_url);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to fetch Webhook URL");
+    }
+  }
 }
