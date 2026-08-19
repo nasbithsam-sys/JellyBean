@@ -158,12 +158,14 @@ serve(async (req) => {
     const crispMsgId = String(crispMsgData.fingerprint || Date.now());
     const sentAt = crispMsgData.timestamp ? new Date(crispMsgData.timestamp).toISOString() : new Date().toISOString();
 
-    // Update conversation
+    // Update conversation (clearing needs-reply state)
     await supabase
       .from("crisp_conversations")
       .update({
         last_message: content,
         last_message_at: sentAt,
+        unread_count: 0,
+        last_customer_unread_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", conv.id);

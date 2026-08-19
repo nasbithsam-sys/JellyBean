@@ -114,6 +114,44 @@ type NoteRecord = {
   author_name?: string;
 };
 
+export function isCrispMaskedMessage(content: string | null | undefined): boolean {
+  if (!content) return false;
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  // Remove whitespace and common punctuation symbols
+  const stripped = trimmed.replace(/[\s\p{P}\p{S}]/gu, "");
+  // Must have at least 3 characters and consist entirely of 'x' or 'X'
+  return stripped.length >= 3 && /^x+$/i.test(stripped);
+}
+
+export function formatMessageDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const datePart = d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const timePart = d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${datePart} • ${timePart}`;
+}
+
+export function formatConversationTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function getWorkspaceDisplayName(websiteId: string, workspacesMap: Map<string, string>): string {
   if (workspacesMap.has(websiteId) && workspacesMap.get(websiteId)?.trim()) {
     return workspacesMap.get(websiteId)!;
@@ -151,10 +189,10 @@ function CrispInboxInner() {
   const isAdmin = auth.primaryRole === "admin";
 
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
-  const [workspaceTotalChatsMap, setWorkspaceTotalChatsMap] = useState<Map<string, number>>(new Map());
+  const [workspaceUnrepliedChatsMap, setWorkspaceUnrepliedChatsMap] = useState<Map<string, number>>(new Map());
   const [workspaceHasUnreadMap, setWorkspaceHasUnreadMap] = useState<Map<string, boolean>>(new Map());
   const [workspaceLatestUnreadAtMap, setWorkspaceLatestUnreadAtMap] = useState<Map<string, string>>(new Map());
-  const [totalChatsCount, setTotalChatsCount] = useState<number>(0);
+  const [totalUnrepliedCount, setTotalUnrepliedCount] = useState<number>(0);
   const [hasAnyUnread, setHasAnyUnread] = useState<boolean>(false);
 
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string>("all");
@@ -240,34 +278,35 @@ function CrispInboxInner() {
   };
 
   // Load aggregate workspace stats using efficient RPC (ENABLED workspaces only)
+  // Number shown beside each workspace is: NUMBER OF CHATS CURRENTLY NEEDING A REPLY
   const loadWorkspaceCounts = async () => {
     const { data, error } = await supabase.rpc("get_crisp_workspace_summaries");
 
     if (!error && data) {
-      const totalMap = new Map<string, number>();
+      const unrepliedMap = new Map<string, number>();
       const hasUnreadMap = new Map<string, boolean>();
       const latestUnreadMap = new Map<string, string>();
-      let grandTotal = 0;
+      let grandUnrepliedTotal = 0;
       let anyUnread = false;
 
       (data as any[]).forEach((item) => {
         const wsId = item.crisp_website_id;
-        const total = Number(item.total_chat_count || 0);
-        const unread = Boolean(item.has_unread);
+        const unreplied = Number(item.unreplied_chat_count ?? item.total_chat_count ?? 0);
+        const unread = Boolean(item.has_unread || unreplied > 0);
         const latestTime = item.latest_unread_at ? String(item.latest_unread_at) : "";
 
-        totalMap.set(wsId, total);
+        unrepliedMap.set(wsId, unreplied);
         hasUnreadMap.set(wsId, unread);
         if (latestTime) latestUnreadMap.set(wsId, latestTime);
 
-        grandTotal += total;
+        grandUnrepliedTotal += unreplied;
         if (unread) anyUnread = true;
       });
 
-      setWorkspaceTotalChatsMap(totalMap);
+      setWorkspaceUnrepliedChatsMap(unrepliedMap);
       setWorkspaceHasUnreadMap(hasUnreadMap);
       setWorkspaceLatestUnreadAtMap(latestUnreadMap);
-      setTotalChatsCount(grandTotal);
+      setTotalUnrepliedCount(grandUnrepliedTotal);
       setHasAnyUnread(anyUnread);
     }
   };
@@ -483,36 +522,11 @@ function CrispInboxInner() {
     }
   }, [selectedConversationId]);
 
-  // Handle selecting a conversation (Marks unread conversation as READ in Crisp + Supabase with error recovery)
+  // Handle selecting a conversation
+  // IMPORTANT: Opening/viewing a chat must NOT clear the unread/needs-reply state.
+  // Only sending an operator reply after the customer's message clears it.
   const handleSelectConversation = (convId: string) => {
     setSelectedConversationId(convId);
-
-    const targetConv = conversations.find((c) => c.id === convId);
-    if (targetConv && targetConv.unread_count && targetConv.unread_count > 0) {
-      const prevUnread = targetConv.unread_count;
-      const prevLastUnreadAt = targetConv.last_customer_unread_at;
-
-      // 1. Optimistically update local conversations state so unread dot disappears instantly
-      setConversations((prev) =>
-        prev.map((c) => (c.id === convId ? { ...c, unread_count: 0, last_customer_unread_at: null } : c))
-      );
-
-      // 2. Call Crisp + Supabase markRead server function asynchronously
-      markCrispConversationRead({ data: { conversationId: convId } }).then((res) => {
-        if (!res.ok) {
-          // Revert local UI state if Crisp or DB mark-read failed!
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === convId ? { ...c, unread_count: prevUnread, last_customer_unread_at: prevLastUnreadAt } : c
-            )
-          );
-          loadWorkspaceCounts();
-          toast.error(res.error || "Could not mark chat read on Crisp");
-        } else {
-          loadWorkspaceCounts();
-        }
-      });
-    }
   };
 
   // Stable Realtime Subscriptions (Single channel created ONCE on mount)
@@ -591,11 +605,8 @@ function CrispInboxInner() {
           if (activeId && newMsg && newMsg.conversation_id === activeId) {
             const nearBottom = isNearBottom();
 
-            // ── Append new message without discarding loaded older pages ──────
-            // Simply append the new row to the existing messages array instead
-            // of calling loadMessages() which would discard all older pages.
+            // Append new message without discarding loaded older pages
             setMessages((prev) => {
-              // Guard against duplicate (e.g. sent by this user)
               if (prev.some((m) => m.id === newMsg.id)) return prev;
               return [...prev, newMsg];
             });
@@ -603,16 +614,6 @@ function CrispInboxInner() {
             if (nearBottom) {
               setTimeout(() => scrollToBottom("smooth"), 30);
             }
-
-            // Acknowledge new message as read (active user is viewing this conversation)
-            markCrispConversationRead({ data: { conversationId: activeId } }).then((res) => {
-              if (res.ok) {
-                setConversations((prev) =>
-                  prev.map((c) => (c.id === activeId ? { ...c, unread_count: 0, last_customer_unread_at: null } : c))
-                );
-                loadWorkspaceCounts();
-              }
-            });
           }
         }
       )
@@ -657,21 +658,27 @@ function CrispInboxInner() {
 
   // Sorted Workspaces Priority:
   // 1. All Workspaces stays pinned first
-  // 2. Workspaces with at least one unread chat come next (sorted by newest unread customer activity DESC)
-  // 3. Workspaces with NO unread chats come after (sorted by TOTAL CHAT COUNT DESC)
-  // 4. Final tie-breaker: Workspace name ASC
+  // 2. Workspaces with at least one chat needing reply (> 0) come first (sorted by unread/needs-reply CHAT COUNT DESC)
+  // 3. Workspaces with zero unread chats (=== 0) come after all unread workspaces
+  // 4. Stable tie-breaker: Workspace name ASC (alphabetical)
   const sortedWorkspaces = useMemo(() => {
     return [...workspaces].sort((a, b) => {
-      const hasUnreadA = workspaceHasUnreadMap.get(a.crisp_website_id) || false;
-      const hasUnreadB = workspaceHasUnreadMap.get(b.crisp_website_id) || false;
+      const countA = workspaceUnrepliedChatsMap.get(a.crisp_website_id) || 0;
+      const countB = workspaceUnrepliedChatsMap.get(b.crisp_website_id) || 0;
 
-      // Primary: Unread workspaces come before read-only workspaces
-      if (hasUnreadA !== hasUnreadB) {
-        return hasUnreadA ? -1 : 1;
+      // 1. Workspaces with unread/needs-reply chats (> 0) come before zero-unread workspaces (=== 0)
+      const hasA = countA > 0;
+      const hasB = countB > 0;
+      if (hasA !== hasB) {
+        return hasA ? -1 : 1;
       }
 
-      // Secondary (Unread Workspaces): Sort by newest unread customer activity DESC
-      if (hasUnreadA && hasUnreadB) {
+      // 2. Among unread workspaces: sort by unread/needs-reply CHAT COUNT DESC
+      if (hasA && hasB) {
+        if (countA !== countB) {
+          return countB - countA;
+        }
+        // If equal count: sort by latest unread customer activity DESC
         const timeA = workspaceLatestUnreadAtMap.get(a.crisp_website_id) || "";
         const timeB = workspaceLatestUnreadAtMap.get(b.crisp_website_id) || "";
         if (timeA !== timeB) {
@@ -679,21 +686,12 @@ function CrispInboxInner() {
         }
       }
 
-      // Secondary (Read-Only Workspaces): Sort by TOTAL CHAT COUNT DESC
-      if (!hasUnreadA && !hasUnreadB) {
-        const countA = workspaceTotalChatsMap.get(a.crisp_website_id) || 0;
-        const countB = workspaceTotalChatsMap.get(b.crisp_website_id) || 0;
-        if (countA !== countB) {
-          return countB - countA;
-        }
-      }
-
-      // Final tie-breaker: Workspace name ASC (alphabetical)
+      // 3. Stable tie-breaker: Workspace name ASC (alphabetical)
       const nameA = getWorkspaceDisplayName(a.crisp_website_id, workspacesMap).toLowerCase();
       const nameB = getWorkspaceDisplayName(b.crisp_website_id, workspacesMap).toLowerCase();
       return nameA.localeCompare(nameB);
     });
-  }, [workspaces, workspaceHasUnreadMap, workspaceLatestUnreadAtMap, workspaceTotalChatsMap, workspacesMap]);
+  }, [workspaces, workspaceUnrepliedChatsMap, workspaceLatestUnreadAtMap, workspacesMap]);
 
   // Conversations for display — the DB RPC already returns globally ordered results
   // (unread_count > 0 DESC, last_message_at DESC) and server-side search is applied.
@@ -702,12 +700,12 @@ function CrispInboxInner() {
   // NOTE: Do NOT apply a local search filter here — search is server-side via RPC.
   const filteredConversations = conversations;
 
-
   const activeConversation = useMemo(() => {
     return conversations.find((c) => c.id === selectedConversationId) || null;
   }, [conversations, selectedConversationId]);
 
   // Handle Send Message
+  // Sending an operator reply clears the unread/needs-reply state for this conversation!
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedConversationId || !messageInput.trim() || isSending) return;
@@ -722,6 +720,21 @@ function CrispInboxInner() {
         toast.error(res.error || "Could not send message");
         setMessageInput(content);
       } else {
+        // Clear needs-reply state locally and reload workspace counts
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === selectedConversationId
+              ? {
+                  ...c,
+                  unread_count: 0,
+                  last_customer_unread_at: null,
+                  last_message: content,
+                  last_message_at: res.sent_at || new Date().toISOString(),
+                }
+              : c
+          )
+        );
+        loadWorkspaceCounts();
         await loadMessages(selectedConversationId);
         scrollToBottom("smooth");
       }
@@ -948,23 +961,23 @@ function CrispInboxInner() {
                 <Globe className="w-4 h-4 shrink-0" />
                 <span className="truncate">All Workspaces</span>
                 {hasAnyUnread && (
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse ml-0.5" title="Has unread conversations" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse ml-0.5" title="Has chats needing reply" />
                 )}
               </div>
               <Badge
                 variant={selectedWebsiteId === "all" ? "secondary" : "outline"}
                 className="ml-1 shrink-0 text-xs px-1.5 py-0 font-semibold border-border/60"
               >
-                {totalChatsCount}
+                {totalUnrepliedCount}
               </Badge>
             </button>
 
             <div className="my-2 border-t border-border/40" />
 
-            {/* Individual Active Workspaces List */}
+            {/* Individual Active Workspaces List (Sorted by Needs-Reply Chats Count DESC) */}
             {sortedWorkspaces.map((ws) => {
-              const totalChats = workspaceTotalChatsMap.get(ws.crisp_website_id) || 0;
-              const hasUnread = workspaceHasUnreadMap.get(ws.crisp_website_id) || false;
+              const unrepliedCount = workspaceUnrepliedChatsMap.get(ws.crisp_website_id) || 0;
+              const hasUnread = unrepliedCount > 0;
               const displayName = getWorkspaceDisplayName(ws.crisp_website_id, workspacesMap);
               const isSelected = selectedWebsiteId === ws.crisp_website_id;
 
@@ -985,7 +998,7 @@ function CrispInboxInner() {
                     <span className={cn("w-2 h-2 rounded-full shrink-0", ws.enabled ? "bg-emerald-500/60" : "bg-muted")} />
                     <span className="truncate">{displayName}</span>
                     {hasUnread && (
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse ml-0.5" title="Has unread conversations" />
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse ml-0.5" title="Has chats needing reply" />
                     )}
                   </button>
 
@@ -994,7 +1007,7 @@ function CrispInboxInner() {
                       variant={isSelected ? "secondary" : "outline"}
                       className="text-xs px-1.5 py-0 font-semibold border-border/60"
                     >
-                      {totalChats}
+                      {unrepliedCount}
                     </Badge>
 
                     {isAdmin && (
@@ -1080,7 +1093,7 @@ function CrispInboxInner() {
               {filteredConversations.map((conv) => {
                 const isSelected = selectedConversationId === conv.id;
                 const isUnread = (conv.unread_count || 0) > 0;
-                const wsLabel = getWorkspaceDisplayName(conv.crisp_website_id, workspacesMap);
+                const isMaskedPreview = isCrispMaskedMessage(conv.last_message);
 
                 return (
                   <button
@@ -1091,35 +1104,31 @@ function CrispInboxInner() {
                       isSelected
                         ? "bg-accent/80 border-primary/50 shadow-sm"
                         : isUnread
-                        ? "bg-primary/5 border-primary/20 hover:bg-accent/40"
-                        : "border-transparent hover:bg-accent/40"
+                        ? "bg-primary/10 border-primary/30 shadow-xs hover:bg-accent/40"
+                        : "border-border/20 hover:bg-accent/40"
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         {isUnread && (
-                          <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" title="Needs operator reply" />
                         )}
-                        <span className={cn("text-sm truncate text-foreground", isUnread ? "font-bold" : "font-semibold")}>
+                        <span className={cn("text-sm truncate text-foreground", isUnread ? "font-bold" : "font-medium")}>
                           {conv.customer_name || "Visitor"}
                         </span>
                       </div>
                       <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
-                        {conv.last_message_at
-                          ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                          : ""}
+                        {formatConversationTime(conv.last_message_at)}
                       </span>
                     </div>
 
                     <p className={cn("text-xs line-clamp-2 break-words leading-relaxed", isUnread ? "text-foreground font-medium" : "text-muted-foreground")}>
-                      {conv.last_message || "No messages yet"}
+                      {isMaskedPreview ? (
+                        <span className="italic opacity-75">Message unavailable (Crisp free plan)</span>
+                      ) : (
+                        conv.last_message || "No messages yet"
+                      )}
                     </p>
-
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 truncate border-border/60 font-normal">
-                        {wsLabel}
-                      </Badge>
-                    </div>
                   </button>
                 );
               })}
@@ -1141,7 +1150,7 @@ function CrispInboxInner() {
       <div className="flex-1 flex flex-col bg-background min-w-0 h-full overflow-hidden">
         {activeConversation ? (
           <>
-            {/* Chat Header */}
+            {/* Chat Header (Clean Customer Identity - No Session ID, No Workspace Tag) */}
             <div className="p-3 border-b border-border/40 flex items-center justify-between bg-card/20 shrink-0">
               <div className="flex items-center gap-3 truncate">
                 <Avatar className="w-8 h-8">
@@ -1154,16 +1163,15 @@ function CrispInboxInner() {
                   <h3 className="font-semibold text-sm truncate">
                     {activeConversation.customer_name || "Visitor"}
                   </h3>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {activeConversation.customer_email || activeConversation.crisp_session_id}
-                  </p>
+                  {(activeConversation.customer_email || activeConversation.customer_phone) && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      {activeConversation.customer_email || activeConversation.customer_phone}
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="secondary" className="text-xs">
-                  {getWorkspaceDisplayName(activeConversation.crisp_website_id, workspacesMap)}
-                </Badge>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1201,6 +1209,7 @@ function CrispInboxInner() {
 
                 {messages.map((msg) => {
                   const isOperator = msg.sender_type === "operator" || msg.direction === "outgoing";
+                  const isMasked = isCrispMaskedMessage(msg.content);
 
                   return (
                     <div
@@ -1215,13 +1224,21 @@ function CrispInboxInner() {
                           "px-3.5 py-2.5 rounded-2xl text-xs break-words shadow-sm space-y-1",
                           isOperator
                             ? "bg-primary text-primary-foreground rounded-br-xs"
+                            : isMasked
+                            ? "bg-muted/70 border border-border/60 text-muted-foreground rounded-bl-xs"
                             : "bg-muted text-foreground rounded-bl-xs"
                         )}
                       >
-                        <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                        {isMasked ? (
+                          <div className="italic text-[11px] text-muted-foreground leading-relaxed">
+                            Message unavailable — older message history is hidden by the current Crisp plan.
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                        )}
                       </div>
                       <span className="text-[10px] text-muted-foreground px-1 mt-0.5 font-medium">
-                        {new Date(msg.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {formatMessageDateTime(msg.sent_at)}
                       </span>
                     </div>
                   );
@@ -1276,7 +1293,7 @@ function CrispInboxInner() {
           {activeConversation ? (
             <div className="flex-1 min-h-0 overflow-y-auto p-4 overscroll-contain">
               <div className="space-y-6">
-                {/* Customer & Chat Details */}
+                {/* Customer & Workspace Details (No technical Crisp IDs) */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 pb-3 border-b border-border/40">
                     <Avatar className="w-10 h-10">
@@ -1289,9 +1306,11 @@ function CrispInboxInner() {
                       <h4 className="font-semibold text-sm truncate">
                         {activeConversation.customer_name || "Visitor"}
                       </h4>
-                      <p className="text-xs text-muted-foreground font-mono truncate">
-                        {activeConversation.crisp_session_id.slice(0, 14)}...
-                      </p>
+                      {activeConversation.customer_email && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {activeConversation.customer_email}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -1316,16 +1335,6 @@ function CrispInboxInner() {
                         <span className="font-medium text-foreground">{activeConversation.customer_phone}</span>
                       </div>
                     )}
-
-                    <div>
-                      <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Crisp Session ID</span>
-                      <span className="font-mono text-[11px] text-muted-foreground break-all">{activeConversation.crisp_session_id}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Crisp Website ID</span>
-                      <span className="font-mono text-[11px] text-muted-foreground break-all">{activeConversation.crisp_website_id}</span>
-                    </div>
                   </div>
                 </div>
 
