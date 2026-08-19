@@ -80,6 +80,41 @@ export const sendCrispMessage = createServerFn({ method: "POST" })
     };
   });
 
+export const markCrispConversationRead = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { conversationId: string }) => {
+    const conversationId = String(input?.conversationId ?? "").trim();
+    if (!conversationId) throw new Error("conversationId is required");
+    return { conversationId };
+  })
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    const { data: roleRows, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    if (roleErr) throw new Error("Could not verify user roles");
+    const roles = (roleRows ?? []).map((r) => String(r.role));
+    if (!roles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
+      throw new Error("Forbidden: Crisp Chat is restricted to admin, cs_admin and cs roles.");
+    }
+
+    const { data: resData, error: fnErr } = await supabase.functions.invoke("crisp-mark-read", {
+      body: { conversationId: data.conversationId },
+    });
+
+    if (fnErr) {
+      return { ok: false as const, error: fnErr.message || "Failed to invoke mark read function" };
+    }
+
+    if (resData?.error) {
+      return { ok: false as const, error: resData.error };
+    }
+
+    return { ok: true as const };
+  });
+
 async function assertAdmin(supabase: any, userId: string) {
   const { data: roleRows, error: roleErr } = await supabase
     .from("user_roles")
@@ -371,13 +406,20 @@ export const deleteCrispWorkspace = createServerFn({ method: "POST" })
     }
 
     if (ws?.credential_secret_id) {
-      // Remove Vault secret if present
-      await supabaseAdmin.rpc("crisp_delete_workspace_secret", {
+      // Remove Vault secret if present & verify result (Abort deletion if Vault secret cleanup fails)
+      const { data: deletedSecret, error: secretDelErr } = await supabaseAdmin.rpc("crisp_delete_workspace_secret", {
         p_secret_id: ws.credential_secret_id,
       });
+
+      if (secretDelErr || deletedSecret !== true) {
+        return {
+          ok: false as const,
+          error: `Failed to clean up workspace Vault secret: ${secretDelErr?.message ?? "Vault secret deletion returned false"}. Workspace deletion aborted.`,
+        };
+      }
     }
 
-    // Delete workspace registration row (Preserves crisp_conversations and crisp_messages)
+    // Delete workspace registration row (Preserves historical crisp_conversations and crisp_messages)
     const { error: delErr } = await supabaseAdmin
       .from("crisp_workspaces")
       .delete()

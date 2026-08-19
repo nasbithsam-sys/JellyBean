@@ -4,6 +4,7 @@ import {
   Building2,
   Check,
   CheckCircle2,
+  ChevronUp,
   Copy,
   Globe,
   Loader2,
@@ -27,6 +28,7 @@ import {
   deleteCrispConversationNote,
   deleteCrispWorkspace,
   getCrispWorkspaceWebhookUrl,
+  markCrispConversationRead,
   regenerateCrispWebhookSecret,
   sendCrispMessage,
   syncCrispHistory,
@@ -70,6 +72,7 @@ type ConversationRecord = {
   status: string | null;
   last_message: string | null;
   last_message_at: string | null;
+  last_customer_unread_at: string | null;
   unread_count: number | null;
   metadata: any;
   created_at: string | null;
@@ -140,6 +143,9 @@ function CrispChatPage() {
   );
 }
 
+const PAGE_SIZE_CONVS = 30;
+const PAGE_SIZE_MSGS = 40;
+
 function CrispInboxInner() {
   const auth = useAuth();
   const isAdmin = auth.primaryRole === "admin";
@@ -156,6 +162,15 @@ function CrispInboxInner() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageRecord[]>([]);
   const [notes, setNotes] = useState<NoteRecord[]>([]);
+
+  // Pagination states for Conversation list
+  const [convPage, setConvPage] = useState<number>(0);
+  const [hasMoreConvs, setHasMoreConvs] = useState<boolean>(true);
+  const [isLoadingConvs, setIsLoadingConvs] = useState<boolean>(false);
+
+  // Pagination states for Messages thread
+  const [hasMoreMessages, setHasMoreMessages] = useState<boolean>(false);
+  const [isLoadingOlderMsgs, setIsLoadingOlderMsgs] = useState<boolean>(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [messageInput, setMessageInput] = useState("");
@@ -189,10 +204,12 @@ function CrispInboxInner() {
   const [deleteWs, setDeleteWs] = useState<WorkspaceRecord | null>(null);
   const [isDeletingWs, setIsDeletingWs] = useState(false);
 
-  // Refs for message container and stable realtime access
+  // Refs for message container, conversation scroll container, and stable realtime access
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const convScrollRef = useRef<HTMLDivElement>(null);
   const selectedConversationIdRef = useRef(selectedConversationId);
   const selectedWebsiteIdRef = useRef(selectedWebsiteId);
+  const workspacesRef = useRef(workspaces);
 
   useEffect(() => {
     selectedConversationIdRef.current = selectedConversationId;
@@ -202,81 +219,156 @@ function CrispInboxInner() {
     selectedWebsiteIdRef.current = selectedWebsiteId;
   }, [selectedWebsiteId]);
 
-  // Load registered workspaces
+  useEffect(() => {
+    workspacesRef.current = workspaces;
+  }, [workspaces]);
+
+  // Load active enabled registered workspaces
   const loadWorkspaces = async () => {
     const { data } = await supabase
       .from("crisp_workspaces")
       .select("*")
+      .eq("enabled", true)
       .order("created_at", { ascending: true });
     if (data) setWorkspaces(data as any);
   };
 
-  // Load aggregate workspace stats: TOTAL chats count per workspace & UNREAD state
+  // Load aggregate workspace stats using efficient RPC (ENABLED workspaces only)
   const loadWorkspaceCounts = async () => {
-    const { data } = await supabase
-      .from("crisp_conversations")
-      .select("crisp_website_id, unread_count, last_message_at");
+    const { data, error } = await supabase.rpc("get_crisp_workspace_summaries");
 
-    if (data) {
+    if (!error && data) {
       const totalMap = new Map<string, number>();
       const hasUnreadMap = new Map<string, boolean>();
       const latestUnreadMap = new Map<string, string>();
+      let grandTotal = 0;
       let anyUnread = false;
 
-      data.forEach((item) => {
+      (data as any[]).forEach((item) => {
         const wsId = item.crisp_website_id;
-        totalMap.set(wsId, (totalMap.get(wsId) || 0) + 1);
+        const total = Number(item.total_chat_count || 0);
+        const unread = Boolean(item.has_unread);
+        const latestTime = item.latest_unread_at ? String(item.latest_unread_at) : "";
 
-        const isUnread = (item.unread_count || 0) > 0;
-        if (isUnread) {
-          hasUnreadMap.set(wsId, true);
-          anyUnread = true;
+        totalMap.set(wsId, total);
+        hasUnreadMap.set(wsId, unread);
+        if (latestTime) latestUnreadMap.set(wsId, latestTime);
 
-          const currentLatest = latestUnreadMap.get(wsId) || "";
-          const msgTime = item.last_message_at || "";
-          if (msgTime.localeCompare(currentLatest) > 0) {
-            latestUnreadMap.set(wsId, msgTime);
-          }
-        }
+        grandTotal += total;
+        if (unread) anyUnread = true;
       });
 
       setWorkspaceTotalChatsMap(totalMap);
       setWorkspaceHasUnreadMap(hasUnreadMap);
       setWorkspaceLatestUnreadAtMap(latestUnreadMap);
-      setTotalChatsCount(data.length);
+      setTotalChatsCount(grandTotal);
       setHasAnyUnread(anyUnread);
     }
   };
 
-  // Fetch conversations filtered by workspace
-  const loadConversations = async (targetWebsiteId?: string) => {
+  // Fetch initial conversations page (Only from active enabled workspaces)
+  const loadConversations = async (targetWebsiteId?: string, isReset = true) => {
     const wsId = targetWebsiteId !== undefined ? targetWebsiteId : selectedWebsiteIdRef.current;
+    const pageToLoad = isReset ? 0 : convPage + 1;
+    setIsLoadingConvs(true);
+
+    const activeWebsiteIds = workspacesRef.current.map((w) => w.crisp_website_id);
+    if (activeWebsiteIds.length === 0) {
+      setConversations([]);
+      setHasMoreConvs(false);
+      setIsLoadingConvs(false);
+      return;
+    }
+
     let query = supabase
       .from("crisp_conversations")
       .select("*")
-      .order("last_message_at", { ascending: false });
+      .order("last_message_at", { ascending: false })
+      .range(pageToLoad * PAGE_SIZE_CONVS, (pageToLoad + 1) * PAGE_SIZE_CONVS - 1);
 
     if (wsId !== "all") {
       query = query.eq("crisp_website_id", wsId);
+    } else {
+      query = query.in("crisp_website_id", activeWebsiteIds);
     }
 
-    const { data } = await query;
-    if (data) setConversations(data as any);
+    const { data, error } = await query;
+    setIsLoadingConvs(false);
+
+    if (!error && data) {
+      if (isReset) {
+        setConversations(data as any);
+        setConvPage(0);
+      } else {
+        setConversations((prev) => [...prev, ...(data as any[])]);
+        setConvPage(pageToLoad);
+      }
+      setHasMoreConvs(data.length === PAGE_SIZE_CONVS);
+    }
   };
 
-  // Fetch messages for active conversation
+  // Handle infinite scrolling in Column 2 conversation list
+  const handleConvScroll = () => {
+    const el = convScrollRef.current;
+    if (!el || isLoadingConvs || !hasMoreConvs) return;
+
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= 100) {
+      loadConversations(selectedWebsiteId, false);
+    }
+  };
+
+  // Fetch initial messages batch for active conversation (Newest 40 messages)
   const loadMessages = async (convId: string, shouldScrollBottom = false) => {
     const { data } = await supabase
       .from("crisp_messages")
       .select("*")
       .eq("conversation_id", convId)
-      .order("sent_at", { ascending: true });
+      .order("sent_at", { ascending: false })
+      .limit(PAGE_SIZE_MSGS);
 
     if (data) {
-      setMessages(data as any);
+      const sortedAsc = (data as any[]).reverse();
+      setMessages(sortedAsc);
+      setHasMoreMessages(data.length === PAGE_SIZE_MSGS);
+
       if (shouldScrollBottom) {
         setTimeout(() => scrollToBottom("auto"), 50);
       }
+    }
+  };
+
+  // Load older messages for message pagination
+  const loadOlderMessages = async () => {
+    if (!selectedConversationId || messages.length === 0 || isLoadingOlderMsgs) return;
+    setIsLoadingOlderMsgs(true);
+
+    const oldestSentAt = messages[0].sent_at;
+    const { data } = await supabase
+      .from("crisp_messages")
+      .select("*")
+      .eq("conversation_id", selectedConversationId)
+      .lt("sent_at", oldestSentAt)
+      .order("sent_at", { ascending: false })
+      .limit(PAGE_SIZE_MSGS);
+
+    setIsLoadingOlderMsgs(false);
+
+    if (data && data.length > 0) {
+      const olderSorted = (data as any[]).reverse();
+      const container = messagesContainerRef.current;
+      const oldScrollHeight = container?.scrollHeight || 0;
+
+      setMessages((prev) => [...olderSorted, ...prev]);
+      setHasMoreMessages(data.length === PAGE_SIZE_MSGS);
+
+      // Preserve scroll position relative to top
+      setTimeout(() => {
+        if (container) {
+          container.scrollTop = container.scrollHeight - oldScrollHeight;
+        }
+      }, 30);
+    } else {
+      setHasMoreMessages(false);
     }
   };
 
@@ -334,14 +426,15 @@ function CrispInboxInner() {
 
   // Initial load
   useEffect(() => {
-    loadWorkspaces();
-    loadWorkspaceCounts();
-    loadConversations();
+    loadWorkspaces().then(() => {
+      loadWorkspaceCounts();
+      loadConversations();
+    });
   }, []);
 
   // Reload conversations when selected workspace filter changes
   useEffect(() => {
-    loadConversations(selectedWebsiteId);
+    loadConversations(selectedWebsiteId, true);
 
     // Clear active conversation if it does not belong to newly selected workspace
     if (selectedWebsiteId !== "all" && selectedConversationId) {
@@ -365,31 +458,39 @@ function CrispInboxInner() {
     }
   }, [selectedConversationId]);
 
-  // Handle selecting a conversation (Marks unread conversation as READ)
+  // Handle selecting a conversation (Marks unread conversation as READ in Crisp + Supabase with error recovery)
   const handleSelectConversation = (convId: string) => {
     setSelectedConversationId(convId);
 
     const targetConv = conversations.find((c) => c.id === convId);
     if (targetConv && targetConv.unread_count && targetConv.unread_count > 0) {
-      // 1. Immediately update local conversations state so unread dot disappears
+      const prevUnread = targetConv.unread_count;
+      const prevLastUnreadAt = targetConv.last_customer_unread_at;
+
+      // 1. Optimistically update local conversations state so unread dot disappears instantly
       setConversations((prev) =>
-        prev.map((c) => (c.id === convId ? { ...c, unread_count: 0 } : c))
+        prev.map((c) => (c.id === convId ? { ...c, unread_count: 0, last_customer_unread_at: null } : c))
       );
 
-      // 2. Persist unread_count = 0 to Supabase DB asynchronously
-      supabase
-        .from("crisp_conversations")
-        .update({ unread_count: 0, updated_at: new Date().toISOString() })
-        .eq("id", convId)
-        .then(({ error }) => {
-          if (!error) {
-            loadWorkspaceCounts();
-          }
-        });
+      // 2. Call Crisp + Supabase markRead server function asynchronously
+      markCrispConversationRead({ data: { conversationId: convId } }).then((res) => {
+        if (!res.ok) {
+          // Revert local UI state if Crisp or DB mark-read failed!
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === convId ? { ...c, unread_count: prevUnread, last_customer_unread_at: prevLastUnreadAt } : c
+            )
+          );
+          loadWorkspaceCounts();
+          toast.error(res.error || "Could not mark chat read on Crisp");
+        } else {
+          loadWorkspaceCounts();
+        }
+      });
     }
   };
 
-  // Stable Realtime Subscriptions (Channel created ONCE on mount)
+  // Stable Realtime Subscriptions (Single channel created ONCE on mount)
   useEffect(() => {
     const channel = supabase
       .channel("crisp_inbox_realtime_stable")
@@ -397,25 +498,31 @@ function CrispInboxInner() {
         "postgres_changes",
         { event: "*", schema: "public", table: "crisp_conversations" },
         () => {
-          loadConversations();
+          loadConversations(selectedWebsiteIdRef.current, true);
           loadWorkspaceCounts();
         }
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "crisp_messages" },
+        { event: "INSERT", schema: "public", table: "crisp_messages" },
         (payload) => {
-          loadConversations();
-          loadWorkspaceCounts();
           const activeId = selectedConversationIdRef.current;
-          if (
-            activeId &&
-            payload.new &&
-            (payload.new as any).conversation_id === activeId
-          ) {
+          const newMsg = payload.new as any;
+
+          if (activeId && newMsg && newMsg.conversation_id === activeId) {
             const nearBottom = isNearBottom();
             loadMessages(activeId).then(() => {
               if (nearBottom) scrollToBottom("smooth");
+            });
+
+            // If active user is currently viewing this conversation, acknowledge new message as read!
+            markCrispConversationRead({ data: { conversationId: activeId } }).then((res) => {
+              if (res.ok) {
+                setConversations((prev) =>
+                  prev.map((c) => (c.id === activeId ? { ...c, unread_count: 0, last_customer_unread_at: null } : c))
+                );
+                loadWorkspaceCounts();
+              }
             });
           }
         }
@@ -607,7 +714,7 @@ function CrispInboxInner() {
         toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages.`);
         loadWorkspaces();
         loadWorkspaceCounts();
-        loadConversations();
+        loadConversations(selectedWebsiteId, true);
         if (selectedConversationId) loadMessages(selectedConversationId);
       }
     } catch (err: any) {
@@ -692,7 +799,7 @@ function CrispInboxInner() {
     }
   };
 
-  // Handle Delete Workspace
+  // Handle Delete Workspace (Verified Vault secret cleanup before workspace row deletion)
   const handleConfirmDeleteWorkspace = async () => {
     if (!deleteWs || isDeletingWs) return;
     setIsDeletingWs(true);
@@ -709,9 +816,10 @@ function CrispInboxInner() {
         }
 
         setDeleteWs(null);
-        loadWorkspaces();
-        loadWorkspaceCounts();
-        loadConversations("all");
+        loadWorkspaces().then(() => {
+          loadWorkspaceCounts();
+          loadConversations("all", true);
+        });
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to delete workspace");
@@ -783,7 +891,7 @@ function CrispInboxInner() {
 
             <div className="my-2 border-t border-border/40" />
 
-            {/* Individual Workspaces List (Sorted by Unread Activity DESC, Number = TOTAL chats) */}
+            {/* Individual Active Workspaces List */}
             {sortedWorkspaces.map((ws) => {
               const totalChats = workspaceTotalChatsMap.get(ws.crisp_website_id) || 0;
               const hasUnread = workspaceHasUnreadMap.get(ws.crisp_website_id) || false;
@@ -891,59 +999,68 @@ function CrispInboxInner() {
           </div>
         </div>
 
-        {/* Conversations Scroll Area */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1 overscroll-contain">
+        {/* Conversations Scroll Area with Infinite Scroll */}
+        <div ref={convScrollRef} onScroll={handleConvScroll} className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1 overscroll-contain">
           {filteredConversations.length === 0 ? (
             <div className="p-6 text-center text-muted-foreground text-xs">
-              No conversations found.
+              {isLoadingConvs ? "Loading conversations..." : "No conversations found."}
             </div>
           ) : (
-            filteredConversations.map((conv) => {
-              const isSelected = selectedConversationId === conv.id;
-              const isUnread = (conv.unread_count || 0) > 0;
-              const wsLabel = getWorkspaceDisplayName(conv.crisp_website_id, workspacesMap);
+            <>
+              {filteredConversations.map((conv) => {
+                const isSelected = selectedConversationId === conv.id;
+                const isUnread = (conv.unread_count || 0) > 0;
+                const wsLabel = getWorkspaceDisplayName(conv.crisp_website_id, workspacesMap);
 
-              return (
-                <button
-                  key={conv.id}
-                  onClick={() => handleSelectConversation(conv.id)}
-                  className={cn(
-                    "w-full text-left p-3 rounded-lg border transition-all space-y-1.5",
-                    isSelected
-                      ? "bg-accent/80 border-primary/50 shadow-sm"
-                      : isUnread
-                      ? "bg-primary/5 border-primary/20 hover:bg-accent/40"
-                      : "border-transparent hover:bg-accent/40"
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {isUnread && (
-                        <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />
-                      )}
-                      <span className={cn("text-sm truncate text-foreground", isUnread ? "font-bold" : "font-semibold")}>
-                        {conv.customer_name || "Visitor"}
+                return (
+                  <button
+                    key={conv.id}
+                    onClick={() => handleSelectConversation(conv.id)}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg border transition-all space-y-1.5",
+                      isSelected
+                        ? "bg-accent/80 border-primary/50 shadow-sm"
+                        : isUnread
+                        ? "bg-primary/5 border-primary/20 hover:bg-accent/40"
+                        : "border-transparent hover:bg-accent/40"
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isUnread && (
+                          <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />
+                        )}
+                        <span className={cn("text-sm truncate text-foreground", isUnread ? "font-bold" : "font-semibold")}>
+                          {conv.customer_name || "Visitor"}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
+                        {conv.last_message_at
+                          ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : ""}
                       </span>
                     </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
-                      {conv.last_message_at
-                        ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                        : ""}
-                    </span>
-                  </div>
 
-                  <p className={cn("text-xs line-clamp-2 break-words leading-relaxed", isUnread ? "text-foreground font-medium" : "text-muted-foreground")}>
-                    {conv.last_message || "No messages yet"}
-                  </p>
+                    <p className={cn("text-xs line-clamp-2 break-words leading-relaxed", isUnread ? "text-foreground font-medium" : "text-muted-foreground")}>
+                      {conv.last_message || "No messages yet"}
+                    </p>
 
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 truncate border-border/60 font-normal">
-                      {wsLabel}
-                    </Badge>
-                  </div>
-                </button>
-              );
-            })
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 truncate border-border/60 font-normal">
+                        {wsLabel}
+                      </Badge>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {isLoadingConvs && (
+                <div className="p-3 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                  <span>Loading more...</span>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -989,9 +1106,29 @@ function CrispInboxInner() {
               </div>
             </div>
 
-            {/* Messages Scroll Area */}
+            {/* Messages Scroll Area with Pagination */}
             <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 overscroll-contain">
               <div className="space-y-3 max-w-3xl mx-auto">
+                {/* Load Older Messages Button */}
+                {hasMoreMessages && (
+                  <div className="text-center py-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={loadOlderMessages}
+                      disabled={isLoadingOlderMsgs}
+                      className="text-xs text-muted-foreground hover:text-foreground h-7 gap-1.5"
+                    >
+                      {isLoadingOlderMsgs ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      )}
+                      <span>Load Older Messages</span>
+                    </Button>
+                  </div>
+                )}
+
                 {messages.map((msg) => {
                   const isOperator = msg.sender_type === "operator" || msg.direction === "outgoing";
 
