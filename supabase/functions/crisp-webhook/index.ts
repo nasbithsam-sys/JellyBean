@@ -245,16 +245,19 @@ serve(async (req) => {
       }
 
       const currentUnread = Number(existingConv?.unread_count || 0);
-      // Only increment if this is a new (not already stored) customer message
-      const updatedUnread = isCustomerMessage && !messageAlreadyExists
-        ? currentUnread + 1
-        : currentUnread;
+      let updatedUnread = currentUnread;
+      if (isCustomerMessage && !messageAlreadyExists) {
+        updatedUnread = currentUnread + 1;
+      } else if (isOperator) {
+        // Operator reply clears awaiting-reply / unread state
+        updatedUnread = 0;
+      }
 
       const lastMessage = isMessageEvent && messageContent ? messageContent : (existingConv?.last_message || null);
       const lastMessageAt = isMessageEvent && messageContent ? sentAt : (existingConv?.last_message_at || sentAt);
 
       // Set last_customer_unread_at ONLY on genuine NEW incoming customer messages
-      // Operator messages must NEVER become last_customer_unread_at
+      // Operator messages clear it
       const lastCustomerUnreadAt = isCustomerMessage && !messageAlreadyExists
         ? sentAt
         : (updatedUnread > 0 ? (existingConv?.last_customer_unread_at || null) : null);

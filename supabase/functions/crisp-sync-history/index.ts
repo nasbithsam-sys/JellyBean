@@ -197,22 +197,28 @@ serve(async (req) => {
               // Sort messages chronologically ascending for correct ordering
               messagesList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-              // ── LAST CUSTOMER MESSAGE TIMESTAMP ─────────────────────────────
-              // Identify the newest actual CUSTOMER (incoming) message.
-              // Operator replies must NEVER become last_customer_unread_at.
+              // ── AWAITING OPERATOR REPLY CALCULATION ─────────────────────────
+              // Determine unread / needs-reply strictly based on message direction:
+              // latest incoming customer message vs latest outgoing operator message.
               let lastCustomerMsgTime: string | null = null;
+              let lastCustomerTimestamp = 0;
+              let lastOperatorTimestamp = 0;
+
               for (let i = messagesList.length - 1; i >= 0; i--) {
                 const m = messagesList[i];
                 const fromStr = String(m.from || "user").toLowerCase();
-                if (fromStr !== "operator") {
+                const ts = m.timestamp || 0;
+                if (fromStr !== "operator" && !lastCustomerMsgTime) {
                   lastCustomerMsgTime = m.timestamp ? new Date(m.timestamp).toISOString() : null;
-                  break;
+                  lastCustomerTimestamp = ts;
+                } else if (fromStr === "operator" && !lastOperatorTimestamp) {
+                  lastOperatorTimestamp = ts;
                 }
               }
 
-              // Only set last_customer_unread_at if there ARE unread messages AND
-              // there's a traceable customer message timestamp
-              const lastCustUnreadAt = unreadCount > 0 ? lastCustomerMsgTime : null;
+              const needsReply = Boolean(lastCustomerMsgTime && (!lastOperatorTimestamp || lastCustomerTimestamp > lastOperatorTimestamp));
+              const calculatedUnread = needsReply ? 1 : 0;
+              const lastCustUnreadAt = needsReply ? lastCustomerMsgTime : null;
 
               // Track newest overall message for last_message + last_message_at
               const newestMsg = messagesList[messagesList.length - 1];
@@ -245,12 +251,13 @@ serve(async (req) => {
                 if (!msgErr) wsMessages++;
               }
 
-              // Update conversation with last message details and correct unread AT
+              // Update conversation with last message details and correct unread / awaiting-reply state
               const { error: updateErr } = await supabase
                 .from("crisp_conversations")
                 .update({
                   last_message: newestText,
                   last_message_at: newestTime,
+                  unread_count: calculatedUnread,
                   last_customer_unread_at: lastCustUnreadAt,
                   updated_at: new Date().toISOString(),
                 })
@@ -260,13 +267,11 @@ serve(async (req) => {
                 console.error(`Failed to update conversation ${sessionId}:`, updateErr.message);
               }
             } else {
-              // No messages fetched — still clear last_customer_unread_at if read
-              if (unreadCount === 0) {
-                await supabase
-                  .from("crisp_conversations")
-                  .update({ last_customer_unread_at: null, updated_at: new Date().toISOString() })
-                  .eq("id", convRecord.id);
-              }
+              // No messages fetched — clear unread
+              await supabase
+                .from("crisp_conversations")
+                .update({ unread_count: 0, last_customer_unread_at: null, updated_at: new Date().toISOString() })
+                .eq("id", convRecord.id);
             }
           }
         }
