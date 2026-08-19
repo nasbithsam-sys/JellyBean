@@ -127,7 +127,7 @@ serve(async (req) => {
       method: "POST",
       headers: {
         "Authorization": `Basic ${authString}`,
-        "X-Crisp-Tier": "website",
+        "X-Crisp-Tier": "plugin",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

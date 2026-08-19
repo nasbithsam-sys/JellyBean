@@ -115,7 +115,7 @@ async function verifyCrispCredentials(websiteId: string, tokenId: string, tokenK
     method: "GET",
     headers: {
       Authorization: `Basic ${auth}`,
-      "X-Crisp-Tier": "website",
+      "X-Crisp-Tier": "plugin",
       "Content-Type": "application/json",
     },
   });
