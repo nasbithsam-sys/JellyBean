@@ -40,8 +40,9 @@ function isCrispMaskedMessage(content: string | null | undefined): boolean {
 function parseMessageContent(msg: any): string {
   const rawContent = msg.content;
   if (typeof rawContent === "string" && rawContent.trim()) return rawContent.trim();
-  if (rawContent && typeof rawContent === "object" && typeof rawContent.text === "string" && rawContent.text.trim()) {
-    return rawContent.text.trim();
+  if (rawContent && typeof rawContent === "object") {
+    if (typeof rawContent.text === "string" && rawContent.text.trim()) return rawContent.text.trim();
+    if (typeof rawContent.name === "string" && rawContent.name.trim()) return rawContent.name.trim();
   }
   if (msg.type === "file" || msg.type === "attachment") return "[File]";
   if (msg.type === "animation" || msg.type === "picker" || msg.type === "image" || msg.type === "media") return "[Image]";

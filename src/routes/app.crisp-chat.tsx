@@ -19,6 +19,10 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Info,
+  Download,
+  FileText,
+  Volume2,
+  Paperclip,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -123,6 +127,94 @@ export function isCrispMaskedMessage(content: string | null | undefined): boolea
   const stripped = trimmed.replace(/[\s\p{P}\p{S}]/gu, "");
   // Must have at least 3 characters and consist entirely of 'x' or 'X'
   return stripped.length >= 3 && /^x+$/i.test(stripped);
+}
+
+export type CrispAttachment = {
+  url: string;
+  name: string;
+  type?: string;
+  size?: number;
+  isImage: boolean;
+  isAudio: boolean;
+  isFile: boolean;
+};
+
+export function getCustomerAttachment(msg: MessageRecord): CrispAttachment | null {
+  const isCustomer = msg.sender_type === "customer" || msg.sender_type === "user" || msg.direction === "incoming";
+  if (!isCustomer) return null;
+
+  const raw = msg.raw_payload;
+  const rawContent = raw?.content;
+  let url = "";
+  let name = "";
+  let type = "";
+  let size: number | undefined = undefined;
+
+  if (rawContent && typeof rawContent === "object") {
+    url = rawContent.url || rawContent.preview || "";
+    name = rawContent.name || rawContent.filename || "";
+    type = rawContent.type || "";
+    size = typeof rawContent.size === "number" ? rawContent.size : undefined;
+  } else if (typeof rawContent === "string" && (rawContent.startsWith("http://") || rawContent.startsWith("https://"))) {
+    url = rawContent.trim();
+  }
+
+  // Fallback: check if msg.content itself is an attachment URL
+  if (!url && typeof msg.content === "string" && (msg.content.startsWith("http://") || msg.content.startsWith("https://"))) {
+    url = msg.content.trim();
+  }
+
+  if (!url) return null;
+
+  const lowerUrl = url.toLowerCase();
+  const lowerType = type.toLowerCase();
+  const lowerName = name.toLowerCase();
+  const msgType = (msg.message_type || raw?.type || "").toLowerCase();
+
+  const isImage =
+    msgType === "image" ||
+    msgType === "animation" ||
+    msgType === "media" ||
+    lowerType.startsWith("image/") ||
+    /\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?.*)?$/i.test(lowerUrl) ||
+    /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(lowerName) ||
+    lowerUrl.includes("/image/") ||
+    lowerUrl.includes("/animation/");
+
+  const isAudio =
+    msgType === "audio" ||
+    lowerType.startsWith("audio/") ||
+    /\.(mp3|wav|ogg|m4a|aac|webm)(\?.*)?$/i.test(lowerUrl) ||
+    /\.(mp3|wav|ogg|m4a|aac|webm)$/i.test(lowerName);
+
+  const isFile = !isImage && !isAudio;
+
+  if (!name) {
+    try {
+      const parsedUrl = new URL(url);
+      const pathnameParts = parsedUrl.pathname.split("/");
+      name = decodeURIComponent(pathnameParts[pathnameParts.length - 1] || "attachment");
+    } catch {
+      name = isImage ? "Photo attachment" : isAudio ? "Voice message" : "File attachment";
+    }
+  }
+
+  return {
+    url,
+    name,
+    type,
+    size,
+    isImage,
+    isAudio,
+    isFile,
+  };
+}
+
+export function formatFileSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function formatMessageDateTime(dateStr: string | null | undefined): string {
@@ -1211,6 +1303,7 @@ function CrispInboxInner() {
                 {messages.map((msg) => {
                   const isOperator = msg.sender_type === "operator" || msg.direction === "outgoing";
                   const isMasked = isCrispMaskedMessage(msg.content);
+                  const attachment = !isOperator && !isMasked ? getCustomerAttachment(msg) : null;
 
                   return (
                     <div
@@ -1236,6 +1329,76 @@ function CrispInboxInner() {
                             <p className="italic text-xs leading-relaxed text-foreground">
                               Message unavailable — older message history is hidden by the current Crisp plan.
                             </p>
+                          </div>
+                        ) : attachment?.isImage ? (
+                          <div className="space-y-1.5">
+                            <a
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block group overflow-hidden rounded-xl border border-border/80 bg-background/50 hover:opacity-95 transition-all shadow-xs"
+                              title="Click to view full image in a new tab"
+                            >
+                              <img
+                                src={attachment.url}
+                                alt={attachment.name || "Customer attached photo"}
+                                className="max-h-72 max-w-full rounded-xl object-contain bg-muted/30 group-hover:scale-[1.01] transition-transform duration-150"
+                                loading="lazy"
+                              />
+                            </a>
+                            {msg.content &&
+                              !["[image]", "[file]", "[attachment]", "[media]"].includes(msg.content.toLowerCase().trim()) &&
+                              !msg.content.startsWith("http://") &&
+                              !msg.content.startsWith("https://") && (
+                                <p className="whitespace-pre-wrap leading-relaxed px-0.5">{msg.content}</p>
+                              )}
+                          </div>
+                        ) : attachment?.isAudio ? (
+                          <div className="space-y-1.5 py-0.5">
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                              <Volume2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span>{attachment.name || "Voice message"}</span>
+                            </div>
+                            <audio controls className="w-full max-w-[280px] h-8 rounded mt-1" src={attachment.url}>
+                              Your browser does not support the audio element.
+                            </audio>
+                            {msg.content &&
+                              !["[audio]", "[file]", "[attachment]"].includes(msg.content.toLowerCase().trim()) &&
+                              !msg.content.startsWith("http://") &&
+                              !msg.content.startsWith("https://") && (
+                                <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                              )}
+                          </div>
+                        ) : attachment?.isFile ? (
+                          <div className="space-y-1.5">
+                            <a
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download={attachment.name}
+                              className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border/80 bg-background/70 hover:bg-accent/40 text-foreground transition-all group shadow-2xs"
+                            >
+                              <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20">
+                                <FileText className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-xs truncate group-hover:underline text-foreground">
+                                  {attachment.name || "Download Attachment"}
+                                </p>
+                                <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                  {attachment.size ? <span>{formatFileSize(attachment.size)}</span> : null}
+                                  <span className="flex items-center gap-1 text-primary group-hover:underline font-medium">
+                                    <Download className="w-3 h-3" /> Download
+                                  </span>
+                                </div>
+                              </div>
+                            </a>
+                            {msg.content &&
+                              !["[file]", "[attachment]", "[image]"].includes(msg.content.toLowerCase().trim()) &&
+                              !msg.content.startsWith("http://") &&
+                              !msg.content.startsWith("https://") && (
+                                <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                              )}
                           </div>
                         ) : (
                           <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
