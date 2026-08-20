@@ -41,25 +41,12 @@ function playCrispChime() {
   }
 }
 
-function showBrowserNotification(title: string, body: string, onClick?: () => void) {
-  try {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission !== "granted") return;
-    const n = new Notification(title, {
-      body,
-      icon: "/favicon.ico",
-      tag: "crisp-incoming-message",
-      requireInteraction: false,
-    });
-    n.onclick = () => {
-      window.focus();
-      onClick?.();
-      n.close();
-    };
-  } catch {
-    // Ignore notification errors
-  }
-}
+type QueuedMessageAlert = {
+  id: string;
+  customerName: string;
+  workspaceName: string;
+  messageSnippet: string;
+};
 
 export function CrispMessageNotifier() {
   const { roles, primaryRole, user } = useAuth();
@@ -73,13 +60,71 @@ export function CrispMessageNotifier() {
     roles.includes("admin");
 
   const seenMsgIdsRef = useRef<Set<string>>(new Set());
-  const hasCheckedOfflineRef = useRef(false);
+  const pendingBackgroundQueueRef = useRef<QueuedMessageAlert[]>([]);
+  const hasCheckedInitialLoadRef = useRef(false);
 
-  // 1. OFFLINE CATCH-UP / INITIAL LOAD CHECK
+  const displayMessageToast = (item: QueuedMessageAlert) => {
+    playCrispChime();
+    toast(
+      `New message from ${item.customerName} (${item.workspaceName}): "${item.messageSnippet}"`,
+      {
+        duration: 9000,
+        icon: <MessageSquare className="w-4 h-4 text-primary shrink-0" />,
+        action: {
+          label: "View Chat",
+          onClick: () => navigate({ to: "/app/crisp-chat" }),
+        },
+      }
+    );
+  };
+
+  const flushBackgroundQueue = () => {
+    const queue = pendingBackgroundQueueRef.current;
+    if (queue.length === 0) return;
+
+    if (queue.length === 1) {
+      displayMessageToast(queue[0]);
+    } else {
+      playCrispChime();
+      toast(
+        `You received ${queue.length} new Crisp messages while away.`,
+        {
+          duration: 10000,
+          icon: <MessageSquare className="w-4 h-4 text-primary shrink-0" />,
+          action: {
+            label: "Open Crisp Chat",
+            onClick: () => navigate({ to: "/app/crisp-chat" }),
+          },
+        }
+      );
+    }
+    pendingBackgroundQueueRef.current = [];
+  };
+
+  // 1. FLUSH PENDING NOTIFICATIONS WHEN USER SWITCHES BACK TO THE CRM TAB
+  useEffect(() => {
+    if (!isCsAdmin) return;
+
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        flushBackgroundQueue();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+    window.addEventListener("focus", handleVisibilityOrFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+    };
+  }, [isCsAdmin, navigate]);
+
+  // 2. OFFLINE CATCH-UP / INITIAL LOAD CHECK
   // When CS Admin opens the CRM, check if there are unreplied conversations waiting
   useEffect(() => {
-    if (!isCsAdmin || !user?.id || hasCheckedOfflineRef.current) return;
-    hasCheckedOfflineRef.current = true;
+    if (!isCsAdmin || !user?.id || hasCheckedInitialLoadRef.current) return;
+    hasCheckedInitialLoadRef.current = true;
 
     async function checkPendingUnread() {
       try {
@@ -95,10 +140,11 @@ export function CrispMessageNotifier() {
           const now = Date.now();
           if (!lastAlert || now - Number(lastAlert) > 5 * 60 * 1000) {
             sessionStorage.setItem("crisp_offline_alert_shown", String(now));
+            playCrispChime();
             toast.info(
               `You have ${totalUnreplied} Crisp conversation${totalUnreplied > 1 ? "s" : ""} awaiting customer reply.`,
               {
-                duration: 8000,
+                duration: 9000,
                 action: {
                   label: "Open Crisp Chat",
                   onClick: () => navigate({ to: "/app/crisp-chat" }),
@@ -115,8 +161,7 @@ export function CrispMessageNotifier() {
     void checkPendingUnread();
   }, [isCsAdmin, user?.id, currentPath, navigate]);
 
-  // 2. ONLINE REALTIME NOTIFICATION
-  // Listens for new incoming customer messages in real-time
+  // 3. REALTIME INCOMING MESSAGE LISTENER
   useEffect(() => {
     if (!isCsAdmin || !user?.id) return;
 
@@ -139,7 +184,7 @@ export function CrispMessageNotifier() {
           // Ignore masked / redacted free-plan placeholder messages
           if (isCrispMaskedMessage(newMsg.content)) return;
 
-          // Prevent duplicate toast if already seen
+          // Prevent duplicate notification if already seen
           if (seenMsgIdsRef.current.has(newMsg.id)) return;
           seenMsgIdsRef.current.add(newMsg.id);
 
@@ -172,33 +217,28 @@ export function CrispMessageNotifier() {
             // Non-fatal if fetch fails
           }
 
-          // Play audio notification chime
-          playCrispChime();
-
           const messageSnippet =
             newMsg.content && newMsg.content.length > 80
               ? `${newMsg.content.slice(0, 80)}...`
               : newMsg.content || "Sent a message";
 
-          // Browser Notification (for background tab)
-          showBrowserNotification(
-            `Crisp Message: ${customerName} (${workspaceName})`,
+          const alertItem: QueuedMessageAlert = {
+            id: newMsg.id,
+            customerName,
+            workspaceName,
             messageSnippet,
-            () => navigate({ to: "/app/crisp-chat" })
-          );
+          };
 
-          // In-App Toast
-          toast(
-            `New message from ${customerName} (${workspaceName}): "${messageSnippet}"`,
-            {
-              duration: 10000,
-              icon: <MessageSquare className="w-4 h-4 text-primary shrink-0" />,
-              action: {
-                label: "View Chat",
-                onClick: () => navigate({ to: "/app/crisp-chat" }),
-              },
-            }
-          );
+          // If the CRM tab is currently open & visible, notify immediately.
+          // If the CRM tab is minimized or user is on another Chrome tab, queue it to notify upon return.
+          const isTabVisible =
+            typeof document !== "undefined" && document.visibilityState === "visible";
+
+          if (isTabVisible) {
+            displayMessageToast(alertItem);
+          } else {
+            pendingBackgroundQueueRef.current.push(alertItem);
+          }
         }
       )
       .subscribe();
