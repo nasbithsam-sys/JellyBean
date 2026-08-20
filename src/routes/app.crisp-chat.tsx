@@ -567,10 +567,10 @@ function CrispInboxInner() {
               // Patch existing row
               const updated = [...prev];
               updated[idx] = { ...updated[idx], ...changedRow };
-              // Re-sort: unread first, then last_message_at DESC
+              // Re-sort: unread first, then last_message_at DESC (masked messages never unread)
               updated.sort((a, b) => {
-                const ua = (a.unread_count || 0) > 0 ? 1 : 0;
-                const ub = (b.unread_count || 0) > 0 ? 1 : 0;
+                const ua = ((a.unread_count || 0) > 0 && !isCrispMaskedMessage(a.last_message)) ? 1 : 0;
+                const ub = ((b.unread_count || 0) > 0 && !isCrispMaskedMessage(b.last_message)) ? 1 : 0;
                 if (ua !== ub) return ub - ua;
                 return (b.last_message_at || "").localeCompare(a.last_message_at || "");
               });
@@ -586,8 +586,8 @@ function CrispInboxInner() {
               if (!belongsHere) return prev;
               const updated = [changedRow, ...prev];
               updated.sort((a, b) => {
-                const ua = (a.unread_count || 0) > 0 ? 1 : 0;
-                const ub = (b.unread_count || 0) > 0 ? 1 : 0;
+                const ua = ((a.unread_count || 0) > 0 && !isCrispMaskedMessage(a.last_message)) ? 1 : 0;
+                const ub = ((b.unread_count || 0) > 0 && !isCrispMaskedMessage(b.last_message)) ? 1 : 0;
                 if (ua !== ub) return ub - ua;
                 return (b.last_message_at || "").localeCompare(a.last_message_at || "");
               });
@@ -1093,8 +1093,8 @@ function CrispInboxInner() {
             <>
               {filteredConversations.map((conv) => {
                 const isSelected = selectedConversationId === conv.id;
-                const isUnread = (conv.unread_count || 0) > 0;
                 const isMaskedPreview = isCrispMaskedMessage(conv.last_message);
+                const isUnread = (conv.unread_count || 0) > 0 && !isMaskedPreview;
 
                 return (
                   <button

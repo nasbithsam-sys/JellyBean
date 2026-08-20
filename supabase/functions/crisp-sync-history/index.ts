@@ -25,6 +25,17 @@ async function resolveWorkspaceName(websiteId: string, authString: string): Prom
   }
 }
 
+/** Check if a message is a masked/redacted Crisp free-plan placeholder (e.g. 'xxxxx', 'xx xxxx xxxx') */
+function isCrispMaskedMessage(content: string | null | undefined): boolean {
+  if (!content) return false;
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  // Remove whitespace and common punctuation symbols
+  const stripped = trimmed.replace(/[\s\p{P}\p{S}]/gu, "");
+  // Must have at least 3 characters and consist entirely of 'x' or 'X'
+  return stripped.length >= 3 && /^x+$/i.test(stripped);
+}
+
 /** Parse raw message content for any message type. */
 function parseMessageContent(msg: any): string {
   const rawContent = msg.content;
@@ -198,9 +209,11 @@ serve(async (req) => {
               messagesList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
               // ── AWAITING OPERATOR REPLY CALCULATION ─────────────────────────
-              // Determine unread / needs-reply strictly based on message direction:
+              // Determine unread / needs-reply strictly based on genuine message direction:
               // latest incoming customer message vs latest outgoing operator message.
+              // Masked/unavailable messages (xxxx) must NEVER be treated as unread!
               let lastCustomerMsgTime: string | null = null;
+              let lastCustomerMsgContent: string | null = null;
               let lastCustomerTimestamp = 0;
               let lastOperatorTimestamp = 0;
 
@@ -210,13 +223,19 @@ serve(async (req) => {
                 const ts = m.timestamp || 0;
                 if (fromStr !== "operator" && !lastCustomerMsgTime) {
                   lastCustomerMsgTime = m.timestamp ? new Date(m.timestamp).toISOString() : null;
+                  lastCustomerMsgContent = parseMessageContent(m);
                   lastCustomerTimestamp = ts;
                 } else if (fromStr === "operator" && !lastOperatorTimestamp) {
                   lastOperatorTimestamp = ts;
                 }
               }
 
-              const needsReply = Boolean(lastCustomerMsgTime && (!lastOperatorTimestamp || lastCustomerTimestamp > lastOperatorTimestamp));
+              const isMaskedCustomerMsg = isCrispMaskedMessage(lastCustomerMsgContent);
+              const needsReply = Boolean(
+                lastCustomerMsgTime &&
+                !isMaskedCustomerMsg &&
+                (!lastOperatorTimestamp || lastCustomerTimestamp > lastOperatorTimestamp)
+              );
               const calculatedUnread = needsReply ? 1 : 0;
               const lastCustUnreadAt = needsReply ? lastCustomerMsgTime : null;
 
