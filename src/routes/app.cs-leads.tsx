@@ -257,6 +257,7 @@ const PIPELINE_STATUSES = [
   "wrong_service",
   "wrong_person",
   "already_got_someone",
+  "already_received_before",
   "service_provider_himself",
   "small_service",
   "converted",
