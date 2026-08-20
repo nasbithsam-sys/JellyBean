@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -51,8 +51,6 @@ type QueuedMessageAlert = {
 export function CrispMessageNotifier() {
   const { roles, primaryRole, user } = useAuth();
   const navigate = useNavigate();
-  const routerState = useRouterState();
-  const currentPath = routerState.location.pathname;
 
   const isCsAdmin =
     primaryRole === "cs_admin" ||
@@ -61,7 +59,6 @@ export function CrispMessageNotifier() {
 
   const seenMsgIdsRef = useRef<Set<string>>(new Set());
   const pendingBackgroundQueueRef = useRef<QueuedMessageAlert[]>([]);
-  const hasCheckedInitialLoadRef = useRef(false);
 
   const displayMessageToast = (item: QueuedMessageAlert) => {
     playCrispChime();
@@ -120,48 +117,7 @@ export function CrispMessageNotifier() {
     };
   }, [isCsAdmin, navigate]);
 
-  // 2. OFFLINE CATCH-UP / INITIAL LOAD CHECK
-  // When CS Admin opens the CRM, check if there are unreplied conversations waiting
-  useEffect(() => {
-    if (!isCsAdmin || !user?.id || hasCheckedInitialLoadRef.current) return;
-    hasCheckedInitialLoadRef.current = true;
-
-    async function checkPendingUnread() {
-      try {
-        const { data, error } = await supabase.rpc("get_crisp_workspace_summaries");
-        if (error || !data) return;
-
-        const totalUnreplied = (data as any[]).reduce((sum, item) => {
-          return sum + Number(item.unreplied_chat_count || 0);
-        }, 0);
-
-        if (totalUnreplied > 0 && currentPath !== "/app/crisp-chat") {
-          const lastAlert = sessionStorage.getItem("crisp_offline_alert_shown");
-          const now = Date.now();
-          if (!lastAlert || now - Number(lastAlert) > 5 * 60 * 1000) {
-            sessionStorage.setItem("crisp_offline_alert_shown", String(now));
-            playCrispChime();
-            toast.info(
-              `You have ${totalUnreplied} Crisp conversation${totalUnreplied > 1 ? "s" : ""} awaiting customer reply.`,
-              {
-                duration: 9000,
-                action: {
-                  label: "Open Crisp Chat",
-                  onClick: () => navigate({ to: "/app/crisp-chat" }),
-                },
-              }
-            );
-          }
-        }
-      } catch (err) {
-        console.error("Failed to check pending Crisp unread count:", err);
-      }
-    }
-
-    void checkPendingUnread();
-  }, [isCsAdmin, user?.id, currentPath, navigate]);
-
-  // 3. REALTIME INCOMING MESSAGE LISTENER
+  // 2. REALTIME INCOMING MESSAGE LISTENER
   useEffect(() => {
     if (!isCsAdmin || !user?.id) return;
 
