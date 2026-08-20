@@ -1601,6 +1601,7 @@ export const Constants = {
         "undeliver",
         "wrong_number",
         "already_got_someone",
+        "already_received_before",
         "service_provider_himself",
         "need_follow_up",
         "wrong_lead",

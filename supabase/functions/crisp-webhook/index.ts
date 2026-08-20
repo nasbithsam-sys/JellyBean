@@ -29,6 +29,15 @@ const GENUINE_MESSAGE_EVENTS = new Set(["message:send", "message:received"]);
 function isGenuineMessageEvent(eventType: string): boolean {
   return GENUINE_MESSAGE_EVENTS.has(eventType);
 }
+
+/** Check if a message is a masked/redacted Crisp free-plan placeholder (e.g. 'xxxxx', 'xx xxxx xxxx') */
+function isCrispMaskedMessage(content: string | null | undefined): boolean {
+  if (!content) return false;
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  const stripped = trimmed.replace(/[\s\p{P}\p{S}]/gu, "");
+  return stripped.length >= 3 && /^x+$/i.test(stripped);
+}
 // ──────────────────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -246,10 +255,12 @@ serve(async (req) => {
 
       const currentUnread = Number(existingConv?.unread_count || 0);
       let updatedUnread = currentUnread;
-      if (isCustomerMessage && !messageAlreadyExists) {
+      const isMaskedMsg = isCrispMaskedMessage(messageContent);
+
+      if (isCustomerMessage && !messageAlreadyExists && !isMaskedMsg) {
         updatedUnread = currentUnread + 1;
-      } else if (isOperator) {
-        // Operator reply clears awaiting-reply / unread state
+      } else if (isOperator || isMaskedMsg) {
+        // Operator reply or masked message clears/prevents awaiting-reply state
         updatedUnread = 0;
       }
 
@@ -257,8 +268,8 @@ serve(async (req) => {
       const lastMessageAt = isMessageEvent && messageContent ? sentAt : (existingConv?.last_message_at || sentAt);
 
       // Set last_customer_unread_at ONLY on genuine NEW incoming customer messages
-      // Operator messages clear it
-      const lastCustomerUnreadAt = isCustomerMessage && !messageAlreadyExists
+      // Operator messages or masked messages clear it
+      const lastCustomerUnreadAt = isCustomerMessage && !messageAlreadyExists && !isMaskedMsg
         ? sentAt
         : (updatedUnread > 0 ? (existingConv?.last_customer_unread_at || null) : null);
 
