@@ -1,3 +1,4 @@
+// JellyBean CS Pipeline Status Definitions
 export const STATUS_LABEL: Record<string, string> = {
   new: "New to contact",
   undeliver: "Undeliver",
