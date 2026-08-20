@@ -198,16 +198,23 @@ serve(async (req) => {
       const rawContent = data.content;
       if (typeof rawContent === "string" && rawContent.trim()) {
         messageContent = rawContent.trim();
-      } else if (rawContent && typeof rawContent === "object" && typeof rawContent.text === "string" && rawContent.text.trim()) {
-        messageContent = rawContent.text.trim();
-      } else if (data.type === "file" || data.type === "attachment") {
-        messageContent = "[File]";
-      } else if (data.type === "animation" || data.type === "picker" || data.type === "image" || data.type === "media") {
-        messageContent = "[Image]";
-      } else if (data.type === "audio") {
-        messageContent = "[Audio]";
-      } else {
-        messageContent = "[Attachment]";
+      } else if (rawContent && typeof rawContent === "object") {
+        if (typeof rawContent.text === "string" && rawContent.text.trim()) {
+          messageContent = rawContent.text.trim();
+        } else if (typeof rawContent.name === "string" && rawContent.name.trim()) {
+          messageContent = rawContent.name.trim();
+        }
+      }
+      if (!messageContent) {
+        if (data.type === "file" || data.type === "attachment") {
+          messageContent = "[File]";
+        } else if (data.type === "animation" || data.type === "picker" || data.type === "image" || data.type === "media") {
+          messageContent = "[Image]";
+        } else if (data.type === "audio") {
+          messageContent = "[Audio]";
+        } else {
+          messageContent = "[Attachment]";
+        }
       }
     }
 
