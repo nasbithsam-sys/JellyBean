@@ -1104,12 +1104,14 @@ function CrispInboxInner() {
                   <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse ml-0.5" title="Has chats needing reply" />
                 )}
               </div>
-              <Badge
-                variant={selectedWebsiteId === "all" ? "secondary" : "outline"}
-                className="ml-1 shrink-0 text-xs px-1.5 py-0 font-semibold border-border/60"
-              >
-                {totalUnrepliedCount}
-              </Badge>
+              {totalUnrepliedCount > 0 && (
+                <Badge
+                  variant={selectedWebsiteId === "all" ? "secondary" : "outline"}
+                  className="ml-1 shrink-0 text-xs px-1.5 py-0 font-semibold border-border/60"
+                >
+                  {totalUnrepliedCount}
+                </Badge>
+              )}
             </button>
 
             <div className="my-2 border-t border-border/40" />
@@ -1143,12 +1145,14 @@ function CrispInboxInner() {
                   </button>
 
                   <div className="flex items-center gap-1 shrink-0 ml-1">
-                    <Badge
-                      variant={isSelected ? "secondary" : "outline"}
-                      className="text-xs px-1.5 py-0 font-semibold border-border/60"
-                    >
-                      {unrepliedCount}
-                    </Badge>
+                    {unrepliedCount > 0 && (
+                      <Badge
+                        variant={isSelected ? "secondary" : "outline"}
+                        className="text-xs px-1.5 py-0 font-semibold border-border/60"
+                      >
+                        {unrepliedCount}
+                      </Badge>
+                    )}
 
                     {isAdmin && (
                       <DropdownMenu>
