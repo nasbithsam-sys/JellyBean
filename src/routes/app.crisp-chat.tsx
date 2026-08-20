@@ -189,13 +189,19 @@ export function getCustomerAttachment(msg: MessageRecord): CrispAttachment | nul
 
   const isFile = !isImage && !isAudio;
 
-  if (!name) {
+  if (isAudio) {
+    if (typeof rawContent?.duration === "number") {
+      name = `Voice Message (${Math.round(rawContent.duration)}s)`;
+    } else {
+      name = "Voice Note";
+    }
+  } else if (!name) {
     try {
       const parsedUrl = new URL(url);
       const pathnameParts = parsedUrl.pathname.split("/");
       name = decodeURIComponent(pathnameParts[pathnameParts.length - 1] || "attachment");
     } catch {
-      name = isImage ? "Photo attachment" : isAudio ? "Voice message" : "File attachment";
+      name = isImage ? "Photo attachment" : "File attachment";
     }
   }
 
@@ -208,6 +214,47 @@ export function getCustomerAttachment(msg: MessageRecord): CrispAttachment | nul
     isAudio,
     isFile,
   };
+}
+
+export function getDisplayableCaption(
+  content: string | null | undefined,
+  attachment: CrispAttachment | null
+): string | null {
+  if (!content) return null;
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+
+  const lower = trimmed.toLowerCase();
+  if (["[image]", "[file]", "[attachment]", "[media]", "[audio]"].includes(lower)) {
+    return null;
+  }
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return null;
+  }
+
+  // Filter out raw JSON strings (e.g. {"url":"...","type":"audio/webm"})
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === "object") {
+        return null;
+      }
+    } catch {
+      // Not JSON
+    }
+  }
+
+  if (attachment) {
+    if (trimmed === attachment.name || trimmed === attachment.url) {
+      return null;
+    }
+    if (attachment.url.includes(trimmed)) {
+      return null;
+    }
+  }
+
+  return trimmed;
 }
 
 export function formatFileSize(bytes?: number): string {
@@ -1304,6 +1351,7 @@ function CrispInboxInner() {
                   const isOperator = msg.sender_type === "operator" || msg.direction === "outgoing";
                   const isMasked = isCrispMaskedMessage(msg.content);
                   const attachment = !isOperator && !isMasked ? getCustomerAttachment(msg) : null;
+                  const caption = getDisplayableCaption(msg.content, attachment);
 
                   return (
                     <div
@@ -1346,28 +1394,22 @@ function CrispInboxInner() {
                                 loading="lazy"
                               />
                             </a>
-                            {msg.content &&
-                              !["[image]", "[file]", "[attachment]", "[media]"].includes(msg.content.toLowerCase().trim()) &&
-                              !msg.content.startsWith("http://") &&
-                              !msg.content.startsWith("https://") && (
-                                <p className="whitespace-pre-wrap leading-relaxed px-0.5">{msg.content}</p>
-                              )}
+                            {caption && (
+                              <p className="whitespace-pre-wrap leading-relaxed px-0.5">{caption}</p>
+                            )}
                           </div>
                         ) : attachment?.isAudio ? (
                           <div className="space-y-1.5 py-0.5">
                             <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                               <Volume2 className="w-3.5 h-3.5 text-primary shrink-0" />
-                              <span>{attachment.name || "Voice message"}</span>
+                              <span>{attachment.name}</span>
                             </div>
                             <audio controls className="w-full max-w-[280px] h-8 rounded mt-1" src={attachment.url}>
                               Your browser does not support the audio element.
                             </audio>
-                            {msg.content &&
-                              !["[audio]", "[file]", "[attachment]"].includes(msg.content.toLowerCase().trim()) &&
-                              !msg.content.startsWith("http://") &&
-                              !msg.content.startsWith("https://") && (
-                                <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                              )}
+                            {caption && (
+                              <p className="whitespace-pre-wrap leading-relaxed">{caption}</p>
+                            )}
                           </div>
                         ) : attachment?.isFile ? (
                           <div className="space-y-1.5">
@@ -1393,12 +1435,9 @@ function CrispInboxInner() {
                                 </div>
                               </div>
                             </a>
-                            {msg.content &&
-                              !["[file]", "[attachment]", "[image]"].includes(msg.content.toLowerCase().trim()) &&
-                              !msg.content.startsWith("http://") &&
-                              !msg.content.startsWith("https://") && (
-                                <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                              )}
+                            {caption && (
+                              <p className="whitespace-pre-wrap leading-relaxed">{caption}</p>
+                            )}
                           </div>
                         ) : (
                           <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
