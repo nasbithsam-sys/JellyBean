@@ -432,6 +432,103 @@ export const deleteCrispWorkspace = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+export const getCrispConversationNotes = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { conversationId: string }) => {
+    const conversationId = String(input?.conversationId ?? "").trim();
+    if (!conversationId) throw new Error("conversationId is required");
+    return { conversationId };
+  })
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+
+    const { data: roleRows, error: roleErr } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+    if (roleErr) throw new Error("Could not verify user roles");
+    const callerRoles = (roleRows ?? []).map((r) => String(r.role));
+    if (!callerRoles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
+      throw new Error("Forbidden: Crisp notes are restricted to admin, cs_admin and cs roles.");
+    }
+
+    const isCallerAdmin = callerRoles.includes("admin");
+    const isCallerCsAdmin = callerRoles.includes("cs_admin");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: notes, error: notesErr } = await supabaseAdmin
+      .from("crisp_conversation_notes")
+      .select("*")
+      .eq("conversation_id", data.conversationId)
+      .order("created_at", { ascending: true });
+
+    if (notesErr) {
+      return { ok: false as const, error: notesErr.message, notes: [] };
+    }
+
+    if (!notes || notes.length === 0) {
+      return { ok: true as const, notes: [] };
+    }
+
+    const userIds = Array.from(new Set(notes.map((n) => n.created_by)));
+
+    // Fetch user profiles by user_id
+    const { data: profiles } = await supabaseAdmin
+      .from("profiles")
+      .select("user_id, full_name, username, email")
+      .in("user_id", userIds);
+
+    const profilesMap = new Map<string, string>();
+    (profiles || []).forEach((p) => {
+      const name = p.full_name?.trim() || p.username?.trim() || p.email?.split("@")[0] || "Team Member";
+      profilesMap.set(p.user_id, name);
+    });
+
+    // Fetch roles for authors to evaluate deletion permissions
+    const { data: authorRoles } = await supabaseAdmin
+      .from("user_roles")
+      .select("user_id, role")
+      .in("user_id", userIds);
+
+    const rolesMap = new Map<string, string[]>();
+    (authorRoles || []).forEach((r) => {
+      const existing = rolesMap.get(r.user_id) || [];
+      existing.push(String(r.role));
+      rolesMap.set(r.user_id, existing);
+    });
+
+    const enrichedNotes = notes.map((n) => {
+      const isSelf = n.created_by === userId;
+      const authorRolesList = rolesMap.get(n.created_by) || [];
+      const authorIsAdmin = authorRolesList.includes("admin");
+      const authorName = profilesMap.get(n.created_by) || "Team Member";
+
+      let canDelete = false;
+      if (isCallerAdmin) {
+        canDelete = true;
+      } else if (isCallerCsAdmin) {
+        canDelete = isSelf || !authorIsAdmin;
+      } else {
+        canDelete = isSelf;
+      }
+
+      return {
+        id: n.id,
+        conversation_id: n.conversation_id,
+        created_by: n.created_by,
+        note: n.note,
+        is_edited: n.is_edited,
+        created_at: n.created_at,
+        updated_at: n.updated_at,
+        author_name: authorName,
+        can_delete: canDelete,
+      };
+    });
+
+    return { ok: true as const, notes: enrichedNotes };
+  });
+
 export const addCrispConversationNote = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { conversationId: string; note: string }) => {
@@ -485,12 +582,50 @@ export const deleteCrispConversationNote = createServerFn({ method: "POST" })
       .select("role")
       .eq("user_id", userId);
     if (roleErr) throw new Error("Could not verify user roles");
-    const roles = (roleRows ?? []).map((r) => String(r.role));
-    if (!roles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
+    const callerRoles = (roleRows ?? []).map((r) => String(r.role));
+    if (!callerRoles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
       throw new Error("Forbidden: Crisp notes are restricted to admin, cs_admin and cs roles.");
     }
 
-    const { error } = await supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Fetch the target note to check creator
+    const { data: note, error: noteErr } = await supabaseAdmin
+      .from("crisp_conversation_notes")
+      .select("id, created_by")
+      .eq("id", data.noteId)
+      .maybeSingle();
+
+    if (noteErr || !note) {
+      return { ok: false as const, error: "Note not found." };
+    }
+
+    const isSelf = note.created_by === userId;
+    const isCallerAdmin = callerRoles.includes("admin");
+    const isCallerCsAdmin = callerRoles.includes("cs_admin");
+
+    if (isCallerAdmin) {
+      // Admin can delete all notes
+    } else if (isCallerCsAdmin) {
+      // CS Admin can delete own notes or CS notes, but not Admin notes
+      if (!isSelf) {
+        const { data: authorRoleRows } = await supabaseAdmin
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", note.created_by);
+        const authorRoles = (authorRoleRows ?? []).map((r) => String(r.role));
+        if (authorRoles.includes("admin")) {
+          return { ok: false as const, error: "Forbidden: CS Admin cannot delete notes written by an Admin." };
+        }
+      }
+    } else {
+      // CS can only delete their own notes
+      if (!isSelf) {
+        return { ok: false as const, error: "Forbidden: You can only delete your own notes." };
+      }
+    }
+
+    const { error } = await supabaseAdmin
       .from("crisp_conversation_notes")
       .delete()
       .eq("id", data.noteId);

@@ -32,6 +32,7 @@ import {
   addCrispWorkspace,
   deleteCrispConversationNote,
   deleteCrispWorkspace,
+  getCrispConversationNotes,
   getCrispWorkspaceWebhookUrl,
   markCrispConversationRead,
   regenerateCrispWebhookSecret,
@@ -117,6 +118,7 @@ type NoteRecord = {
   is_edited: boolean;
   created_at: string;
   author_name?: string;
+  can_delete?: boolean;
 };
 
 export function isCrispMaskedMessage(content: string | null | undefined): boolean {
@@ -570,35 +572,13 @@ function CrispInboxInner() {
 
   // Fetch internal notes for active conversation
   const loadNotes = async (convId: string) => {
-    const { data } = await supabase
-      .from("crisp_conversation_notes")
-      .select("*")
-      .eq("conversation_id", convId)
-      .order("created_at", { ascending: true });
-
-    if (data) {
-      const userIds = Array.from(new Set(data.map((n) => n.created_by)));
-      let namesMap: Record<string, string> = {};
-
-      if (userIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .in("id", userIds);
-
-        if (profiles) {
-          profiles.forEach((p) => {
-            namesMap[p.id] = p.full_name || p.email?.split("@")[0] || "Team Member";
-          });
-        }
+    try {
+      const res = await getCrispConversationNotes({ data: { conversationId: convId } });
+      if (res.ok && res.notes) {
+        setNotes(res.notes);
       }
-
-      setNotes(
-        data.map((n) => ({
-          ...n,
-          author_name: namesMap[n.created_by] || "Team Member",
-        }))
-      );
+    } catch (err: any) {
+      console.error("Failed to load notes:", err);
     }
   };
 
@@ -760,13 +740,9 @@ function CrispInboxInner() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "crisp_conversation_notes" },
-        (payload) => {
+        () => {
           const activeId = selectedConversationIdRef.current;
-          if (
-            activeId &&
-            payload.new &&
-            (payload.new as any).conversation_id === activeId
-          ) {
+          if (activeId) {
             loadNotes(activeId);
           }
         }
@@ -1597,13 +1573,15 @@ function CrispInboxInner() {
                             </span>
                           </div>
                           <p className="text-xs whitespace-pre-wrap break-words">{note.note}</p>
-                          <button
-                            onClick={() => handleDeleteNote(note.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 text-muted-foreground hover:text-destructive"
-                            title="Delete note"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {note.can_delete && (
+                            <button
+                              onClick={() => handleDeleteNote(note.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 text-muted-foreground hover:text-destructive p-0.5 rounded hover:bg-destructive/10"
+                              title="Delete note"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       ))
                     )}
