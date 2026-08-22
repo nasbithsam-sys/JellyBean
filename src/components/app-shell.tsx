@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   Send,
   PieChart,
-  MoreHorizontal,
   KeyRound,
   MessageSquare,
 } from "lucide-react";
@@ -27,12 +26,6 @@ import type { AppRole, AuthState } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useClockSkew } from "@/hooks/use-clock-skew";
 import jellybeanLogo from "@/assets/jellybean-logo.png";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ChangePasswordDialog } from "@/components/auth/change-password-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useState } from "react";
@@ -214,7 +207,11 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
         </div>
         <div className="mt-auto p-2.5 lg:p-3">
           <div className="flex items-center justify-center lg:justify-start gap-2.5 rounded-[22px] bg-sidebar-accent/72 border border-white/[0.10] shadow-sm p-2 lg:p-2.5 overflow-hidden">
-            <div className="h-9 w-9 shrink-0 rounded-full bg-primary grid place-items-center text-[12px] font-bold text-white shadow-sm">
+            <div
+              onClick={() => setPasswordDialogOpen(true)}
+              title="Change Password"
+              className="h-9 w-9 shrink-0 rounded-full bg-primary grid place-items-center text-[12px] font-bold text-white shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
+            >
               {initials(auth.profile?.full_name, auth.user?.email)}
             </div>
             <div className="hidden lg:flex min-w-0 flex-1 flex-col justify-center">
@@ -227,27 +224,15 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
               </div>
             </div>
             <div className="hidden lg:flex items-center gap-0.5 shrink-0">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    title="Account options"
-                    aria-label="Account options"
-                    className="crm-motion h-8 w-8 grid place-items-center rounded-xl text-white/55 hover:bg-white/10 hover:text-white transition-colors"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52 p-1">
-                  <DropdownMenuItem
-                    onSelect={() => setPasswordDialogOpen(true)}
-                    className="crm-motion rounded-sm px-2.5 py-2 text-[13px] font-medium cursor-pointer flex items-center gap-2"
-                  >
-                    <KeyRound className="h-4 w-4" />
-                    Change Password
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <button
+                type="button"
+                onClick={() => setPasswordDialogOpen(true)}
+                title="Change Password"
+                aria-label="Change Password"
+                className="crm-motion h-8 w-8 grid place-items-center rounded-xl text-white/55 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <KeyRound className="h-4 w-4" />
+              </button>
               <button
                 onClick={() => void auth.signOut()}
                 title="Sign out"
