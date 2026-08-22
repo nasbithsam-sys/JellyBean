@@ -32,16 +32,15 @@ const ROLE_TABLES: Record<AppRole, string[]> = {
  * refetches per subscriber; this keeps it to at most one per 400 ms window.
  */
 function makeDebouncedInvalidator(qc: QueryClient, waitMs = 400) {
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const pending = new Set<string>();
   return (key: string[]) => {
     const id = key.join("/");
-    const existing = timers.get(id);
-    if (existing) clearTimeout(existing);
-    const t = setTimeout(() => {
-      timers.delete(id);
+    if (pending.has(id)) return; // Already scheduled an invalidation for this window
+    pending.add(id);
+    setTimeout(() => {
+      pending.delete(id);
       qc.invalidateQueries({ queryKey: key });
     }, waitMs);
-    timers.set(id, t);
   };
 }
 

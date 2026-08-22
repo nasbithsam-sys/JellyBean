@@ -67,20 +67,26 @@ export function CrmUpdatesNotifier() {
 
 
   useEffect(() => {
-    if (!user?.id) return;
     void loadPending();
+  }, [loadPending]);
+
+  const loadPendingRef = useRef(loadPending);
+  useEffect(() => {
+    loadPendingRef.current = loadPending;
+  }, [loadPending]);
+
+  useEffect(() => {
+    if (!user?.id) return;
 
     const channel = supabase
-      .channel(`crm-updates-${user.id}`)
+      .channel(`crm-updates-sub`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "crm_update_notifications" },
         (payload) => {
           const n = payload.new as Notification;
           if (!n.is_active) return;
-          // RLS on INSERT payloads isn't enforced client-side; re-check role match
-          // We'll rely on loadPending logic; simplest: refetch to apply RLS-guarded read.
-          void loadPending();
+          void loadPendingRef.current();
         },
       )
       .subscribe();
@@ -88,7 +94,7 @@ export function CrmUpdatesNotifier() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [user?.id, loadPending]);
+  }, [user?.id]);
 
   const current = queue[0];
 

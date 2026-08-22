@@ -89,42 +89,28 @@ export function useAuthState(): AuthState {
   useEffect(() => {
     let cancelled = false;
 
-    // Set up listener FIRST
+    // `onAuthStateChange` immediately fires `INITIAL_SESSION` on setup,
+    // so we don't need a redundant `getSession()` call.
     const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
       if (cancelled) return;
       latestSessionRef.current = sess;
       setSession(sess);
       setUser(sess?.user ?? null);
-      // Defer to avoid deadlock
-      setTimeout(() => {
-        void loadProfileAndRoles(sess?.user?.id);
-      }, 0);
+      
+      // Load profile and roles, then clear loading state
+      withTimeout(loadProfileAndRoles(sess?.user?.id), 20000, "Supabase profile lookup")
+        .catch((error) => {
+          console.error("[Auth] Could not initialize profile", error);
+          if (!latestSessionRef.current) {
+            setProfile(null);
+            setRoles([]);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     });
-    // Then check current session
-    withTimeout(supabase.auth.getSession(), 20000, "Supabase session lookup")
-      .then(({ data }) => {
-        if (cancelled) return;
-        latestSessionRef.current = data.session;
-        setSession(data.session);
-        setUser(data.session?.user ?? null);
-        return withTimeout(
-          loadProfileAndRoles(data.session?.user?.id),
-          20000,
-          "Supabase profile lookup",
-        );
-      })
-      .catch((error) => {
-        console.error("[Auth] Could not initialize session", error);
-        if (!latestSessionRef.current) {
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-          setRoles([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+
     return () => {
       cancelled = true;
       sub.subscription.unsubscribe();

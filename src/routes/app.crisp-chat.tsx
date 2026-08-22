@@ -358,6 +358,7 @@ function CrispInboxInner() {
 
   const [isSending, setIsSending] = useState(false);
   const [isAddingNote, setIsAddingNote] = useState(false);
+  const [isMarkingRead, setIsMarkingRead] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(true);
 
@@ -862,6 +863,35 @@ function CrispInboxInner() {
     }
   };
 
+  const handleMarkAsRead = async () => {
+    if (!selectedConversationId || isMarkingRead) return;
+    setIsMarkingRead(true);
+    try {
+      const res = await markCrispConversationRead({ data: { conversationId: selectedConversationId } });
+      if (!res.ok) {
+        toast.error(res.error || "Could not mark as read");
+      } else {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === selectedConversationId
+              ? {
+                  ...c,
+                  unread_count: 0,
+                  last_customer_unread_at: null,
+                }
+              : c
+          )
+        );
+        loadWorkspaceCounts();
+        toast.success("Chat marked as read");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "An unexpected error occurred");
+    } finally {
+      setIsMarkingRead(false);
+    }
+  };
+
   // Handle Add Note
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1292,6 +1322,19 @@ function CrispInboxInner() {
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                {activeConversation.unread_count ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs gap-1.5"
+                    onClick={handleMarkAsRead}
+                    disabled={isMarkingRead}
+                    title="Mark conversation as read without sending a reply"
+                  >
+                    {isMarkingRead ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                    <span>Mark as Read</span>
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   size="icon"
