@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { MessageSquare } from "lucide-react";
-import { toast } from "sonner";
+import { MessageSquare, X, ExternalLink, Layers } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 function isCrispMaskedMessage(content: string | null | undefined): boolean {
   if (!content) return false;
@@ -43,9 +44,11 @@ function playCrispChime() {
 
 type QueuedMessageAlert = {
   id: string;
+  conversationId: string;
   customerName: string;
   workspaceName: string;
   messageSnippet: string;
+  receivedAt: string;
 };
 
 export function CrispMessageNotifier() {
@@ -58,66 +61,22 @@ export function CrispMessageNotifier() {
     roles.includes("admin");
 
   const seenMsgIdsRef = useRef<Set<string>>(new Set());
-  const pendingBackgroundQueueRef = useRef<QueuedMessageAlert[]>([]);
+  const [activeQueue, setActiveQueue] = useState<QueuedMessageAlert[]>([]);
 
-  const displayMessageToast = (item: QueuedMessageAlert) => {
-    playCrispChime();
-    toast(
-      `New message from ${item.customerName} (${item.workspaceName}): "${item.messageSnippet}"`,
-      {
-        duration: 9000,
-        icon: <MessageSquare className="w-4 h-4 text-primary shrink-0" />,
-        action: {
-          label: "View Chat",
-          onClick: () => navigate({ to: "/app/crisp-chat" }),
-        },
-      }
-    );
+  const handleDismissTop = () => {
+    setActiveQueue((prev) => prev.slice(1));
   };
 
-  const flushBackgroundQueue = () => {
-    const queue = pendingBackgroundQueueRef.current;
-    if (queue.length === 0) return;
-
-    if (queue.length === 1) {
-      displayMessageToast(queue[0]);
-    } else {
-      playCrispChime();
-      toast(
-        `You received ${queue.length} new Crisp messages while away.`,
-        {
-          duration: 10000,
-          icon: <MessageSquare className="w-4 h-4 text-primary shrink-0" />,
-          action: {
-            label: "Open Crisp Chat",
-            onClick: () => navigate({ to: "/app/crisp-chat" }),
-          },
-        }
-      );
-    }
-    pendingBackgroundQueueRef.current = [];
+  const handleDismissAll = () => {
+    setActiveQueue([]);
   };
 
-  // 1. FLUSH PENDING NOTIFICATIONS WHEN USER SWITCHES BACK TO THE CRM TAB
-  useEffect(() => {
-    if (!isCsAdmin) return;
+  const handleViewChat = (_conversationId?: string) => {
+    setActiveQueue((prev) => prev.slice(1));
+    navigate({ to: "/app/crisp-chat" });
+  };
 
-    const handleVisibilityOrFocus = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        flushBackgroundQueue();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
-    window.addEventListener("focus", handleVisibilityOrFocus);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
-      window.removeEventListener("focus", handleVisibilityOrFocus);
-    };
-  }, [isCsAdmin, navigate]);
-
-  // 2. REALTIME INCOMING MESSAGE LISTENER
+  // REALTIME INCOMING MESSAGE LISTENER
   useEffect(() => {
     if (!isCsAdmin || !user?.id) return;
 
@@ -174,27 +133,22 @@ export function CrispMessageNotifier() {
           }
 
           const messageSnippet =
-            newMsg.content && newMsg.content.length > 80
-              ? `${newMsg.content.slice(0, 80)}...`
+            newMsg.content && newMsg.content.length > 220
+              ? `${newMsg.content.slice(0, 220)}...`
               : newMsg.content || "Sent a message";
 
           const alertItem: QueuedMessageAlert = {
             id: newMsg.id,
+            conversationId: newMsg.conversation_id,
             customerName,
             workspaceName,
             messageSnippet,
+            receivedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           };
 
-          // If the CRM tab is currently open & visible, notify immediately.
-          // If the CRM tab is minimized or user is on another Chrome tab, queue it to notify upon return.
-          const isTabVisible =
-            typeof document !== "undefined" && document.visibilityState === "visible";
-
-          if (isTabVisible) {
-            displayMessageToast(alertItem);
-          } else {
-            pendingBackgroundQueueRef.current.push(alertItem);
-          }
+          // Play chime and push to persistent center queue
+          playCrispChime();
+          setActiveQueue((prev) => [...prev, alertItem]);
         }
       )
       .subscribe();
@@ -202,7 +156,108 @@ export function CrispMessageNotifier() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [isCsAdmin, user?.id, navigate]);
+  }, [isCsAdmin, user?.id]);
 
-  return null;
+  if (!isCsAdmin || activeQueue.length === 0) {
+    return null;
+  }
+
+  const currentItem = activeQueue[0];
+  const queueLength = activeQueue.length;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-md bg-card border border-border/80 shadow-2xl rounded-2xl p-6 text-card-foreground flex flex-col gap-4 animate-in zoom-in-95 duration-200">
+        {/* Top Header */}
+        <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-primary/15 text-primary grid place-items-center shrink-0 animate-pulse">
+              <MessageSquare className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold tracking-tight text-foreground">New Crisp Message</h3>
+                {queueLength > 1 && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary border-primary/30 flex items-center gap-1 font-semibold"
+                  >
+                    <Layers className="h-3 w-3" />
+                    1 of {queueLength}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">Received at {currentItem.receivedAt}</p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleDismissTop}
+            className="text-muted-foreground hover:text-foreground h-7 w-7 rounded-lg hover:bg-muted grid place-items-center transition-colors"
+            title="Close this popup"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Workspace & Customer */}
+        <div className="flex items-center justify-between gap-2 bg-muted/40 p-2.5 rounded-xl border border-border/30">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Customer</div>
+            <div className="text-sm font-semibold text-foreground truncate">{currentItem.customerName}</div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Workspace</div>
+            <Badge
+              variant="secondary"
+              className="text-[11px] font-medium bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+            >
+              {currentItem.workspaceName}
+            </Badge>
+          </div>
+        </div>
+
+        {/* Message Content */}
+        <div className="bg-background/80 p-3.5 rounded-xl border border-border/40 text-[13px] text-foreground leading-relaxed max-h-40 overflow-y-auto whitespace-pre-wrap">
+          &ldquo;{currentItem.messageSnippet}&rdquo;
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          {queueLength > 1 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDismissAll}
+              className="text-[12px] h-9 text-muted-foreground hover:text-destructive"
+            >
+              Dismiss All ({queueLength})
+            </Button>
+          ) : (
+            <div />
+          )}
+
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDismissTop}
+              className="text-[12px] h-9"
+            >
+              {queueLength > 1 ? `Next (${queueLength - 1} left)` : "Dismiss"}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => handleViewChat(currentItem.conversationId)}
+              className="text-[12px] h-9 gap-1.5 font-semibold shadow-sm"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              View Chat
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

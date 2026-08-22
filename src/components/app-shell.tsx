@@ -29,6 +29,7 @@ import jellybeanLogo from "@/assets/jellybean-logo.png";
 import { ChangePasswordDialog } from "@/components/auth/change-password-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useState } from "react";
+import { useCrispUnread } from "@/hooks/use-crisp-unread";
 
 type Item = {
   to: string;
@@ -138,6 +139,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
   const displayName = auth.profile?.full_name || auth.user?.email || "-";
   const skewSeconds = useClockSkew();
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const { unreadCount: crispUnreadCount, hasUnread: hasCrispUnread } = useCrispUnread();
 
   useRealtimeSync(auth.primaryRole);
 
@@ -168,6 +170,9 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
             const Icon = item.icon;
             const active =
               item.to === "/app" ? path === "/app" || path === "/app/" : path.startsWith(item.to);
+            const isCrispItem = item.to === "/app/crisp-chat";
+            const shouldBlinkCrisp = isCrispItem && hasCrispUnread;
+
             return (
               <Link
                 key={item.to}
@@ -175,19 +180,32 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                 title={item.label}
                 className={cn(
                   "group crm-motion relative flex h-11 items-center justify-center lg:justify-start gap-3 px-0 lg:px-3 rounded-2xl text-[13px] tracking-[-0.005em]",
+                  shouldBlinkCrisp && "animate-pulse bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.35)]",
                   active
                     ? "crm-sidebar-active text-white font-semibold"
-                    : "text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white",
+                    : !shouldBlinkCrisp && "text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white",
                 )}
               >
-                <Icon
-                  className={cn(
-                    "h-[16px] w-[16px] crm-motion",
-                    active ? "text-white" : "text-white/60 group-hover:text-white",
+                <div className="relative flex items-center justify-center">
+                  <Icon
+                    className={cn(
+                      "h-[16px] w-[16px] crm-motion",
+                      active ? "text-white" : shouldBlinkCrisp ? "text-emerald-300" : "text-white/60 group-hover:text-white",
+                    )}
+                  />
+                  {shouldBlinkCrisp && (
+                    <span className="lg:hidden absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
                   )}
-                />
-                <span className="hidden lg:block flex-1 truncate">{item.label}</span>
-                {item.shortcut && (
+                </div>
+                <span className={cn("hidden lg:block flex-1 truncate", shouldBlinkCrisp && "font-semibold text-emerald-200")}>
+                  {item.label}
+                </span>
+                {isCrispItem && crispUnreadCount > 0 && (
+                  <span className="hidden lg:inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500 text-white shadow-sm shrink-0 animate-bounce">
+                    {crispUnreadCount}
+                  </span>
+                )}
+                {item.shortcut && !shouldBlinkCrisp && (
                   <kbd
                     className={cn(
                       "hidden lg:inline-flex crm-motion opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded font-mono",
