@@ -23,6 +23,7 @@ import {
   FileText,
   Volume2,
   Paperclip,
+  X,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -331,6 +332,7 @@ function CrispInboxInner() {
   const isAdmin = auth.primaryRole === "admin";
 
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
+  const [workspaceSearch, setWorkspaceSearch] = useState<string>("");
   const [workspaceUnrepliedChatsMap, setWorkspaceUnrepliedChatsMap] = useState<Map<string, number>>(new Map());
   const [workspaceHasUnreadMap, setWorkspaceHasUnreadMap] = useState<Map<string, boolean>>(new Map());
   const [workspaceLatestUnreadAtMap, setWorkspaceLatestUnreadAtMap] = useState<Map<string, string>>(new Map());
@@ -810,6 +812,19 @@ function CrispInboxInner() {
     });
   }, [workspaces, workspaceUnrepliedChatsMap, workspaceLatestUnreadAtMap, workspacesMap]);
 
+  const filteredWorkspaces = useMemo(() => {
+    if (!workspaceSearch.trim()) return sortedWorkspaces;
+    const q = workspaceSearch.toLowerCase().trim();
+    return sortedWorkspaces.filter((ws) => {
+      const displayName = getWorkspaceDisplayName(ws.crisp_website_id, workspacesMap);
+      return (
+        displayName.toLowerCase().includes(q) ||
+        (ws.workspace_name || "").toLowerCase().includes(q) ||
+        ws.crisp_website_id.toLowerCase().includes(q)
+      );
+    });
+  }, [sortedWorkspaces, workspaceSearch, workspacesMap]);
+
   // Conversations for display — the DB RPC already returns globally ordered results
   // (unread_count > 0 DESC, last_message_at DESC) and server-side search is applied.
   // We preserve that order and only apply local re-sort when realtime patches rows
@@ -1091,6 +1106,29 @@ function CrispInboxInner() {
           )}
         </div>
 
+        {/* Workspace Search Input */}
+        <div className="p-2 border-b border-border/40 shrink-0">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+            <Input
+              placeholder="Search workspaces..."
+              value={workspaceSearch}
+              onChange={(e) => setWorkspaceSearch(e.target.value)}
+              className="pl-8 pr-7 h-8 text-xs bg-background/50 border-border/50 focus-visible:ring-1"
+            />
+            {workspaceSearch && (
+              <button
+                type="button"
+                onClick={() => setWorkspaceSearch("")}
+                className="absolute right-2 top-2 text-muted-foreground hover:text-foreground h-4 w-4 rounded-full grid place-items-center"
+                title="Clear search"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="flex-1 min-h-0 overflow-y-auto p-2 overscroll-contain">
           <div className="space-y-1">
             {/* All Workspaces (Pinned First) */}
@@ -1122,8 +1160,13 @@ function CrispInboxInner() {
 
             <div className="my-2 border-t border-border/40" />
 
-            {/* Individual Active Workspaces List (Sorted by Needs-Reply Chats Count DESC) */}
-            {sortedWorkspaces.map((ws) => {
+            {/* Individual Active Workspaces List (Filtered & Sorted) */}
+            {filteredWorkspaces.length === 0 ? (
+              <div className="p-3 text-center text-xs text-muted-foreground">
+                No workspaces match &quot;{workspaceSearch}&quot;
+              </div>
+            ) : (
+              filteredWorkspaces.map((ws) => {
               const unrepliedCount = workspaceUnrepliedChatsMap.get(ws.crisp_website_id) || 0;
               const hasUnread = unrepliedCount > 0;
               const displayName = getWorkspaceDisplayName(ws.crisp_website_id, workspacesMap);
@@ -1198,7 +1241,8 @@ function CrispInboxInner() {
                   </div>
                 </div>
               );
-            })}
+            })
+          )}
           </div>
         </div>
       </div>
