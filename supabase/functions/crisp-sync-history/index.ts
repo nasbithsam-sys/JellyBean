@@ -92,222 +92,231 @@ serve(async (req) => {
 
     let totalConversations = 0;
     let totalMessages = 0;
+    const syncErrors: { websiteId: string; workspaceName?: string; error: string }[] = [];
 
     for (const ws of workspaces) {
       const websiteId = ws.crisp_website_id;
       const secretId = ws.credential_secret_id;
-      if (!secretId) continue;
-
-      const { data: secretData, error: secretErr } = await supabase.rpc("crisp_get_workspace_secret", {
-        p_secret_id: secretId,
-      });
-
-      const tokenId = (secretData as any)?.token_id || (secretData as any)?.tokenId;
-      const tokenKey = (secretData as any)?.token_key || (secretData as any)?.tokenKey;
-
-      if (secretErr || !tokenId || !tokenKey) {
-        console.error(`Missing Vault credentials for workspace ${websiteId}`);
+      if (!secretId) {
+        syncErrors.push({ websiteId, workspaceName: ws.workspace_name || undefined, error: "No credentials secret ID found" });
         continue;
       }
 
-      const authString = btoa(`${tokenId}:${tokenKey}`);
-      const headers = {
-        Authorization: `Basic ${authString}`,
-        "X-Crisp-Tier": "website",
-        "Content-Type": "application/json",
-      };
+      try {
+        const { data: secretData, error: secretErr } = await supabase.rpc("crisp_get_workspace_secret", {
+          p_secret_id: secretId,
+        });
 
-      // Resolve workspace name if missing
-      if (!ws.workspace_name) {
-        const wsName = await resolveWorkspaceName(websiteId, authString);
-        if (wsName) {
-          await supabase.from("crisp_workspaces").update({ workspace_name: wsName }).eq("id", ws.id);
-        }
-      }
+        const tokenId = (secretData as any)?.token_id || (secretData as any)?.tokenId;
+        const tokenKey = (secretData as any)?.token_key || (secretData as any)?.tokenKey;
 
-      let wsConversations = 0;
-      let wsMessages = 0;
-
-      // Paginate Crisp history (safety cap: 50 pages)
-      for (let page = 1; page <= 50; page++) {
-        const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
-        const listRes = await fetch(listUrl, { headers });
-        if (!listRes.ok) {
-          const errJson = await listRes.json().catch(() => ({}));
-          const reason = (errJson as any)?.reason || (errJson as any)?.data?.message || `HTTP ${listRes.status}`;
-          throw new Error(`Crisp history sync failed for ${websiteId}: ${reason}`);
+        if (secretErr || !tokenId || !tokenKey) {
+          console.error(`Missing Vault credentials for workspace ${websiteId}`);
+          syncErrors.push({ websiteId, workspaceName: ws.workspace_name || undefined, error: "Missing Vault credentials" });
+          continue;
         }
 
-        const listData = await listRes.json();
-        const sessions = listData.data || [];
-        if (!Array.isArray(sessions) || sessions.length === 0) break;
+        const authString = btoa(`${tokenId}:${tokenKey}`);
+        const headers = {
+          Authorization: `Basic ${authString}`,
+          "X-Crisp-Tier": "website",
+          "Content-Type": "application/json",
+        };
 
-        for (const session of sessions) {
-          const sessionId = session.session_id;
-          if (!sessionId) continue;
+        // Resolve workspace name if missing
+        if (!ws.workspace_name) {
+          const wsName = await resolveWorkspaceName(websiteId, authString);
+          if (wsName) {
+            await supabase.from("crisp_workspaces").update({ workspace_name: wsName }).eq("id", ws.id);
+          }
+        }
 
-          const customerMeta = session.meta || {};
-          const incomingName = customerMeta.nickname || session.nickname || null;
-          const incomingEmail = customerMeta.email || session.email || null;
-          const incomingPhone = customerMeta.phone || session.phone || null;
-          const incomingAvatar = customerMeta.avatar || session.avatar || null;
-          const state = session.state || "unresolved";
+        let wsConversations = 0;
+        let wsMessages = 0;
 
-          // Import Crisp native operator unread count (session.unread.operator)
-          const unreadObj = session.unread || {};
-          const operatorUnread = typeof unreadObj.operator === "number"
-            ? unreadObj.operator
-            : typeof session.unread_count === "number"
-            ? session.unread_count
-            : 0;
+        // Paginate Crisp history (safety cap: 50 pages)
+        for (let page = 1; page <= 50; page++) {
+          const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
+          const listRes = await fetch(listUrl, { headers });
+          if (!listRes.ok) {
+            const errJson = await listRes.json().catch(() => ({}));
+            const reason = (errJson as any)?.reason || (errJson as any)?.data?.message || `HTTP ${listRes.status}`;
+            console.error(`Crisp history sync failed for workspace ${websiteId} on page ${page}: ${reason}`);
+            syncErrors.push({ websiteId, workspaceName: ws.workspace_name || undefined, error: reason });
+            break; // Stop paginating this failed workspace and continue with others
+          }
 
-          const unreadCount = Math.max(0, operatorUnread);
+          const listData = await listRes.json();
+          const sessions = listData.data || [];
+          if (!Array.isArray(sessions) || sessions.length === 0) break;
 
-          const { data: existingConv } = await supabase
-            .from("crisp_conversations")
-            .select("customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at, last_customer_unread_at")
-            .eq("crisp_website_id", websiteId)
-            .eq("crisp_session_id", sessionId)
-            .maybeSingle();
+          for (const session of sessions) {
+            const sessionId = session.session_id;
+            if (!sessionId) continue;
 
-          const finalName = incomingName || existingConv?.customer_name || null;
-          const finalEmail = incomingEmail || existingConv?.customer_email || null;
-          const finalPhone = incomingPhone || existingConv?.customer_phone || null;
-          const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
+            const customerMeta = session.meta || {};
+            const incomingName = customerMeta.nickname || session.nickname || null;
+            const incomingEmail = customerMeta.email || session.email || null;
+            const incomingPhone = customerMeta.phone || session.phone || null;
+            const incomingAvatar = customerMeta.avatar || session.avatar || null;
+            const state = session.state || "unresolved";
 
-          const { data: convRecord, error: convErr } = await supabase
-            .from("crisp_conversations")
-            .upsert(
-              {
-                crisp_website_id: websiteId,
-                crisp_session_id: sessionId,
-                customer_name: finalName,
-                customer_email: finalEmail,
-                customer_phone: finalPhone,
-                customer_avatar: finalAvatar,
-                status: state,
-                unread_count: unreadCount,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "crisp_website_id,crisp_session_id" }
-            )
-            .select("id")
-            .single();
+            // Import Crisp native operator unread count (session.unread.operator)
+            const unreadObj = session.unread || {};
+            const operatorUnread = typeof unreadObj.operator === "number"
+              ? unreadObj.operator
+              : typeof session.unread_count === "number"
+              ? session.unread_count
+              : 0;
 
-          if (convErr || !convRecord) continue;
-          wsConversations++;
+            const unreadCount = Math.max(0, operatorUnread);
 
-          // Sync messages for this conversation
-          const msgsUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/messages`;
-          const msgsRes = await fetch(msgsUrl, { headers });
+            const { data: existingConv } = await supabase
+              .from("crisp_conversations")
+              .select("customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at, last_customer_unread_at")
+              .eq("crisp_website_id", websiteId)
+              .eq("crisp_session_id", sessionId)
+              .maybeSingle();
 
-          if (msgsRes.ok) {
-            const msgsData = await msgsRes.json();
-            const messagesList: any[] = msgsData.data || [];
+            const finalName = incomingName || existingConv?.customer_name || null;
+            const finalEmail = incomingEmail || existingConv?.customer_email || null;
+            const finalPhone = incomingPhone || existingConv?.customer_phone || null;
+            const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
 
-            if (messagesList.length > 0) {
-              // Sort messages chronologically ascending for correct ordering
-              messagesList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
-              // ── AWAITING OPERATOR REPLY CALCULATION ─────────────────────────
-              // Determine unread / needs-reply strictly based on genuine message direction:
-              // latest incoming customer message vs latest outgoing operator message.
-              // Masked/unavailable messages (xxxx) must NEVER be treated as unread!
-              let lastCustomerMsgTime: string | null = null;
-              let lastCustomerMsgContent: string | null = null;
-              let lastCustomerTimestamp = 0;
-              let lastOperatorTimestamp = 0;
-
-              for (let i = messagesList.length - 1; i >= 0; i--) {
-                const m = messagesList[i];
-                const fromStr = String(m.from || "user").toLowerCase();
-                const ts = m.timestamp || 0;
-                if (fromStr !== "operator" && !lastCustomerMsgTime) {
-                  lastCustomerMsgTime = m.timestamp ? new Date(m.timestamp).toISOString() : null;
-                  lastCustomerMsgContent = parseMessageContent(m);
-                  lastCustomerTimestamp = ts;
-                } else if (fromStr === "operator" && !lastOperatorTimestamp) {
-                  lastOperatorTimestamp = ts;
-                }
-              }
-
-              const isMaskedCustomerMsg = isCrispMaskedMessage(lastCustomerMsgContent);
-              const needsReply = Boolean(
-                lastCustomerMsgTime &&
-                !isMaskedCustomerMsg &&
-                (!lastOperatorTimestamp || lastCustomerTimestamp > lastOperatorTimestamp)
-              );
-              const calculatedUnread = needsReply ? 1 : 0;
-              const lastCustUnreadAt = needsReply ? lastCustomerMsgTime : null;
-
-              // Track newest overall message for last_message + last_message_at
-              const newestMsg = messagesList[messagesList.length - 1];
-              const newestText = parseMessageContent(newestMsg);
-              const newestTime = newestMsg.timestamp
-                ? new Date(newestMsg.timestamp).toISOString()
-                : new Date().toISOString();
-
-              // Upsert all messages (ignore duplicates via 23505)
-              for (const msg of messagesList) {
-                const textContent = parseMessageContent(msg);
-                const crispMsgId = String(msg.fingerprint || `${sessionId}_${msg.timestamp}`);
-                const isOperator = String(msg.from).toLowerCase() === "operator";
-                const sentAt = msg.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
-
-                const { error: msgErr } = await supabase.from("crisp_messages").insert({
-                  conversation_id: convRecord.id,
+            const { data: convRecord, error: convErr } = await supabase
+              .from("crisp_conversations")
+              .upsert(
+                {
                   crisp_website_id: websiteId,
                   crisp_session_id: sessionId,
-                  crisp_message_id: crispMsgId,
-                  sender_type: isOperator ? "operator" : "customer",
-                  direction: isOperator ? "outgoing" : "incoming",
-                  content: textContent,
-                  message_type: msg.type || "text",
-                  sent_at: sentAt,
-                  raw_payload: msg,
-                });
-
-                // 23505 = unique_violation (already imported) — safe to ignore
-                if (!msgErr) wsMessages++;
-              }
-
-              // Update conversation with last message details and correct unread / awaiting-reply state
-              const { error: updateErr } = await supabase
-                .from("crisp_conversations")
-                .update({
-                  last_message: newestText,
-                  last_message_at: newestTime,
-                  unread_count: calculatedUnread,
-                  last_customer_unread_at: lastCustUnreadAt,
+                  customer_name: finalName,
+                  customer_email: finalEmail,
+                  customer_phone: finalPhone,
+                  customer_avatar: finalAvatar,
+                  status: state,
+                  unread_count: unreadCount,
                   updated_at: new Date().toISOString(),
-                })
-                .eq("id", convRecord.id);
+                },
+                { onConflict: "crisp_website_id,crisp_session_id" }
+              )
+              .select("id")
+              .single();
 
-              if (updateErr) {
-                console.error(`Failed to update conversation ${sessionId}:`, updateErr.message);
+            if (convErr || !convRecord) continue;
+            wsConversations++;
+
+            // Sync messages for this conversation
+            const msgsUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/messages`;
+            const msgsRes = await fetch(msgsUrl, { headers });
+
+            if (msgsRes.ok) {
+              const msgsData = await msgsRes.json();
+              const messagesList: any[] = msgsData.data || [];
+
+              if (messagesList.length > 0) {
+                // Sort messages chronologically ascending for correct ordering
+                messagesList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+                // ── AWAITING OPERATOR REPLY CALCULATION ─────────────────────────
+                let lastCustomerMsgTime: string | null = null;
+                let lastCustomerMsgContent: string | null = null;
+                let lastCustomerTimestamp = 0;
+                let lastOperatorTimestamp = 0;
+
+                for (let i = messagesList.length - 1; i >= 0; i--) {
+                  const m = messagesList[i];
+                  const fromStr = String(m.from || "user").toLowerCase();
+                  const ts = m.timestamp || 0;
+                  if (fromStr !== "operator" && !lastCustomerMsgTime) {
+                    lastCustomerMsgTime = m.timestamp ? new Date(m.timestamp).toISOString() : null;
+                    lastCustomerMsgContent = parseMessageContent(m);
+                    lastCustomerTimestamp = ts;
+                  } else if (fromStr === "operator" && !lastOperatorTimestamp) {
+                    lastOperatorTimestamp = ts;
+                  }
+                }
+
+                const isMaskedCustomerMsg = isCrispMaskedMessage(lastCustomerMsgContent);
+                const needsReply = Boolean(
+                  lastCustomerMsgTime &&
+                  !isMaskedCustomerMsg &&
+                  (!lastOperatorTimestamp || lastCustomerTimestamp > lastOperatorTimestamp)
+                );
+                const calculatedUnread = needsReply ? 1 : 0;
+                const lastCustUnreadAt = needsReply ? lastCustomerMsgTime : null;
+
+                // Track newest overall message for last_message + last_message_at
+                const newestMsg = messagesList[messagesList.length - 1];
+                const newestText = parseMessageContent(newestMsg);
+                const newestTime = newestMsg.timestamp
+                  ? new Date(newestMsg.timestamp).toISOString()
+                  : new Date().toISOString();
+
+                // Upsert all messages (ignore duplicates via 23505)
+                for (const msg of messagesList) {
+                  const textContent = parseMessageContent(msg);
+                  const crispMsgId = String(msg.fingerprint || `${sessionId}_${msg.timestamp}`);
+                  const isOperator = String(msg.from).toLowerCase() === "operator";
+                  const sentAt = msg.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+
+                  const { error: msgErr } = await supabase.from("crisp_messages").insert({
+                    conversation_id: convRecord.id,
+                    crisp_website_id: websiteId,
+                    crisp_session_id: sessionId,
+                    crisp_message_id: crispMsgId,
+                    sender_type: isOperator ? "operator" : "customer",
+                    direction: isOperator ? "outgoing" : "incoming",
+                    content: textContent,
+                    message_type: msg.type || "text",
+                    sent_at: sentAt,
+                    raw_payload: msg,
+                  });
+
+                  // 23505 = unique_violation (already imported) — safe to ignore
+                  if (!msgErr) wsMessages++;
+                }
+
+                // Update conversation with last message details and correct unread / awaiting-reply state
+                const { error: updateErr } = await supabase
+                  .from("crisp_conversations")
+                  .update({
+                    last_message: newestText,
+                    last_message_at: newestTime,
+                    unread_count: calculatedUnread,
+                    last_customer_unread_at: lastCustUnreadAt,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", convRecord.id);
+
+                if (updateErr) {
+                  console.error(`Failed to update conversation ${sessionId}:`, updateErr.message);
+                }
+              } else {
+                // No messages fetched — clear unread
+                await supabase
+                  .from("crisp_conversations")
+                  .update({ unread_count: 0, last_customer_unread_at: null, updated_at: new Date().toISOString() })
+                  .eq("id", convRecord.id);
               }
-            } else {
-              // No messages fetched — clear unread
-              await supabase
-                .from("crisp_conversations")
-                .update({ unread_count: 0, last_customer_unread_at: null, updated_at: new Date().toISOString() })
-                .eq("id", convRecord.id);
             }
           }
         }
+
+        const { error: wsUpdateErr } = await supabase
+          .from("crisp_workspaces")
+          .update({ last_synced_at: new Date().toISOString() })
+          .eq("id", ws.id);
+
+        if (wsUpdateErr) {
+          console.error(`Failed to update last_synced_at for workspace ${websiteId}:`, wsUpdateErr.message);
+        }
+
+        totalConversations += wsConversations;
+        totalMessages += wsMessages;
+      } catch (wsErr: any) {
+        console.error(`Error processing workspace ${websiteId}:`, wsErr);
+        syncErrors.push({ websiteId, workspaceName: ws.workspace_name || undefined, error: wsErr.message || "Sync failed" });
       }
-
-      const { error: wsUpdateErr } = await supabase
-        .from("crisp_workspaces")
-        .update({ last_synced_at: new Date().toISOString() })
-        .eq("id", ws.id);
-
-      if (wsUpdateErr) {
-        console.error(`Failed to update last_synced_at for workspace ${websiteId}:`, wsUpdateErr.message);
-      }
-
-      totalConversations += wsConversations;
-      totalMessages += wsMessages;
     }
 
     return new Response(
@@ -315,11 +324,12 @@ serve(async (req) => {
         status: "success",
         synced_conversations: totalConversations,
         synced_messages: totalMessages,
+        errors: syncErrors.length > 0 ? syncErrors : undefined,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
-    console.error("Crisp history sync error:", err);
+    console.error("Crisp history sync fatal error:", err);
     return new Response(JSON.stringify({ error: err.message || "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
