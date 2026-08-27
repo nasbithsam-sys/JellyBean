@@ -458,26 +458,65 @@ function CrispInboxInner() {
       setHasAnyUnread(anyUnread);
     }
 
-    // Calculate today's visitor count (sessions created today)
+    // Calculate today's visitor count (sessions whose first interaction happened today)
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayIso = today.toISOString();
 
-      const { data: todayConvRows } = await supabase
-        .from("crisp_conversations")
-        .select("id, crisp_website_id")
-        .gte("created_at", todayIso);
+      // Try RPC first for fast server-side computation
+      const { data: rpcRows, error: rpcErr } = await supabase.rpc("get_crisp_today_visitors_summary", {
+        p_today_start: todayIso,
+      });
 
-      if (todayConvRows) {
+      if (!rpcErr && Array.isArray(rpcRows)) {
         const wsVisitorsMap = new Map<string, number>();
-        let totalVisitorsToday = todayConvRows.length;
-        todayConvRows.forEach((row) => {
-          const wId = row.crisp_website_id;
-          wsVisitorsMap.set(wId, (wsVisitorsMap.get(wId) || 0) + 1);
+        let totalVisitorsToday = 0;
+        rpcRows.forEach((row: any) => {
+          const count = Number(row.today_visitor_count || 0);
+          wsVisitorsMap.set(row.crisp_website_id, count);
+          totalVisitorsToday += count;
         });
         setTodayWorkspaceVisitorsMap(wsVisitorsMap);
         setTodayTotalVisitors(totalVisitorsToday);
+      } else {
+        // Fallback: Query earliest message per conversation
+        const [{ data: convRows }, { data: msgRows }] = await Promise.all([
+          supabase
+            .from("crisp_conversations")
+            .select("id, crisp_website_id, created_at"),
+          supabase
+            .from("crisp_messages")
+            .select("conversation_id, sent_at")
+            .order("sent_at", { ascending: true }),
+        ]);
+
+        if (convRows) {
+          const firstMsgTimeMap = new Map<string, string>();
+          (msgRows ?? []).forEach((m) => {
+            if (!firstMsgTimeMap.has(m.conversation_id)) {
+              firstMsgTimeMap.set(m.conversation_id, m.sent_at);
+            }
+          });
+
+          const wsVisitorsMap = new Map<string, number>();
+          let totalVisitorsToday = 0;
+
+          convRows.forEach((c) => {
+            const firstMsgAt = firstMsgTimeMap.get(c.id);
+            const isToday = firstMsgAt
+              ? new Date(firstMsgAt).getTime() >= new Date(todayIso).getTime()
+              : new Date(c.created_at).getTime() >= new Date(todayIso).getTime();
+
+            if (isToday) {
+              totalVisitorsToday++;
+              wsVisitorsMap.set(c.crisp_website_id, (wsVisitorsMap.get(c.crisp_website_id) || 0) + 1);
+            }
+          });
+
+          setTodayWorkspaceVisitorsMap(wsVisitorsMap);
+          setTodayTotalVisitors(totalVisitorsToday);
+        }
       }
     } catch {
       // Non-fatal if count fetch fails
