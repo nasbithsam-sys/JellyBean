@@ -464,33 +464,20 @@ function CrispInboxInner() {
       today.setHours(0, 0, 0, 0);
       const todayIso = today.toISOString();
 
-      // 1. Fetch conversations that have incoming customer messages today
+      // 1. Fetch conversations that received incoming customer messages today
       const { data: incomingMsgsToday } = await supabase
         .from("crisp_messages")
         .select("conversation_id, crisp_website_id")
         .in("direction", ["incoming"])
         .gte("sent_at", todayIso);
 
-      // 2. Fetch all messages sent today (to check for automated/welcome messages on new chats)
-      const { data: allMsgsToday } = await supabase
-        .from("crisp_messages")
-        .select("conversation_id, crisp_website_id, sent_at")
-        .gte("sent_at", todayIso);
-
-      // 3. Fetch conversations that had messages before today (to strictly exclude old conversations like visitor2872)
-      const { data: oldMsgs } = await supabase
-        .from("crisp_messages")
-        .select("conversation_id")
-        .lt("sent_at", todayIso);
-
-      // 4. Fetch live session:created webhook events from today (visitors who visited today with no messages yet)
+      // 2. Fetch live session:created webhook events from today (visitors who visited today)
       const { data: sessionEventsToday } = await supabase
         .from("crisp_webhook_events")
         .select("crisp_website_id, payload")
         .eq("event_type", "session:created")
         .gte("created_at", todayIso);
 
-      const oldConvIds = new Set((oldMsgs ?? []).map((m) => m.conversation_id));
       const countedVisitorIds = new Set<string>();
       const wsVisitorsMap = new Map<string, number>();
 
@@ -502,18 +489,10 @@ function CrispInboxInner() {
         }
       });
 
-      // Add new chats that started today (e.g. automated welcome messages to new visitors) with NO messages before today
-      (allMsgsToday ?? []).forEach((m) => {
-        if (!oldConvIds.has(m.conversation_id) && !countedVisitorIds.has(m.conversation_id)) {
-          countedVisitorIds.add(m.conversation_id);
-          wsVisitorsMap.set(m.crisp_website_id, (wsVisitorsMap.get(m.crisp_website_id) || 0) + 1);
-        }
-      });
-
-      // Add sessions created today from live webhook events (visitors who visited today without sending/receiving text)
+      // Add sessions created today from live webhook events (visitors who visited today without sending text)
       (sessionEventsToday ?? []).forEach((ev) => {
         const sessId = (ev.payload as any)?.data?.session_id || (ev.payload as any)?.session_id;
-        const key = `session_${sessId || Math.random()}`;
+        const key = sessId ? `sess_${sessId}` : `evt_${Math.random()}`;
         if (!countedVisitorIds.has(key)) {
           countedVisitorIds.add(key);
           wsVisitorsMap.set(ev.crisp_website_id, (wsVisitorsMap.get(ev.crisp_website_id) || 0) + 1);
