@@ -458,66 +458,70 @@ function CrispInboxInner() {
       setHasAnyUnread(anyUnread);
     }
 
-    // Calculate today's visitor count (sessions whose first interaction happened today)
+    // Calculate today's visitor count (New visitors from today)
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayIso = today.toISOString();
 
-      // Try RPC first for fast server-side computation
-      const { data: rpcRows, error: rpcErr } = await supabase.rpc("get_crisp_today_visitors_summary", {
-        p_today_start: todayIso,
+      // 1. Fetch conversations that have incoming customer messages today
+      const { data: incomingMsgsToday } = await supabase
+        .from("crisp_messages")
+        .select("conversation_id, crisp_website_id")
+        .in("direction", ["incoming"])
+        .gte("sent_at", todayIso);
+
+      // 2. Fetch all messages sent today (to check for automated/welcome messages on new chats)
+      const { data: allMsgsToday } = await supabase
+        .from("crisp_messages")
+        .select("conversation_id, crisp_website_id, sent_at")
+        .gte("sent_at", todayIso);
+
+      // 3. Fetch conversations that had messages before today (to strictly exclude old conversations like visitor2872)
+      const { data: oldMsgs } = await supabase
+        .from("crisp_messages")
+        .select("conversation_id")
+        .lt("sent_at", todayIso);
+
+      // 4. Fetch live session:created webhook events from today (visitors who visited today with no messages yet)
+      const { data: sessionEventsToday } = await supabase
+        .from("crisp_webhook_events")
+        .select("crisp_website_id, payload")
+        .eq("event_type", "session:created")
+        .gte("created_at", todayIso);
+
+      const oldConvIds = new Set((oldMsgs ?? []).map((m) => m.conversation_id));
+      const countedVisitorIds = new Set<string>();
+      const wsVisitorsMap = new Map<string, number>();
+
+      // Add incoming customer messages from today
+      (incomingMsgsToday ?? []).forEach((m) => {
+        if (!countedVisitorIds.has(m.conversation_id)) {
+          countedVisitorIds.add(m.conversation_id);
+          wsVisitorsMap.set(m.crisp_website_id, (wsVisitorsMap.get(m.crisp_website_id) || 0) + 1);
+        }
       });
 
-      if (!rpcErr && Array.isArray(rpcRows)) {
-        const wsVisitorsMap = new Map<string, number>();
-        let totalVisitorsToday = 0;
-        rpcRows.forEach((row: any) => {
-          const count = Number(row.today_visitor_count || 0);
-          wsVisitorsMap.set(row.crisp_website_id, count);
-          totalVisitorsToday += count;
-        });
-        setTodayWorkspaceVisitorsMap(wsVisitorsMap);
-        setTodayTotalVisitors(totalVisitorsToday);
-      } else {
-        // Fallback: Query earliest message per conversation
-        const [{ data: convRows }, { data: msgRows }] = await Promise.all([
-          supabase
-            .from("crisp_conversations")
-            .select("id, crisp_website_id, created_at"),
-          supabase
-            .from("crisp_messages")
-            .select("conversation_id, sent_at")
-            .order("sent_at", { ascending: true }),
-        ]);
-
-        if (convRows) {
-          const firstMsgTimeMap = new Map<string, string>();
-          (msgRows ?? []).forEach((m) => {
-            if (!firstMsgTimeMap.has(m.conversation_id)) {
-              firstMsgTimeMap.set(m.conversation_id, m.sent_at);
-            }
-          });
-
-          const wsVisitorsMap = new Map<string, number>();
-          let totalVisitorsToday = 0;
-
-          convRows.forEach((c) => {
-            const firstMsgAt = firstMsgTimeMap.get(c.id);
-            const isToday = firstMsgAt
-              ? new Date(firstMsgAt).getTime() >= new Date(todayIso).getTime()
-              : new Date(c.created_at).getTime() >= new Date(todayIso).getTime();
-
-            if (isToday) {
-              totalVisitorsToday++;
-              wsVisitorsMap.set(c.crisp_website_id, (wsVisitorsMap.get(c.crisp_website_id) || 0) + 1);
-            }
-          });
-
-          setTodayWorkspaceVisitorsMap(wsVisitorsMap);
-          setTodayTotalVisitors(totalVisitorsToday);
+      // Add new chats that started today (e.g. automated welcome messages to new visitors) with NO messages before today
+      (allMsgsToday ?? []).forEach((m) => {
+        if (!oldConvIds.has(m.conversation_id) && !countedVisitorIds.has(m.conversation_id)) {
+          countedVisitorIds.add(m.conversation_id);
+          wsVisitorsMap.set(m.crisp_website_id, (wsVisitorsMap.get(m.crisp_website_id) || 0) + 1);
         }
-      }
+      });
+
+      // Add sessions created today from live webhook events (visitors who visited today without sending/receiving text)
+      (sessionEventsToday ?? []).forEach((ev) => {
+        const sessId = (ev.payload as any)?.data?.session_id || (ev.payload as any)?.session_id;
+        const key = `session_${sessId || Math.random()}`;
+        if (!countedVisitorIds.has(key)) {
+          countedVisitorIds.add(key);
+          wsVisitorsMap.set(ev.crisp_website_id, (wsVisitorsMap.get(ev.crisp_website_id) || 0) + 1);
+        }
+      });
+
+      setTodayWorkspaceVisitorsMap(wsVisitorsMap);
+      setTodayTotalVisitors(countedVisitorIds.size);
     } catch {
       // Non-fatal if count fetch fails
     }
