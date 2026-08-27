@@ -1028,14 +1028,48 @@ function CrispInboxInner() {
       const websiteIdParam = selectedWebsiteId !== "all" ? selectedWebsiteId : undefined;
       const res = await syncCrispHistory({ data: { websiteId: websiteIdParam } });
 
-      if (!res.ok) {
-        toast.error(res.error || "Failed to sync history");
-      } else {
+      if (res.ok) {
         toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages.`);
         loadWorkspaces();
         loadWorkspaceCounts();
         loadConversations(selectedWebsiteId, true);
         if (selectedConversationId) loadMessages(selectedConversationId);
+      } else {
+        // If full sync returned an error or timeout and we are on "all", fallback to syncing enabled workspaces individually
+        if (selectedWebsiteId === "all" && workspacesRef.current.length > 0) {
+          const wsList = workspacesRef.current;
+          let totalConvs = 0;
+          let totalMsgs = 0;
+          let successCount = 0;
+          let lastError = res.error;
+
+          for (const ws of wsList) {
+            try {
+              const indRes = await syncCrispHistory({ data: { websiteId: ws.crisp_website_id } });
+              if (indRes.ok) {
+                totalConvs += indRes.synced_conversations || 0;
+                totalMsgs += indRes.synced_messages || 0;
+                successCount++;
+              } else if (indRes.error) {
+                lastError = indRes.error;
+              }
+            } catch (wsErr: any) {
+              lastError = wsErr.message || lastError;
+            }
+          }
+
+          if (successCount > 0) {
+            toast.success(`Synced ${successCount}/${wsList.length} workspaces (${totalConvs} convs, ${totalMsgs} msgs).`);
+            loadWorkspaces();
+            loadWorkspaceCounts();
+            loadConversations("all", true);
+            if (selectedConversationId) loadMessages(selectedConversationId);
+          } else {
+            toast.error(lastError || "Could not sync history for workspaces");
+          }
+        } else {
+          toast.error(res.error || "Failed to sync history");
+        }
       }
     } catch (err: any) {
       toast.error(err.message || "History sync failed");

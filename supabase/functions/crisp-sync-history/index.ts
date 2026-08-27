@@ -134,8 +134,8 @@ serve(async (req) => {
         let wsConversations = 0;
         let wsMessages = 0;
 
-        // Paginate Crisp history (safety cap: 50 pages)
-        for (let page = 1; page <= 50; page++) {
+        // Paginate Crisp history (safety cap: 10 pages per sync)
+        for (let page = 1; page <= 10; page++) {
           const listUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversations/${page}`;
           const listRes = await fetch(listUrl, { headers });
           if (!listRes.ok) {
@@ -150,155 +150,158 @@ serve(async (req) => {
           const sessions = listData.data || [];
           if (!Array.isArray(sessions) || sessions.length === 0) break;
 
-          for (const session of sessions) {
-            const sessionId = session.session_id;
-            if (!sessionId) continue;
+          // Process sessions in parallel chunks of 5
+          const SESSION_CHUNK = 5;
+          for (let sIdx = 0; sIdx < sessions.length; sIdx += SESSION_CHUNK) {
+            const sessionSlice = sessions.slice(sIdx, sIdx + SESSION_CHUNK);
+            await Promise.allSettled(
+              sessionSlice.map(async (session: any) => {
+                const sessionId = session.session_id;
+                if (!sessionId) return;
 
-            const customerMeta = session.meta || {};
-            const incomingName = customerMeta.nickname || session.nickname || null;
-            const incomingEmail = customerMeta.email || session.email || null;
-            const incomingPhone = customerMeta.phone || session.phone || null;
-            const incomingAvatar = customerMeta.avatar || session.avatar || null;
-            const state = session.state || "unresolved";
+                const customerMeta = session.meta || {};
+                const incomingName = customerMeta.nickname || session.nickname || null;
+                const incomingEmail = customerMeta.email || session.email || null;
+                const incomingPhone = customerMeta.phone || session.phone || null;
+                const incomingAvatar = customerMeta.avatar || session.avatar || null;
+                const state = session.state || "unresolved";
 
-            // Import Crisp native operator unread count (session.unread.operator)
-            const unreadObj = session.unread || {};
-            const operatorUnread = typeof unreadObj.operator === "number"
-              ? unreadObj.operator
-              : typeof session.unread_count === "number"
-              ? session.unread_count
-              : 0;
+                // Import Crisp native operator unread count (session.unread.operator)
+                const unreadObj = session.unread || {};
+                const operatorUnread = typeof unreadObj.operator === "number"
+                  ? unreadObj.operator
+                  : typeof session.unread_count === "number"
+                  ? session.unread_count
+                  : 0;
 
-            const unreadCount = Math.max(0, operatorUnread);
+                const unreadCount = Math.max(0, operatorUnread);
 
-            const { data: existingConv } = await supabase
-              .from("crisp_conversations")
-              .select("customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at, last_customer_unread_at")
-              .eq("crisp_website_id", websiteId)
-              .eq("crisp_session_id", sessionId)
-              .maybeSingle();
+                const { data: existingConv } = await supabase
+                  .from("crisp_conversations")
+                  .select("customer_name, customer_email, customer_phone, customer_avatar, last_message, last_message_at, last_customer_unread_at")
+                  .eq("crisp_website_id", websiteId)
+                  .eq("crisp_session_id", sessionId)
+                  .maybeSingle();
 
-            const finalName = incomingName || existingConv?.customer_name || null;
-            const finalEmail = incomingEmail || existingConv?.customer_email || null;
-            const finalPhone = incomingPhone || existingConv?.customer_phone || null;
-            const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
+                const finalName = incomingName || existingConv?.customer_name || null;
+                const finalEmail = incomingEmail || existingConv?.customer_email || null;
+                const finalPhone = incomingPhone || existingConv?.customer_phone || null;
+                const finalAvatar = incomingAvatar || existingConv?.customer_avatar || null;
 
-            const { data: convRecord, error: convErr } = await supabase
-              .from("crisp_conversations")
-              .upsert(
-                {
-                  crisp_website_id: websiteId,
-                  crisp_session_id: sessionId,
-                  customer_name: finalName,
-                  customer_email: finalEmail,
-                  customer_phone: finalPhone,
-                  customer_avatar: finalAvatar,
-                  status: state,
-                  unread_count: unreadCount,
-                  updated_at: new Date().toISOString(),
-                },
-                { onConflict: "crisp_website_id,crisp_session_id" }
-              )
-              .select("id")
-              .single();
+                const { data: convRecord, error: convErr } = await supabase
+                  .from("crisp_conversations")
+                  .upsert(
+                    {
+                      crisp_website_id: websiteId,
+                      crisp_session_id: sessionId,
+                      customer_name: finalName,
+                      customer_email: finalEmail,
+                      customer_phone: finalPhone,
+                      customer_avatar: finalAvatar,
+                      status: state,
+                      unread_count: unreadCount,
+                      updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: "crisp_website_id,crisp_session_id" }
+                  )
+                  .select("id")
+                  .single();
 
-            if (convErr || !convRecord) continue;
-            wsConversations++;
+                if (convErr || !convRecord) return;
+                wsConversations++;
 
-            // Sync messages for this conversation
-            const msgsUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/messages`;
-            const msgsRes = await fetch(msgsUrl, { headers });
+                // Sync messages for this conversation
+                const msgsUrl = `https://api.crisp.chat/v1/website/${websiteId}/conversation/${sessionId}/messages`;
+                const msgsRes = await fetch(msgsUrl, { headers });
 
-            if (msgsRes.ok) {
-              const msgsData = await msgsRes.json();
-              const messagesList: any[] = msgsData.data || [];
+                if (msgsRes.ok) {
+                  const msgsData = await msgsRes.json();
+                  const messagesList: any[] = msgsData.data || [];
 
-              if (messagesList.length > 0) {
-                // Sort messages chronologically ascending for correct ordering
-                messagesList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                  if (messagesList.length > 0) {
+                    // Sort messages chronologically ascending for correct ordering
+                    messagesList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-                // ── AWAITING OPERATOR REPLY CALCULATION ─────────────────────────
-                let lastCustomerMsgTime: string | null = null;
-                let lastCustomerMsgContent: string | null = null;
-                let lastCustomerTimestamp = 0;
-                let lastOperatorTimestamp = 0;
+                    // ── AWAITING OPERATOR REPLY CALCULATION ─────────────────────────
+                    let lastCustomerMsgTime: string | null = null;
+                    let lastCustomerMsgContent: string | null = null;
+                    let lastCustomerTimestamp = 0;
+                    let lastOperatorTimestamp = 0;
 
-                for (let i = messagesList.length - 1; i >= 0; i--) {
-                  const m = messagesList[i];
-                  const fromStr = String(m.from || "user").toLowerCase();
-                  const ts = m.timestamp || 0;
-                  if (fromStr !== "operator" && !lastCustomerMsgTime) {
-                    lastCustomerMsgTime = m.timestamp ? new Date(m.timestamp).toISOString() : null;
-                    lastCustomerMsgContent = parseMessageContent(m);
-                    lastCustomerTimestamp = ts;
-                  } else if (fromStr === "operator" && !lastOperatorTimestamp) {
-                    lastOperatorTimestamp = ts;
+                    for (let i = messagesList.length - 1; i >= 0; i--) {
+                      const m = messagesList[i];
+                      const fromStr = String(m.from || "user").toLowerCase();
+                      const ts = m.timestamp || 0;
+                      if (fromStr !== "operator" && !lastCustomerMsgTime) {
+                        lastCustomerMsgTime = m.timestamp ? new Date(m.timestamp).toISOString() : null;
+                        lastCustomerMsgContent = parseMessageContent(m);
+                        lastCustomerTimestamp = ts;
+                      } else if (fromStr === "operator" && !lastOperatorTimestamp) {
+                        lastOperatorTimestamp = ts;
+                      }
+                    }
+
+                    const isMaskedCustomerMsg = isCrispMaskedMessage(lastCustomerMsgContent);
+                    const needsReply = Boolean(
+                      lastCustomerMsgTime &&
+                      !isMaskedCustomerMsg &&
+                      (!lastOperatorTimestamp || lastCustomerTimestamp > lastOperatorTimestamp)
+                    );
+                    const calculatedUnread = needsReply ? 1 : 0;
+                    const lastCustUnreadAt = needsReply ? lastCustomerMsgTime : null;
+
+                    // Track newest overall message for last_message + last_message_at
+                    const newestMsg = messagesList[messagesList.length - 1];
+                    const newestText = parseMessageContent(newestMsg);
+                    const newestTime = newestMsg.timestamp
+                      ? new Date(newestMsg.timestamp).toISOString()
+                      : new Date().toISOString();
+
+                    // Upsert all messages (ignore duplicates via 23505)
+                    for (const msg of messagesList) {
+                      const textContent = parseMessageContent(msg);
+                      const crispMsgId = String(msg.fingerprint || `${sessionId}_${msg.timestamp}`);
+                      const isOperator = String(msg.from).toLowerCase() === "operator";
+                      const sentAt = msg.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+
+                      const { error: msgErr } = await supabase.from("crisp_messages").insert({
+                        conversation_id: convRecord.id,
+                        crisp_website_id: websiteId,
+                        crisp_session_id: sessionId,
+                        crisp_message_id: crispMsgId,
+                        sender_type: isOperator ? "operator" : "customer",
+                        direction: isOperator ? "outgoing" : "incoming",
+                        content: textContent,
+                        message_type: msg.type || "text",
+                        sent_at: sentAt,
+                        raw_payload: msg,
+                      });
+
+                      // 23505 = unique_violation (already imported) — safe to ignore
+                      if (!msgErr) wsMessages++;
+                    }
+
+                    // Update conversation with last message details and correct unread / awaiting-reply state
+                    await supabase
+                      .from("crisp_conversations")
+                      .update({
+                        last_message: newestText,
+                        last_message_at: newestTime,
+                        unread_count: calculatedUnread,
+                        last_customer_unread_at: lastCustUnreadAt,
+                        updated_at: new Date().toISOString(),
+                      })
+                      .eq("id", convRecord.id);
+                  } else {
+                    // No messages fetched — clear unread
+                    await supabase
+                      .from("crisp_conversations")
+                      .update({ unread_count: 0, last_customer_unread_at: null, updated_at: new Date().toISOString() })
+                      .eq("id", convRecord.id);
                   }
                 }
-
-                const isMaskedCustomerMsg = isCrispMaskedMessage(lastCustomerMsgContent);
-                const needsReply = Boolean(
-                  lastCustomerMsgTime &&
-                  !isMaskedCustomerMsg &&
-                  (!lastOperatorTimestamp || lastCustomerTimestamp > lastOperatorTimestamp)
-                );
-                const calculatedUnread = needsReply ? 1 : 0;
-                const lastCustUnreadAt = needsReply ? lastCustomerMsgTime : null;
-
-                // Track newest overall message for last_message + last_message_at
-                const newestMsg = messagesList[messagesList.length - 1];
-                const newestText = parseMessageContent(newestMsg);
-                const newestTime = newestMsg.timestamp
-                  ? new Date(newestMsg.timestamp).toISOString()
-                  : new Date().toISOString();
-
-                // Upsert all messages (ignore duplicates via 23505)
-                for (const msg of messagesList) {
-                  const textContent = parseMessageContent(msg);
-                  const crispMsgId = String(msg.fingerprint || `${sessionId}_${msg.timestamp}`);
-                  const isOperator = String(msg.from).toLowerCase() === "operator";
-                  const sentAt = msg.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
-
-                  const { error: msgErr } = await supabase.from("crisp_messages").insert({
-                    conversation_id: convRecord.id,
-                    crisp_website_id: websiteId,
-                    crisp_session_id: sessionId,
-                    crisp_message_id: crispMsgId,
-                    sender_type: isOperator ? "operator" : "customer",
-                    direction: isOperator ? "outgoing" : "incoming",
-                    content: textContent,
-                    message_type: msg.type || "text",
-                    sent_at: sentAt,
-                    raw_payload: msg,
-                  });
-
-                  // 23505 = unique_violation (already imported) — safe to ignore
-                  if (!msgErr) wsMessages++;
-                }
-
-                // Update conversation with last message details and correct unread / awaiting-reply state
-                const { error: updateErr } = await supabase
-                  .from("crisp_conversations")
-                  .update({
-                    last_message: newestText,
-                    last_message_at: newestTime,
-                    unread_count: calculatedUnread,
-                    last_customer_unread_at: lastCustUnreadAt,
-                    updated_at: new Date().toISOString(),
-                  })
-                  .eq("id", convRecord.id);
-
-                if (updateErr) {
-                  console.error(`Failed to update conversation ${sessionId}:`, updateErr.message);
-                }
-              } else {
-                // No messages fetched — clear unread
-                await supabase
-                  .from("crisp_conversations")
-                  .update({ unread_count: 0, last_customer_unread_at: null, updated_at: new Date().toISOString() })
-                  .eq("id", convRecord.id);
-              }
-            }
+              })
+            );
           }
         }
 
