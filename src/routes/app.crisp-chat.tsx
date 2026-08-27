@@ -1025,56 +1025,50 @@ function CrispInboxInner() {
     setIsSyncing(true);
 
     try {
-      if (selectedWebsiteId !== "all") {
-        // Sync single workspace
-        const res = await syncCrispHistory({ data: { websiteId: selectedWebsiteId } });
+      const websiteIdParam = selectedWebsiteId !== "all" ? selectedWebsiteId : undefined;
+      const res = await syncCrispHistory({ data: { websiteId: websiteIdParam } });
 
-        if (!res.ok) {
-          toast.error(res.error || "Failed to sync history");
-        } else {
-          toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages.`);
-          loadWorkspaces();
-          loadWorkspaceCounts();
-          loadConversations(selectedWebsiteId, true);
-          if (selectedConversationId) loadMessages(selectedConversationId);
-        }
+      if (res.ok) {
+        toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages.`);
+        loadWorkspaces();
+        loadWorkspaceCounts();
+        loadConversations(selectedWebsiteId, true);
+        if (selectedConversationId) loadMessages(selectedConversationId);
       } else {
-        // Sync all workspaces in parallel batches of 3 to prevent 90s Edge Function timeout
-        const wsList = workspacesRef.current;
-        if (wsList.length === 0) {
-          toast.info("No workspaces found to sync.");
-          return;
-        }
+        // If full sync returned an error or timeout and we are on "all", fallback to syncing enabled workspaces individually
+        if (selectedWebsiteId === "all" && workspacesRef.current.length > 0) {
+          const wsList = workspacesRef.current;
+          let totalConvs = 0;
+          let totalMsgs = 0;
+          let successCount = 0;
+          let lastError = res.error;
 
-        let totalConvs = 0;
-        let totalMsgs = 0;
-        let successCount = 0;
-
-        // Process in chunks of 3 concurrently
-        const CHUNK_SIZE = 3;
-        for (let i = 0; i < wsList.length; i += CHUNK_SIZE) {
-          const chunk = wsList.slice(i, i + CHUNK_SIZE);
-          const results = await Promise.allSettled(
-            chunk.map((w) => syncCrispHistory({ data: { websiteId: w.crisp_website_id } }))
-          );
-
-          results.forEach((r) => {
-            if (r.status === "fulfilled" && r.value.ok) {
-              totalConvs += r.value.synced_conversations || 0;
-              totalMsgs += r.value.synced_messages || 0;
-              successCount++;
+          for (const ws of wsList) {
+            try {
+              const indRes = await syncCrispHistory({ data: { websiteId: ws.crisp_website_id } });
+              if (indRes.ok) {
+                totalConvs += indRes.synced_conversations || 0;
+                totalMsgs += indRes.synced_messages || 0;
+                successCount++;
+              } else if (indRes.error) {
+                lastError = indRes.error;
+              }
+            } catch (wsErr: any) {
+              lastError = wsErr.message || lastError;
             }
-          });
-        }
+          }
 
-        if (successCount > 0) {
-          toast.success(`Synced ${successCount}/${wsList.length} workspaces (${totalConvs} convs, ${totalMsgs} msgs).`);
-          loadWorkspaces();
-          loadWorkspaceCounts();
-          loadConversations("all", true);
-          if (selectedConversationId) loadMessages(selectedConversationId);
+          if (successCount > 0) {
+            toast.success(`Synced ${successCount}/${wsList.length} workspaces (${totalConvs} convs, ${totalMsgs} msgs).`);
+            loadWorkspaces();
+            loadWorkspaceCounts();
+            loadConversations("all", true);
+            if (selectedConversationId) loadMessages(selectedConversationId);
+          } else {
+            toast.error(lastError || "Could not sync history for workspaces");
+          }
         } else {
-          toast.error("History sync encountered an issue. Please try syncing individual workspaces.");
+          toast.error(res.error || "Failed to sync history");
         }
       }
     } catch (err: any) {
