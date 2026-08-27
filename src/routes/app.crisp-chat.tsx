@@ -23,6 +23,7 @@ import {
   FileText,
   Volume2,
   Paperclip,
+  Users,
   X,
 } from "lucide-react";
 
@@ -338,6 +339,8 @@ function CrispInboxInner() {
   const [workspaceLatestUnreadAtMap, setWorkspaceLatestUnreadAtMap] = useState<Map<string, string>>(new Map());
   const [totalUnrepliedCount, setTotalUnrepliedCount] = useState<number>(0);
   const [hasAnyUnread, setHasAnyUnread] = useState<boolean>(false);
+  const [todayTotalVisitors, setTodayTotalVisitors] = useState<number>(0);
+  const [todayWorkspaceVisitorsMap, setTodayWorkspaceVisitorsMap] = useState<Map<string, number>>(new Map());
 
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string>("all");
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
@@ -453,6 +456,74 @@ function CrispInboxInner() {
       setWorkspaceLatestUnreadAtMap(latestUnreadMap);
       setTotalUnrepliedCount(grandUnrepliedTotal);
       setHasAnyUnread(anyUnread);
+    }
+
+    // Calculate today's visitor count (New visitors from today)
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayIso = today.toISOString();
+
+      // 1. Fetch conversations that have incoming customer messages today
+      const { data: incomingMsgsToday } = await supabase
+        .from("crisp_messages")
+        .select("conversation_id, crisp_website_id")
+        .in("direction", ["incoming"])
+        .gte("sent_at", todayIso);
+
+      // 2. Fetch all messages sent today (to check for automated/welcome messages on new chats)
+      const { data: allMsgsToday } = await supabase
+        .from("crisp_messages")
+        .select("conversation_id, crisp_website_id, sent_at")
+        .gte("sent_at", todayIso);
+
+      // 3. Fetch conversations that had messages before today (to strictly exclude old conversations like visitor2872)
+      const { data: oldMsgs } = await supabase
+        .from("crisp_messages")
+        .select("conversation_id")
+        .lt("sent_at", todayIso);
+
+      // 4. Fetch live session:created webhook events from today (visitors who visited today with no messages yet)
+      const { data: sessionEventsToday } = await supabase
+        .from("crisp_webhook_events")
+        .select("crisp_website_id, payload")
+        .eq("event_type", "session:created")
+        .gte("created_at", todayIso);
+
+      const oldConvIds = new Set((oldMsgs ?? []).map((m) => m.conversation_id));
+      const countedVisitorIds = new Set<string>();
+      const wsVisitorsMap = new Map<string, number>();
+
+      // Add incoming customer messages from today
+      (incomingMsgsToday ?? []).forEach((m) => {
+        if (!countedVisitorIds.has(m.conversation_id)) {
+          countedVisitorIds.add(m.conversation_id);
+          wsVisitorsMap.set(m.crisp_website_id, (wsVisitorsMap.get(m.crisp_website_id) || 0) + 1);
+        }
+      });
+
+      // Add new chats that started today (e.g. automated welcome messages to new visitors) with NO messages before today
+      (allMsgsToday ?? []).forEach((m) => {
+        if (!oldConvIds.has(m.conversation_id) && !countedVisitorIds.has(m.conversation_id)) {
+          countedVisitorIds.add(m.conversation_id);
+          wsVisitorsMap.set(m.crisp_website_id, (wsVisitorsMap.get(m.crisp_website_id) || 0) + 1);
+        }
+      });
+
+      // Add sessions created today from live webhook events (visitors who visited today without sending/receiving text)
+      (sessionEventsToday ?? []).forEach((ev) => {
+        const sessId = (ev.payload as any)?.data?.session_id || (ev.payload as any)?.session_id;
+        const key = `session_${sessId || Math.random()}`;
+        if (!countedVisitorIds.has(key)) {
+          countedVisitorIds.add(key);
+          wsVisitorsMap.set(ev.crisp_website_id, (wsVisitorsMap.get(ev.crisp_website_id) || 0) + 1);
+        }
+      });
+
+      setTodayWorkspaceVisitorsMap(wsVisitorsMap);
+      setTodayTotalVisitors(countedVisitorIds.size);
+    } catch {
+      // Non-fatal if count fetch fails
     }
   };
 
@@ -1278,7 +1349,7 @@ function CrispInboxInner() {
       {/* ========================================================================= */}
       <div className="w-80 shrink-0 border-r border-border/40 bg-card/20 flex flex-col h-full overflow-hidden">
         {/* Search & Sync Header */}
-        <div className="p-3 border-b border-border/40 shrink-0">
+        <div className="p-3 border-b border-border/40 shrink-0 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
@@ -1299,6 +1370,25 @@ function CrispInboxInner() {
             >
               <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
             </Button>
+          </div>
+
+          {/* Today's Visitors Counter */}
+          <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-background/60 border border-border/40 text-xs">
+            <div className="flex items-center gap-1.5 text-foreground font-medium">
+              <Users className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span>Visitors Today:</span>
+              <Badge
+                variant="secondary"
+                className="px-1.5 py-0 text-[11px] font-bold bg-primary/15 text-primary border-primary/30"
+              >
+                {selectedWebsiteId === "all"
+                  ? todayTotalVisitors
+                  : todayWorkspaceVisitorsMap.get(selectedWebsiteId) || 0}
+              </Badge>
+            </div>
+            <span className="text-[10px] text-muted-foreground truncate max-w-[110px]">
+              {selectedWebsiteId === "all" ? "All Workspaces" : getWorkspaceDisplayName(selectedWebsiteId, workspacesMap)}
+            </span>
           </div>
         </div>
 
