@@ -132,18 +132,18 @@ serve(async (req) => {
       });
     }
 
-    // Fingerprint uniquely identifies this message delivery event
-    const fingerprint = data.fingerprint || data.timestamp || Date.now();
-    const eventFingerprint = `${websiteId}_${eventType}_${sessionId}_${fingerprint}`;
-
-    // ─── EARLY-EXIT: skip non-message events BEFORE logging ─────────────────
-    // Acknowledge-type and notify events that are NOT genuine message delivery
-    // return success immediately without touching messages or unread state.
+    // ─── EVENT CLASSIFICATION ───────────────────────────────────────────────
     const isMessageEvent = isGenuineMessageEvent(eventType);
     const rawFrom = String(data.from || "user").toLowerCase();
     const isOperator = rawFrom === "operator";
     // Customer messages are: genuine message:send events from non-operator sender
     const isCustomerMessage = eventType === "message:send" && !isOperator;
+
+    // Fingerprint uniquely identifies this delivery event (safeguarded against collision)
+    const uniqueQualifier = isMessageEvent
+      ? `msg_${data.fingerprint || data.timestamp || Date.now()}`
+      : `session_${eventType}_${data.timestamp || Date.now()}`;
+    const eventFingerprint = `${websiteId}_${eventType}_${sessionId}_${uniqueQualifier}`;
 
     // 2. LOG WEBHOOK EVENT with processed: false initially
     const { data: eventRow, error: webhookLogErr } = await supabase

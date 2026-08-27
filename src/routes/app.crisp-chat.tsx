@@ -759,7 +759,33 @@ function CrispInboxInner() {
       )
       .subscribe();
 
+    // ── Background Auto-Sync Heartbeat (Every 30s) ──────────────────────────
+    // Automatically refreshes conversations, workspace counts, and active chat
+    // so new messages always appear without requiring manual sync clicks.
+    const pollInterval = setInterval(() => {
+      loadWorkspaceCounts();
+      loadConversations(selectedWebsiteIdRef.current, true);
+      const activeId = selectedConversationIdRef.current;
+      if (activeId) {
+        loadMessages(activeId);
+      }
+    }, 30000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadWorkspaceCounts();
+        loadConversations(selectedWebsiteIdRef.current, true);
+        const activeId = selectedConversationIdRef.current;
+        if (activeId) {
+          loadMessages(activeId);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
+      clearInterval(pollInterval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       supabase.removeChannel(channel);
     };
   }, []);
