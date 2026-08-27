@@ -51,6 +51,28 @@ type QueuedMessageAlert = {
   receivedAt: string;
 };
 
+function getDismissedNotificationKeys(userId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(`crisp_dismissed_alerts_${userId}`);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function addDismissedNotificationKeys(userId: string, keys: string[]) {
+  try {
+    const current = getDismissedNotificationKeys(userId);
+    keys.forEach((k) => current.add(k));
+    const arr = Array.from(current).slice(-200);
+    localStorage.setItem(`crisp_dismissed_alerts_${userId}`, JSON.stringify(arr));
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
 export function CrispMessageNotifier() {
   const { roles, primaryRole, user } = useAuth();
   const navigate = useNavigate();
@@ -64,14 +86,25 @@ export function CrispMessageNotifier() {
   const [activeQueue, setActiveQueue] = useState<QueuedMessageAlert[]>([]);
 
   const handleDismissTop = () => {
+    const item = activeQueue[0];
+    if (item && user?.id) {
+      addDismissedNotificationKeys(user.id, [item.id]);
+    }
     setActiveQueue((prev) => prev.slice(1));
   };
 
   const handleDismissAll = () => {
+    if (user?.id && activeQueue.length > 0) {
+      addDismissedNotificationKeys(user.id, activeQueue.map((a) => a.id));
+    }
     setActiveQueue([]);
   };
 
   const handleViewChat = (_conversationId?: string) => {
+    const item = activeQueue[0];
+    if (item && user?.id) {
+      addDismissedNotificationKeys(user.id, [item.id]);
+    }
     setActiveQueue((prev) => prev.slice(1));
     navigate({ to: "/app/crisp-chat" });
   };
@@ -105,11 +138,12 @@ export function CrispMessageNotifier() {
         });
       }
 
+      const dismissedKeys = getDismissedNotificationKeys(user.id);
       const newAlerts: QueuedMessageAlert[] = [];
 
       for (const conv of validUnread) {
         const seenKey = `unread_conv_${conv.id}_${conv.last_message_at}`;
-        if (seenMsgIdsRef.current.has(seenKey)) continue;
+        if (seenMsgIdsRef.current.has(seenKey) || dismissedKeys.has(seenKey)) continue;
         seenMsgIdsRef.current.add(seenKey);
 
         const customerName = conv.customer_name?.trim() || "Customer";
