@@ -43,8 +43,22 @@ export function useCrispUnread() {
       )
       .subscribe();
 
+    // Background heartbeat poll every 30s to keep unread badges synced even if websocket drops
+    const pollInterval = setInterval(() => {
+      void fetchUnreadCount();
+    }, 30000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchUnreadCount();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       isMountedRef.current = false;
+      clearInterval(pollInterval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       void supabase.removeChannel(channel);
     };
   }, [fetchUnreadCount]);
