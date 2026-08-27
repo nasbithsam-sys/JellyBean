@@ -1025,17 +1025,57 @@ function CrispInboxInner() {
     setIsSyncing(true);
 
     try {
-      const websiteIdParam = selectedWebsiteId !== "all" ? selectedWebsiteId : undefined;
-      const res = await syncCrispHistory({ data: { websiteId: websiteIdParam } });
+      if (selectedWebsiteId !== "all") {
+        // Sync single workspace
+        const res = await syncCrispHistory({ data: { websiteId: selectedWebsiteId } });
 
-      if (!res.ok) {
-        toast.error(res.error || "Failed to sync history");
+        if (!res.ok) {
+          toast.error(res.error || "Failed to sync history");
+        } else {
+          toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages.`);
+          loadWorkspaces();
+          loadWorkspaceCounts();
+          loadConversations(selectedWebsiteId, true);
+          if (selectedConversationId) loadMessages(selectedConversationId);
+        }
       } else {
-        toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages.`);
-        loadWorkspaces();
-        loadWorkspaceCounts();
-        loadConversations(selectedWebsiteId, true);
-        if (selectedConversationId) loadMessages(selectedConversationId);
+        // Sync all workspaces in parallel batches of 3 to prevent 90s Edge Function timeout
+        const wsList = workspacesRef.current;
+        if (wsList.length === 0) {
+          toast.info("No workspaces found to sync.");
+          return;
+        }
+
+        let totalConvs = 0;
+        let totalMsgs = 0;
+        let successCount = 0;
+
+        // Process in chunks of 3 concurrently
+        const CHUNK_SIZE = 3;
+        for (let i = 0; i < wsList.length; i += CHUNK_SIZE) {
+          const chunk = wsList.slice(i, i + CHUNK_SIZE);
+          const results = await Promise.allSettled(
+            chunk.map((w) => syncCrispHistory({ data: { websiteId: w.crisp_website_id } }))
+          );
+
+          results.forEach((r) => {
+            if (r.status === "fulfilled" && r.value.ok) {
+              totalConvs += r.value.synced_conversations || 0;
+              totalMsgs += r.value.synced_messages || 0;
+              successCount++;
+            }
+          });
+        }
+
+        if (successCount > 0) {
+          toast.success(`Synced ${successCount}/${wsList.length} workspaces (${totalConvs} convs, ${totalMsgs} msgs).`);
+          loadWorkspaces();
+          loadWorkspaceCounts();
+          loadConversations("all", true);
+          if (selectedConversationId) loadMessages(selectedConversationId);
+        } else {
+          toast.error("History sync encountered an issue. Please try syncing individual workspaces.");
+        }
       }
     } catch (err: any) {
       toast.error(err.message || "History sync failed");
