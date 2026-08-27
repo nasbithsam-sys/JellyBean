@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { MessageSquare, X, ExternalLink, Layers } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -51,6 +51,28 @@ type QueuedMessageAlert = {
   receivedAt: string;
 };
 
+function getDismissedNotificationKeys(userId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(`crisp_dismissed_alerts_${userId}`);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function addDismissedNotificationKeys(userId: string, keys: string[]) {
+  try {
+    const current = getDismissedNotificationKeys(userId);
+    keys.forEach((k) => current.add(k));
+    const arr = Array.from(current).slice(-200);
+    localStorage.setItem(`crisp_dismissed_alerts_${userId}`, JSON.stringify(arr));
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
 export function CrispMessageNotifier() {
   const { roles, primaryRole, user } = useAuth();
   const navigate = useNavigate();
@@ -64,19 +86,126 @@ export function CrispMessageNotifier() {
   const [activeQueue, setActiveQueue] = useState<QueuedMessageAlert[]>([]);
 
   const handleDismissTop = () => {
+    const item = activeQueue[0];
+    if (item && user?.id) {
+      addDismissedNotificationKeys(user.id, [item.id]);
+    }
     setActiveQueue((prev) => prev.slice(1));
   };
 
   const handleDismissAll = () => {
+    if (user?.id && activeQueue.length > 0) {
+      addDismissedNotificationKeys(user.id, activeQueue.map((a) => a.id));
+    }
     setActiveQueue([]);
   };
 
   const handleViewChat = (_conversationId?: string) => {
+    const item = activeQueue[0];
+    if (item && user?.id) {
+      addDismissedNotificationKeys(user.id, [item.id]);
+    }
     setActiveQueue((prev) => prev.slice(1));
     navigate({ to: "/app/crisp-chat" });
   };
 
-  // REALTIME INCOMING MESSAGE LISTENER
+  // CHECK UNREAD CONVERSATIONS (On login & on tab focus/switch)
+  const checkUnreadAndQueue = useCallback(async () => {
+    if (!isCsAdmin || !user?.id) return;
+
+    try {
+      const { data: unreadConvs } = await supabase
+        .from("crisp_conversations")
+        .select("id, customer_name, crisp_website_id, last_message, last_message_at, unread_count")
+        .gt("unread_count", 0)
+        .order("last_message_at", { ascending: false })
+        .limit(10);
+
+      if (!unreadConvs || unreadConvs.length === 0) return;
+
+      const validUnread = unreadConvs.filter((c) => !isCrispMaskedMessage(c.last_message));
+      if (validUnread.length === 0) return;
+
+      const websiteIds = Array.from(new Set(validUnread.map((c) => c.crisp_website_id).filter(Boolean)));
+      const wsMap = new Map<string, string>();
+      if (websiteIds.length > 0) {
+        const { data: wsRows } = await supabase
+          .from("crisp_workspaces")
+          .select("crisp_website_id, workspace_name")
+          .in("crisp_website_id", websiteIds);
+        (wsRows ?? []).forEach((w) => {
+          if (w.workspace_name?.trim()) wsMap.set(w.crisp_website_id, w.workspace_name.trim());
+        });
+      }
+
+      const dismissedKeys = getDismissedNotificationKeys(user.id);
+      const newAlerts: QueuedMessageAlert[] = [];
+
+      for (const conv of validUnread) {
+        const seenKey = `unread_conv_${conv.id}_${conv.last_message_at}`;
+        if (seenMsgIdsRef.current.has(seenKey) || dismissedKeys.has(seenKey)) continue;
+        seenMsgIdsRef.current.add(seenKey);
+
+        const customerName = conv.customer_name?.trim() || "Customer";
+        const workspaceName = wsMap.get(conv.crisp_website_id) || "Crisp";
+        const messageSnippet =
+          conv.last_message && conv.last_message.length > 220
+            ? `${conv.last_message.slice(0, 220)}...`
+            : conv.last_message || "New unread customer message";
+
+        const receivedAt = conv.last_message_at
+          ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+        newAlerts.push({
+          id: seenKey,
+          conversationId: conv.id,
+          customerName,
+          workspaceName,
+          messageSnippet,
+          receivedAt,
+        });
+      }
+
+      if (newAlerts.length > 0) {
+        playCrispChime();
+        setActiveQueue((prev) => {
+          const existingIds = new Set(prev.map((a) => a.id));
+          const additions = newAlerts.filter((a) => !existingIds.has(a.id));
+          return [...prev, ...additions];
+        });
+      }
+    } catch {
+      // Non-fatal
+    }
+  }, [isCsAdmin, user?.id]);
+
+  // Check unread on login / initial mount
+  useEffect(() => {
+    void checkUnreadAndQueue();
+  }, [checkUnreadAndQueue]);
+
+  // Check unread when user switches back to CRM tab (visibilitychange / focus)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void checkUnreadAndQueue();
+      }
+    };
+    const handleFocus = () => {
+      void checkUnreadAndQueue();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [checkUnreadAndQueue]);
+
+  // REALTIME INCOMING MESSAGE LISTENER (During active browsing session)
   useEffect(() => {
     if (!isCsAdmin || !user?.id) return;
 
