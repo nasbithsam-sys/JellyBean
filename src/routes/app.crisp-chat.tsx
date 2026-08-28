@@ -365,6 +365,8 @@ function CrispInboxInner() {
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [isMarkingRead, setIsMarkingRead] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isHoveringSync, setIsHoveringSync] = useState(false);
+  const abortSyncRef = useRef(false);
   const [showRightPanel, setShowRightPanel] = useState(true);
 
   // Admin Workspace Management Modals State
@@ -1019,14 +1021,25 @@ function CrispInboxInner() {
     }
   };
 
+  // Handle Stop/Abort History Sync
+  const handleStopSync = () => {
+    abortSyncRef.current = true;
+    setIsSyncing(false);
+    setIsHoveringSync(false);
+    toast.info("Sync stopped");
+  };
+
   // Handle History Sync
   const handleSyncHistory = async () => {
     if (isSyncing) return;
+    abortSyncRef.current = false;
     setIsSyncing(true);
 
     try {
       const websiteIdParam = selectedWebsiteId !== "all" ? selectedWebsiteId : undefined;
       const res = await syncCrispHistory({ data: { websiteId: websiteIdParam } });
+
+      if (abortSyncRef.current) return;
 
       if (res.ok) {
         toast.success(`Synced ${res.synced_conversations} conversations & ${res.synced_messages} messages.`);
@@ -1044,8 +1057,11 @@ function CrispInboxInner() {
           let lastError = res.error;
 
           for (const ws of wsList) {
+            if (abortSyncRef.current) break;
             try {
               const indRes = await syncCrispHistory({ data: { websiteId: ws.crisp_website_id } });
+              if (abortSyncRef.current) break;
+
               if (indRes.ok) {
                 totalConvs += indRes.synced_conversations || 0;
                 totalMsgs += indRes.synced_messages || 0;
@@ -1054,9 +1070,12 @@ function CrispInboxInner() {
                 lastError = indRes.error;
               }
             } catch (wsErr: any) {
+              if (abortSyncRef.current) break;
               lastError = wsErr.message || lastError;
             }
           }
+
+          if (abortSyncRef.current) return;
 
           if (successCount > 0) {
             toast.success(`Synced ${successCount}/${wsList.length} workspaces (${totalConvs} convs, ${totalMsgs} msgs).`);
@@ -1068,13 +1087,18 @@ function CrispInboxInner() {
             toast.error(lastError || "Could not sync history for workspaces");
           }
         } else {
-          toast.error(res.error || "Failed to sync history");
+          if (!abortSyncRef.current) {
+            toast.error(res.error || "Failed to sync history");
+          }
         }
       }
     } catch (err: any) {
-      toast.error(err.message || "History sync failed");
+      if (!abortSyncRef.current) {
+        toast.error(err.message || "History sync failed");
+      }
     } finally {
       setIsSyncing(false);
+      setIsHoveringSync(false);
     }
   };
 
@@ -1374,14 +1398,26 @@ function CrispInboxInner() {
               />
             </div>
             <Button
-              variant="outline"
+              variant={isSyncing && isHoveringSync ? "destructive" : "outline"}
               size="icon"
-              onClick={handleSyncHistory}
-              disabled={isSyncing}
-              title="Sync Crisp History"
-              className="h-9 w-9 shrink-0"
+              onClick={isSyncing ? handleStopSync : handleSyncHistory}
+              onMouseEnter={() => isSyncing && setIsHoveringSync(true)}
+              onMouseLeave={() => setIsHoveringSync(false)}
+              title={isSyncing ? (isHoveringSync ? "Stop syncing" : "Syncing in progress... (click to stop)") : "Sync Crisp History"}
+              className={cn(
+                "h-9 w-9 shrink-0 transition-colors duration-150",
+                isSyncing && isHoveringSync && "bg-destructive/15 text-destructive border-destructive/40 hover:bg-destructive/25"
+              )}
             >
-              <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+              {isSyncing ? (
+                isHoveringSync ? (
+                  <X className="w-4 h-4 text-destructive animate-in fade-in zoom-in-75 duration-150" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+                )
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
             </Button>
           </div>
 
