@@ -2514,46 +2514,7 @@ function LeadCard({
           }}
         />
       </div>
-      <div
-        className="mt-3 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Label className="crm-lead-label">Requirement 1</Label>
-        <Textarea
-          value={requirement1}
-          rows={1}
-          onChange={(e) => setRequirement1(e.target.value)}
-          onBlur={async () => {
-            if ((requirement1 || "") !== (lead.requirement_1 ?? "")) {
-              if (await saveField({ requirement_1: requirement1 } as Partial<Lead>)) {
-                qc.invalidateQueries({ queryKey: ["cs_leads"] });
-              }
-            }
-          }}
-          className="text-[12.5px] mt-1.5 h-10 min-h-[40px] resize-none leading-relaxed py-2.5"
-          placeholder="Requirement 1"
-        />
-      </div>
-      <div
-        className="mt-3 rounded-2xl border border-border/70 bg-surface/70 px-3.5 py-3.5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Label className="crm-lead-label">Requirement 2</Label>
-        <Textarea
-          value={requirement2}
-          rows={1}
-          onChange={(e) => setRequirement2(e.target.value)}
-          onBlur={async () => {
-            if ((requirement2 || "") !== (lead.requirement_2 ?? "")) {
-              if (await saveField({ requirement_2: requirement2 } as Partial<Lead>)) {
-                qc.invalidateQueries({ queryKey: ["cs_leads"] });
-              }
-            }
-          }}
-          className="text-[12.5px] mt-1.5 h-10 min-h-[40px] resize-none leading-relaxed py-2.5"
-          placeholder="Requirement 2"
-        />
-      </div>
+
       <div
         className="mt-3 rounded-2xl border border-border/70 bg-surface/72 px-3.5 py-3.5"
         onClick={(e) => e.stopPropagation()}
@@ -3169,12 +3130,6 @@ function LeadDrawer({
             {lead.post_text && (
               <Info label="Customer exact requirement" value={lead.post_text} multiline />
             )}
-            {lead.requirement_1 && (
-              <Info label="Requirement 1" value={lead.requirement_1} multiline />
-            )}
-            {lead.requirement_2 && (
-              <Info label="Requirement 2" value={lead.requirement_2} multiline />
-            )}
             {lead.context && <Info label="Context" value={lead.context} multiline />}
             {lead.original_lead_link && (
               <div>
@@ -3293,30 +3248,6 @@ function LeadDrawer({
                     }}
                   />
                 )}
-              </div>
-              <div>
-                <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-                  Requirement 1
-                </Label>
-                <Textarea
-                  value={requirement1}
-                  onChange={(e) => setRequirement1(e.target.value)}
-                  rows={3}
-                  maxLength={2000}
-                  placeholder="Requirement 1"
-                />
-              </div>
-              <div>
-                <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
-                  Requirement 2
-                </Label>
-                <Textarea
-                  value={requirement2}
-                  onChange={(e) => setRequirement2(e.target.value)}
-                  rows={3}
-                  maxLength={2000}
-                  placeholder="Requirement 2"
-                />
               </div>
               <div>
                 <Label className="block mb-1.5 text-[11.5px] uppercase tracking-wide text-muted-foreground font-medium">
