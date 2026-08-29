@@ -263,6 +263,7 @@ export type Database = {
       }
       crisp_webhook_events: {
         Row: {
+          created_at: string
           crisp_website_id: string | null
           error: string | null
           event_fingerprint: string
@@ -273,6 +274,7 @@ export type Database = {
           received_at: string | null
         }
         Insert: {
+          created_at?: string
           crisp_website_id?: string | null
           error?: string | null
           event_fingerprint: string
@@ -283,6 +285,7 @@ export type Database = {
           received_at?: string | null
         }
         Update: {
+          created_at?: string
           crisp_website_id?: string | null
           error?: string | null
           event_fingerprint?: string
