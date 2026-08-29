@@ -10,7 +10,7 @@ export function useCrispUnread() {
       const { data, error } = await supabase.rpc("get_crisp_workspace_summaries");
       if (!error && data && isMountedRef.current) {
         let total = 0;
-        (data as any[]).forEach((item) => {
+        data.forEach((item) => {
           const unreplied = Number(item.unreplied_chat_count ?? item.total_chat_count ?? 0);
           total += unreplied;
         });

@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
-import { useNewLeadAlert } from "@/hooks/use-realtime-sync";
 import { useSignedLeadUrls } from "@/lib/lead-attachments";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -388,7 +387,8 @@ function Page() {
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
-  const { newLeadCount, clearAlert } = useNewLeadAlert(auth.primaryRole);
+  const [newLeadCount, setNewLeadCount] = useState(0);
+  const clearAlert = () => setNewLeadCount(0);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   useEffect(() => {
@@ -1000,9 +1000,9 @@ function Inner() {
   // ── New-lead sound notification (Supabase Realtime — instant for every CS) ──
   // Listens for INSERT events on qualified_leads. Every signed-in CS/admin
   // tab fires the chime + toast the moment the lead is forwarded, with no
-  // polling delay. The realtime-sync hook handles cache invalidation, but
-  // we mount a dedicated channel here so we get the *new row* payload to
-  // surface the customer name in the toast.
+  // polling delay. This single page channel owns the CS banner, notification,
+  // automatic rephrase, and CS query invalidation so those features do not
+  // require a second qualified_leads subscription.
   const armedRef = useRef(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">(
     typeof window !== "undefined" && "Notification" in window
@@ -1038,6 +1038,7 @@ function Inner() {
           };
         }) => {
           if (!armedRef.current) return;
+          setNewLeadCount((current) => current + 1);
           const name = payload.new?.customer_name ?? "incoming";
           const area = payload.new?.main_area || payload.new?.sub_area || null;
           playNotificationBeep();
