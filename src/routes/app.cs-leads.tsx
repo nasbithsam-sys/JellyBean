@@ -3,6 +3,7 @@ import { RouteSkeleton } from "@/components/route-skeleton";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -366,6 +367,72 @@ function useCsComposeTemplatesList(userId: string | undefined) {
   return { ...query, templates, save };
 }
 
+const CS_AUTO_REPHRASE_ENABLED_KEY = "cs_auto_rephrase_enabled";
+
+function useCsAutoRephraseToggle(userId: string | undefined) {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ["shared_state", CS_AUTO_REPHRASE_ENABLED_KEY],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_state")
+        .select("value")
+        .eq("key", CS_AUTO_REPHRASE_ENABLED_KEY)
+        .maybeSingle();
+      if (error) throw error;
+      if (
+        data?.value &&
+        typeof data.value === "object" &&
+        !Array.isArray(data.value) &&
+        "enabled" in data.value
+      ) {
+        return Boolean((data.value as { enabled?: boolean }).enabled);
+      }
+      return false; // Default is OFF
+    },
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`cs-auto-rephrase-toggle-${crypto.randomUUID()}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "shared_state",
+          filter: `key=eq.${CS_AUTO_REPHRASE_ENABLED_KEY}`,
+        },
+        () => qc.invalidateQueries({ queryKey: ["shared_state", CS_AUTO_REPHRASE_ENABLED_KEY] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  const setEnabled = async (enabled: boolean) => {
+    qc.setQueryData(["shared_state", CS_AUTO_REPHRASE_ENABLED_KEY], enabled);
+    const { error } = await supabase.from("shared_state").upsert({
+      key: CS_AUTO_REPHRASE_ENABLED_KEY,
+      value: { enabled },
+      updated_by: userId ?? null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      qc.invalidateQueries({ queryKey: ["shared_state", CS_AUTO_REPHRASE_ENABLED_KEY] });
+      throw error;
+    }
+  };
+
+  return {
+    enabled: Boolean(query.data),
+    isLoading: query.isLoading,
+    setEnabled,
+  };
+}
+
 function Page() {
   const auth = useAuth();
   const isCs = auth.primaryRole === "cs";
@@ -387,6 +454,12 @@ function Page() {
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
+  const autoRephraseToggle = useCsAutoRephraseToggle(auth.user?.id);
+  const autoRephraseEnabledRef = useRef(autoRephraseToggle.enabled);
+  useEffect(() => {
+    autoRephraseEnabledRef.current = autoRephraseToggle.enabled;
+  }, [autoRephraseToggle.enabled]);
+
   const [newLeadCount, setNewLeadCount] = useState(0);
   const clearAlert = () => setNewLeadCount(0);
   const [query, setQuery] = useState("");
@@ -1051,8 +1124,8 @@ function Inner() {
             at: Date.now(),
           });
 
-          // Auto-rephrase new lead if marketing_notes is not yet set
-          if (payload.new?.id && !payload.new?.marketing_notes) {
+          // Auto-rephrase new lead if toggle is enabled and marketing_notes is not yet set
+          if (autoRephraseEnabledRef.current && payload.new?.id && !payload.new?.marketing_notes) {
             void autoRephraseLeadWithAi({ data: { leadId: payload.new.id } })
               .then((res) => {
                 if (res?.success) {
@@ -1356,6 +1429,35 @@ function Inner() {
               );
             })()}
           <div className="ml-auto flex items-center gap-2">
+            <div
+              className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px] shadow-sm select-none"
+              title={
+                autoRephraseToggle.enabled
+                  ? "Auto-rephrase is ON (New incoming leads will be auto-rephrased)"
+                  : "Auto-rephrase is OFF (Only manual rephrasing)"
+              }
+            >
+              <Sparkles
+                className={cn(
+                  "h-3.5 w-3.5",
+                  autoRephraseToggle.enabled ? "text-primary" : "text-muted-foreground",
+                )}
+              />
+              <span className="text-foreground font-medium">Auto-rephrase</span>
+              <Switch
+                checked={autoRephraseToggle.enabled}
+                onCheckedChange={async (checked) => {
+                  try {
+                    await autoRephraseToggle.setEnabled(checked);
+                    toast.success(checked ? "Auto-rephrase turned ON" : "Auto-rephrase turned OFF");
+                  } catch (err) {
+                    toast.error(friendlyError(err));
+                  }
+                }}
+                disabled={autoRephraseToggle.isLoading}
+                aria-label="Toggle Auto-rephrase"
+              />
+            </div>
             <div className="px-3 h-9 inline-flex items-center gap-2 rounded-md bg-surface border border-border text-[12px] shadow-sm">
               <span className="text-muted-foreground">Sent today</span>
               <span className="font-semibold tabular-nums">{sentToday.data ?? "—"}</span>
