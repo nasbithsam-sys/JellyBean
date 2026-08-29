@@ -311,13 +311,13 @@ export const analyzeRawLeadsWithAi = createServerFn({ method: "POST" })
 
     if (results.length === 0) throw new Error("AI returned no usable lead decisions");
 
-    for (const { row_key, lead } of results) {
-      const { error: updateError } = await supabaseAdmin
-        .from("raw_lead_cache")
-        .update({ lead } as never)
-        .eq("row_key", row_key);
-      if (updateError) throw new Error(updateError.message);
-    }
+    const { error: updateError } = await supabaseAdmin.rpc(
+      "batch_update_raw_lead_decisions" as never,
+      {
+        decisions: results.map(({ row_key, lead }) => ({ row_key, lead })),
+      } as never,
+    );
+    if (updateError) throw new Error(updateError.message);
 
     const yes = results.filter((result) => result.lead === "yes").length;
     const no = results.filter((result) => result.lead === "no").length;
