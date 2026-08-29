@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { logActivity } from "@/lib/activity-log";
+import { DEFAULT_CS_COMPOSE_TEMPLATE } from "@/lib/cs-compose-template";
 
 // FROZEN PROMPT — batch-aware default used when no saved CRM prompt is available.
 export const FROZEN_LEAD_PROMPT = `You classify each item in the \`leads\` array independently as a residential home-service lead.
@@ -362,10 +363,19 @@ async function ensureRequesterCanRephrase(userId: string) {
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .in("role", ["admin", "sub_admin", "cs"]);
+    .in("role", [
+      "admin",
+      "sub_admin",
+      "cs",
+      "scraping",
+      "maturing",
+      "acc_handler",
+      "facebook",
+      "seo",
+    ]);
 
   if (error) throw new Error(error.message);
-  if (!data?.length) throw new Error("Forbidden: CS access required");
+  if (!data?.length) throw new Error("Forbidden: Access required");
 }
 
 const rephraseInputSchema = z.object({
@@ -377,16 +387,25 @@ const rephraseInputSchema = z.object({
   systemPrompt: z.string().nullable().optional(),
 });
 
-export const rephraseLeadTemplateWithAi = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input) => rephraseInputSchema.parse(input))
-  .handler(async ({ data, context }) => {
-    await ensureRequesterCanRephrase(context.userId);
+export async function executeAiRephraseCore({
+  template,
+  customerName,
+  contextText,
+  requirement1,
+  requirement2,
+  systemPrompt: customSystemPrompt,
+}: {
+  template: string;
+  customerName: string;
+  contextText?: string | null;
+  requirement1?: string | null;
+  requirement2?: string | null;
+  systemPrompt?: string | null;
+}): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret");
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret");
-
-    const defaultSystemPrompt = `You are an expert customer service assistant. Your goal is to clean, extract, and normalize three parts of a customer lead request to prepare them for an outbound message.
+  const defaultSystemPrompt = `You are an expert customer service assistant. Your goal is to clean, extract, and normalize three parts of a customer lead request to prepare them for an outbound message.
 
 You must output a JSON object containing exactly three fields:
 1. "serviceContext": A very short, clean name of the service (e.g. "garage door repair", "lawn care", "plumbing leak"). It must be concise and lowercase. Never use "service", "seeking", "repair or replacement", or "damaged or non-functioning".
@@ -409,177 +428,260 @@ Forbidden Phrases (do not use in any field):
 - "our schedule"
 - "arrange a visit"`;
 
-    const systemPrompt = data.systemPrompt || defaultSystemPrompt;
+  const systemPrompt = customSystemPrompt || defaultSystemPrompt;
 
-    const userContent = JSON.stringify({
-      context: data.contextText || "",
-      requirement1: data.requirement1 || "",
-      requirement2: data.requirement2 || "",
-    });
+  const userContent = JSON.stringify({
+    context: contextText || "",
+    requirement1: requirement1 || "",
+    requirement2: requirement2 || "",
+  });
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-5.4-nano",
-        input: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "lead_rephrase",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                serviceContext: { type: "string" },
-                requirement1: { type: "string" },
-                requirement2: { type: "string" },
-              },
-              required: ["serviceContext", "requirement1", "requirement2"],
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-5.4-nano",
+      input: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "lead_rephrase",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              serviceContext: { type: "string" },
+              requirement1: { type: "string" },
+              requirement2: { type: "string" },
             },
+            required: ["serviceContext", "requirement1", "requirement2"],
           },
         },
-      }),
-    });
+      },
+    }),
+  });
 
-    const responseBody = (await response.json()) as OpenAiResponse;
-    if (!response.ok) {
-      throw new Error(responseBody.error?.message ?? `OpenAI request failed (${response.status})`);
+  const responseBody = (await response.json()) as OpenAiResponse;
+  if (!response.ok) {
+    throw new Error(responseBody.error?.message ?? `OpenAI request failed (${response.status})`);
+  }
+
+  const rephrased = extractOutputText(responseBody);
+
+  // Parse the JSON output from AI
+  let serviceContext = "";
+  let req1 = "";
+  let req2 = "";
+
+  try {
+    const parsed = JSON.parse(rephrased.trim());
+    serviceContext = parsed.serviceContext || "";
+    req1 = parsed.requirement1 || "";
+    req2 = parsed.requirement2 || "";
+  } catch {
+    // Fallback in case JSON parsing fails
+    serviceContext = contextText || "";
+    req1 = requirement1 || "";
+    req2 = requirement2 || "";
+  }
+
+  // Helper functions for sanitization & normalization
+  const extractFirstName = (fullName: string): string => {
+    const name = fullName.trim().split(/\s+/)[0];
+    return name || "there";
+  };
+
+  const extractSenderName = (templateText: string): string => {
+    const match = templateText.match(/this is\s+([A-Za-z0-9_'\-\s]+?)(?:[\.,\r\n]|$)/i);
+    if (match) {
+      return match[1].trim();
+    }
+    const match2 = templateText.match(/this is\s+(\w+)/i);
+    if (match2) {
+      return match2[1].trim();
+    }
+    return "Alex";
+  };
+
+  const sanitizeForbiddenPhrases = (text: string): string => {
+    if (!text) return "";
+    let clean = text;
+    const replacements: Array<[RegExp, string]> = [
+      [/I understand/gi, ""],
+      [/seeking/gi, "looking for"],
+      [/repair or replacement/gi, "repair"],
+      [/damaged or non-functioning/gi, ""],
+      [/provide the service address/gi, "share your complete address"],
+      [/our schedule/gi, "the schedule"],
+      [/arrange a visit/gi, "check the schedule for a visit"],
+    ];
+    for (const [regex, rep] of replacements) {
+      clean = clean.replace(regex, rep);
+    }
+    return clean.replace(/\s+/g, " ").trim();
+  };
+
+  const normalizeRequirement = (req: string): string => {
+    if (!req) return "";
+    let clean = req.trim();
+    const lower = clean.toLowerCase();
+
+    if (lower.includes("address")) {
+      return "share your complete address";
+    }
+    if (
+      lower.includes("availability") ||
+      lower.includes("available") ||
+      lower.includes("time") ||
+      lower.includes("when")
+    ) {
+      return "let me know your availability";
+    }
+    if (
+      lower.includes("photo") ||
+      lower.includes("picture") ||
+      lower.includes("image") ||
+      lower.includes("pic")
+    ) {
+      return "send me a picture of it";
     }
 
-    const rephrased = extractOutputText(responseBody);
-    
-    // Parse the JSON output from AI
-    let serviceContext = "";
-    let req1 = "";
-    let req2 = "";
+    clean = sanitizeForbiddenPhrases(clean);
+    if (clean.length > 0) {
+      clean = clean.charAt(0).toLowerCase() + clean.slice(1);
+      clean = clean.replace(/[\.\?,;!]$/, "");
+    }
+    return clean.trim();
+  };
+
+  const normalizeServiceContext = (ctx: string): string => {
+    if (!ctx) return "your service";
+    let clean = ctx.trim();
+    clean = sanitizeForbiddenPhrases(clean);
+    // Remove trailing/leading "service"
+    clean = clean.replace(/\b(service)\b/gi, "");
+
+    // If there is a "for [noun]" or "to [verb]" that repeats words present earlier in the string, strip it.
+    const forIndex = clean.toLowerCase().indexOf(" for ");
+    if (forIndex !== -1) {
+      const firstPart = clean.substring(0, forIndex).trim();
+      const secondPart = clean.substring(forIndex + 5).trim();
+      const firstWords = firstPart
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2);
+      const secondWords = secondPart
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w) => w.length > 2);
+      const overlap = firstWords.some((w) => secondWords.includes(w));
+      if (overlap) {
+        clean = firstPart;
+      }
+    }
+
+    clean = clean.replace(/\s+/g, " ").trim();
+    if (clean.length > 0) {
+      clean = clean.charAt(0).toLowerCase() + clean.slice(1);
+    }
+    return clean || "your service";
+  };
+
+  // Apply sanitization and normalization
+  const finalFirstName = extractFirstName(customerName);
+  const finalSenderName = extractSenderName(template);
+  const finalServiceContext = normalizeServiceContext(serviceContext);
+  const finalReq1 = normalizeRequirement(req1);
+  const finalReq2 = normalizeRequirement(req2);
+
+  // Build requirements part: join with " and " if both are present
+  let requirementsPart = "";
+  if (finalReq1 && finalReq2) {
+    requirementsPart = `${finalReq1} and ${finalReq2}`;
+  } else if (finalReq1) {
+    requirementsPart = finalReq1;
+  } else if (finalReq2) {
+    requirementsPart = finalReq2;
+  } else {
+    requirementsPart = "confirm the details";
+  }
+
+  // Build the final strict SMS format
+  const finalSms = `Hi ${finalFirstName}, this is ${finalSenderName}. I saw that you are looking for ${finalServiceContext}. Could you kindly ${requirementsPart}, so I can check the schedule for a visit?`;
+
+  return finalSms;
+}
+
+export const rephraseLeadTemplateWithAi = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => rephraseInputSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await ensureRequesterCanRephrase(context.userId);
+    const finalSms = await executeAiRephraseCore({
+      template: data.template,
+      customerName: data.customerName,
+      contextText: data.contextText,
+      requirement1: data.requirement1,
+      requirement2: data.requirement2,
+      systemPrompt: data.systemPrompt,
+    });
+    return { rephrased: finalSms };
+  });
+
+export const autoRephraseLeadWithAi = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ leadId: z.string().min(1) }).parse(input))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return { success: false, reason: "Missing OPENAI_API_KEY" };
+
+    const { data: lead, error } = await supabaseAdmin
+      .from("qualified_leads")
+      .select("id, customer_name, context, post_text, requirement_1, requirement_2, marketing_notes")
+      .eq("id", data.leadId)
+      .maybeSingle();
+
+    if (error || !lead) return { success: false, reason: "Lead not found" };
+
+    // Strict safety check: If marketing_notes is already populated, DO NOT overwrite!
+    if (lead.marketing_notes && lead.marketing_notes.trim().length > 0) {
+      return { success: false, reason: "Already has marketing_notes" };
+    }
+
+    const contextText = lead.context || lead.post_text || "";
+    if (!contextText.trim()) {
+      return { success: false, reason: "No context text available" };
+    }
 
     try {
-      const parsed = JSON.parse(rephrased.trim());
-      serviceContext = parsed.serviceContext || "";
-      req1 = parsed.requirement1 || "";
-      req2 = parsed.requirement2 || "";
-    } catch (e) {
-      // Fallback in case JSON parsing fails
-      serviceContext = data.contextText || "";
-      req1 = data.requirement1 || "";
-      req2 = data.requirement2 || "";
+      const finalSms = await executeAiRephraseCore({
+        template: DEFAULT_CS_COMPOSE_TEMPLATE,
+        customerName: lead.customer_name || "there",
+        contextText,
+        requirement1: lead.requirement_1 || "",
+        requirement2: lead.requirement_2 || "",
+      });
+
+      if (finalSms) {
+        // Update database with rephrased SMS
+        await supabaseAdmin
+          .from("qualified_leads")
+          .update({ marketing_notes: finalSms } as never)
+          .eq("id", lead.id);
+
+        return { success: true, rephrased: finalSms };
+      }
+    } catch (err) {
+      console.error("[Auto-rephrase] Failed for lead:", lead.id, err);
+      return { success: false, reason: (err as Error).message };
     }
 
-    // Helper functions for sanitization & normalization
-    const extractFirstName = (fullName: string): string => {
-      const name = fullName.trim().split(/\s+/)[0];
-      return name || "there";
-    };
-
-    const extractSenderName = (templateText: string): string => {
-      const match = templateText.match(/this is\s+([A-Za-z0-9_'\-\s]+?)(?:[\.,\r\n]|$)/i);
-      if (match) {
-        return match[1].trim();
-      }
-      const match2 = templateText.match(/this is\s+(\w+)/i);
-      if (match2) {
-        return match2[1].trim();
-      }
-      return "Alex";
-    };
-
-    const sanitizeForbiddenPhrases = (text: string): string => {
-      if (!text) return "";
-      let clean = text;
-      const replacements: Array<[RegExp, string]> = [
-        [/I understand/gi, ""],
-        [/seeking/gi, "looking for"],
-        [/repair or replacement/gi, "repair"],
-        [/damaged or non-functioning/gi, ""],
-        [/provide the service address/gi, "share your complete address"],
-        [/our schedule/gi, "the schedule"],
-        [/arrange a visit/gi, "check the schedule for a visit"]
-      ];
-      for (const [regex, rep] of replacements) {
-        clean = clean.replace(regex, rep);
-      }
-      return clean.replace(/\s+/g, " ").trim();
-    };
-
-    const normalizeRequirement = (req: string): string => {
-      if (!req) return "";
-      let clean = req.trim();
-      const lower = clean.toLowerCase();
-      
-      if (lower.includes("address")) {
-        return "share your complete address";
-      }
-      if (lower.includes("availability") || lower.includes("available") || lower.includes("time") || lower.includes("when")) {
-        return "let me know your availability";
-      }
-      if (lower.includes("photo") || lower.includes("picture") || lower.includes("image") || lower.includes("pic")) {
-        return "send me a picture of it";
-      }
-      
-      clean = sanitizeForbiddenPhrases(clean);
-      if (clean.length > 0) {
-        clean = clean.charAt(0).toLowerCase() + clean.slice(1);
-        clean = clean.replace(/[\.\?,;!]$/, "");
-      }
-      return clean.trim();
-    };
-
-    const normalizeServiceContext = (ctx: string): string => {
-      if (!ctx) return "your service";
-      let clean = ctx.trim();
-      clean = sanitizeForbiddenPhrases(clean);
-      // Remove trailing/leading "service"
-      clean = clean.replace(/\b(service)\b/gi, "");
-      
-      // If there is a "for [noun]" or "to [verb]" that repeats words present earlier in the string, strip it.
-      const forIndex = clean.toLowerCase().indexOf(" for ");
-      if (forIndex !== -1) {
-        const firstPart = clean.substring(0, forIndex).trim();
-        const secondPart = clean.substring(forIndex + 5).trim();
-        const firstWords = firstPart.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-        const secondWords = secondPart.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-        const overlap = firstWords.some(w => secondWords.includes(w));
-        if (overlap) {
-          clean = firstPart;
-        }
-      }
-
-      clean = clean.replace(/\s+/g, " ").trim();
-      if (clean.length > 0) {
-        clean = clean.charAt(0).toLowerCase() + clean.slice(1);
-      }
-      return clean || "your service";
-    };
-
-    // Apply sanitization and normalization
-    const finalFirstName = extractFirstName(data.customerName);
-    const finalSenderName = extractSenderName(data.template);
-    const finalServiceContext = normalizeServiceContext(serviceContext);
-    const finalReq1 = normalizeRequirement(req1);
-    const finalReq2 = normalizeRequirement(req2);
-
-    // Build requirements part: join with " and " if both are present
-    let requirementsPart = "";
-    if (finalReq1 && finalReq2) {
-      requirementsPart = `${finalReq1} and ${finalReq2}`;
-    } else if (finalReq1) {
-      requirementsPart = finalReq1;
-    } else if (finalReq2) {
-      requirementsPart = finalReq2;
-    } else {
-      requirementsPart = "confirm the details";
-    }
-
-    // Build the final strict SMS format
-    const finalSms = `Hi ${finalFirstName}, this is ${finalSenderName}. I saw that you are looking for ${finalServiceContext}. Could you kindly ${requirementsPart}, so I can check the schedule for a visit?`;
-
-    return { rephrased: finalSms };
+    return { success: false, reason: "No output generated" };
   });
