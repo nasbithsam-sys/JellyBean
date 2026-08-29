@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { autoRephraseLeadWithAi } from "@/lib/raw-leads-ai.functions";
 import { toast } from "sonner";
 import {
   formatDistanceToNow,
@@ -442,6 +444,7 @@ function SubmitForm({
 }) {
   const auth = useAuth();
   const qc = useQueryClient();
+  const autoRephraseFn = useServerFn(autoRephraseLeadWithAi);
   const [submitting, setSubmitting] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
   const referenceMode: LeadReferenceMode =
@@ -506,29 +509,39 @@ function SubmitForm({
         .map((p) => p.trim())
         .filter((p) => p.length > 0)
         .map((p) => formatPhone(p) || p);
-      const { error } = await supabase.from("qualified_leads").insert({
-        customer_name: values.customerName,
-        customer_number: values.customerNumber,
-        customer_number_2: cleanedExtras[0] ?? null,
-        extra_numbers: cleanedExtras,
-        service: values.service,
-        pass_it_to:
-          role === "facebook" || role === "seo" ? null : values.service,
-        main_area: values.area || null,
-        sub_area: values.area || null,
-        context: values.context,
-        post_text: values.exactCustomerText,
-        reference: values.reference,
-        images: imageUrls,
-        submitted_by_role: role,
-        is_important: values.isImportant,
-        pinned_important: values.isImportant,
-        created_by: auth.user.id,
-        assigned_by: auth.user.id,
-        cs_status: "new",
-        is_landline: values.isLandline,
-      } as never);
+      const { data: insertedLead, error } = await supabase
+        .from("qualified_leads")
+        .insert({
+          customer_name: values.customerName,
+          customer_number: values.customerNumber,
+          customer_number_2: cleanedExtras[0] ?? null,
+          extra_numbers: cleanedExtras,
+          service: values.service,
+          pass_it_to:
+            role === "facebook" || role === "seo" ? null : values.service,
+          main_area: values.area || null,
+          sub_area: values.area || null,
+          context: values.context,
+          post_text: values.exactCustomerText,
+          reference: values.reference,
+          images: imageUrls,
+          submitted_by_role: role,
+          is_important: values.isImportant,
+          pinned_important: values.isImportant,
+          created_by: auth.user.id,
+          assigned_by: auth.user.id,
+          cs_status: "new",
+          is_landline: values.isLandline,
+        } as never)
+        .select("id")
+        .maybeSingle();
       if (error) throw error;
+
+      if (insertedLead?.id) {
+        void autoRephraseFn({ data: { leadId: insertedLead.id } }).catch((err) => {
+          console.error("[Auto-rephrase] Failed for submitted lead:", insertedLead.id, err);
+        });
+      }
       await supabase.from("activity_logs").insert({
         actor_id: auth.user.id,
         actor_name:

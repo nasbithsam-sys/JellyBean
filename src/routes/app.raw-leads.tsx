@@ -63,7 +63,11 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 import { downloadCsv, formatPhone, normalizePhone } from "@/lib/crm-lite";
-import { analyzeRawLeadsWithAi, FROZEN_LEAD_PROMPT } from "@/lib/raw-leads-ai.functions";
+import {
+  analyzeRawLeadsWithAi,
+  autoRephraseLeadWithAi,
+  FROZEN_LEAD_PROMPT,
+} from "@/lib/raw-leads-ai.functions";
 import {
   checkDuplicatePhone,
   fetchRawLeadCache,
@@ -2453,7 +2457,7 @@ function QualifyDialog({
   const [busy, setBusy] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const qc = useQueryClient();
-
+  const autoRephraseFn = useServerFn(autoRephraseLeadWithAi);
 
   async function send(values: LeadFormValues) {
     setBusy(true);
@@ -2462,30 +2466,41 @@ function QualifyDialog({
         .map((p) => p.trim())
         .filter((p) => p.length > 0)
         .map((p) => formatPhone(p) || p);
-      const { error } = await supabase.from("qualified_leads").insert({
-        customer_name: values.customerName,
-        customer_number: formatPhone(values.customerNumber) || values.customerNumber,
-        customer_number_2: cleanedExtras[0] ?? null,
-        extra_numbers: cleanedExtras,
-        post_text: values.exactCustomerText,
-        context: values.context,
-        service: values.service,
-        pass_it_to: values.service,
-        reference: values.reference,
-        sub_area: values.area || null,
-        main_area: values.area || null,
-        original_lead_link: row["Lead Link"] || null,
-        canonical_post_id: extractNextdoorPostId(row["Lead Link"]),
-        canonical_lead_link: canonicalizeLeadLink(row["Lead Link"]),
-        assigned_by: actorId,
-        created_by: actorId,
-        cs_status: "new",
-        is_landline: values.isLandline,
-        is_important: values.isImportant,
-        pinned_important: values.isImportant,
-        submitted_by_role: actorRole,
-      } as never);
+      const { data: insertedLead, error } = await supabase
+        .from("qualified_leads")
+        .insert({
+          customer_name: values.customerName,
+          customer_number: formatPhone(values.customerNumber) || values.customerNumber,
+          customer_number_2: cleanedExtras[0] ?? null,
+          extra_numbers: cleanedExtras,
+          post_text: values.exactCustomerText,
+          context: values.context,
+          service: values.service,
+          pass_it_to: values.service,
+          reference: values.reference,
+          sub_area: values.area || null,
+          main_area: values.area || null,
+          original_lead_link: row["Lead Link"] || null,
+          canonical_post_id: extractNextdoorPostId(row["Lead Link"]),
+          canonical_lead_link: canonicalizeLeadLink(row["Lead Link"]),
+          assigned_by: actorId,
+          created_by: actorId,
+          cs_status: "new",
+          is_landline: values.isLandline,
+          is_important: values.isImportant,
+          pinned_important: values.isImportant,
+          submitted_by_role: actorRole,
+        } as never)
+        .select("id")
+        .maybeSingle();
       if (error) throw error;
+
+      if (insertedLead?.id) {
+        void autoRephraseFn({ data: { leadId: insertedLead.id } }).catch((err) => {
+          console.error("[Auto-rephrase] Failed for forwarded lead:", insertedLead.id, err);
+        });
+      }
+
       if (actorId) {
         await supabase.from("activity_logs").insert({
           actor_id: actorId,

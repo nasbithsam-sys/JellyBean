@@ -10,6 +10,7 @@ import {
   canonicalizeLeadLink,
 } from "@/lib/lead-link-canonicalizer";
 import type { LeadDraft } from "@/lib/lead-drafts";
+import { autoRephraseLeadWithAi } from "@/lib/raw-leads-ai.functions";
 
 export class DraftValidationError extends Error {
   missing: string[];
@@ -122,10 +123,18 @@ export async function sendDraftToCS(
     insertPayload.canonical_lead_link = canonicalizeLeadLink(rawLeadLink);
   }
 
-  const { error } = await supabase
+  const { data: insertedLead, error } = await supabase
     .from("qualified_leads")
-    .insert(insertPayload as never);
+    .insert(insertPayload as never)
+    .select("id")
+    .maybeSingle();
   if (error) throw new Error(error.message);
+
+  if (insertedLead?.id) {
+    void autoRephraseLeadWithAi({ data: { leadId: insertedLead.id } }).catch((err) => {
+      console.error("[Auto-rephrase] Failed for draft lead:", insertedLead.id, err);
+    });
+  }
 
   // Activity log — matches shape used by both existing flows.
   await supabase.from("activity_logs").insert({
