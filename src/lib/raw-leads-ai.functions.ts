@@ -170,22 +170,21 @@ async function classifyWithOpenAi({
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY secret");
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model,
-      reasoning: { effort: "medium" },
-      input: [
+      model: model || "gpt-4o-mini",
+      messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify({ leads }) },
       ],
-      text: {
-        format: {
-          type: "json_schema",
+      response_format: {
+        type: "json_schema",
+        json_schema: {
           name: "raw_lead_classification",
           strict: true,
           schema: {
@@ -433,21 +432,21 @@ Forbidden Phrases (do not use in any field):
     requirement2: requirement2 || "",
   });
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.4-nano",
-      input: [
+      model: "gpt-4o-mini",
+      messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
       ],
-      text: {
-        format: {
-          type: "json_schema",
+      response_format: {
+        type: "json_schema",
+        json_schema: {
           name: "lead_rephrase",
           strict: true,
           schema: {
@@ -465,12 +464,12 @@ Forbidden Phrases (do not use in any field):
     }),
   });
 
-  const responseBody = (await response.json()) as OpenAiResponse;
+  const responseBody = await response.json();
   if (!response.ok) {
     throw new Error(responseBody.error?.message ?? `OpenAI request failed (${response.status})`);
   }
 
-  const rephrased = extractOutputText(responseBody);
+  const rephrased = responseBody.choices?.[0]?.message?.content || "";
 
   // Parse the JSON output from AI
   let serviceContext = "";
