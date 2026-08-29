@@ -639,6 +639,24 @@ export const autoRephraseLeadWithAi = createServerFn({ method: "POST" })
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return { success: false, reason: "Missing OPENAI_API_KEY" };
 
+    // Check if auto-rephrase toggle is enabled (default is OFF)
+    const { data: toggleState } = await supabaseAdmin
+      .from("shared_state")
+      .select("value")
+      .eq("key", "cs_auto_rephrase_enabled")
+      .maybeSingle();
+
+    const isAutoRephraseOn = Boolean(
+      toggleState?.value &&
+      typeof toggleState.value === "object" &&
+      !Array.isArray(toggleState.value) &&
+      (toggleState.value as { enabled?: boolean }).enabled
+    );
+
+    if (!isAutoRephraseOn) {
+      return { success: false, reason: "Auto-rephrase is disabled (toggle is OFF)" };
+    }
+
     const { data: lead, error } = await supabaseAdmin
       .from("qualified_leads")
       .select("id, customer_name, context, post_text, requirement_1, requirement_2, marketing_notes")
