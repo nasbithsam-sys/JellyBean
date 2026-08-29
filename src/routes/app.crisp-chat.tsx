@@ -439,7 +439,7 @@ function CrispInboxInner() {
       let grandUnrepliedTotal = 0;
       let anyUnread = false;
 
-      (data as any[]).forEach((item) => {
+      data.forEach((item) => {
         const wsId = item.crisp_website_id;
         const unreplied = Number(item.unreplied_chat_count ?? item.total_chat_count ?? 0);
         const unread = Boolean(item.has_unread || unreplied > 0);
@@ -493,6 +493,7 @@ function CrispInboxInner() {
 
       // Add sessions created today from live webhook events (visitors who visited today without sending text)
       (sessionEventsToday ?? []).forEach((ev) => {
+        if (!ev.crisp_website_id) return;
         const sessId = (ev.payload as any)?.data?.session_id || (ev.payload as any)?.session_id;
         const key = sessId ? `sess_${sessId}` : `evt_${Math.random()}`;
         if (!countedVisitorIds.has(key)) {
@@ -543,20 +544,20 @@ function CrispInboxInner() {
       p_website_ids: targetIds,
       p_limit: PAGE_SIZE_CONVS,
       p_offset: pageToLoad * PAGE_SIZE_CONVS,
-      p_search: search.trim() || null,
+      p_search: search.trim() || undefined,
     });
 
     setIsLoadingConvs(false);
 
     if (!error && data) {
       if (isReset) {
-        setConversations(data as any);
+        setConversations(data);
         setConvPage(0);
       } else {
-        setConversations((prev) => [...prev, ...(data as any[])]);
+        setConversations((prev) => [...prev, ...data]);
         setConvPage(pageToLoad);
       }
-      setHasMoreConvs((data as any[]).length === PAGE_SIZE_CONVS);
+      setHasMoreConvs(data.length === PAGE_SIZE_CONVS);
     }
   };
 

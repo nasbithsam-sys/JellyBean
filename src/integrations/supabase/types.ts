@@ -169,6 +169,7 @@ export type Database = {
           id: string
           last_message: string | null
           last_message_at: string | null
+          last_customer_unread_at: string | null
           metadata: Json | null
           status: string | null
           unread_count: number | null
@@ -185,6 +186,7 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_at?: string | null
+          last_customer_unread_at?: string | null
           metadata?: Json | null
           status?: string | null
           unread_count?: number | null
@@ -201,6 +203,7 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_at?: string | null
+          last_customer_unread_at?: string | null
           metadata?: Json | null
           status?: string | null
           unread_count?: number | null
@@ -1054,6 +1057,10 @@ export type Database = {
         Args: { _assigned_to: string; _category_key: string; _delta: number }
         Returns: undefined
       }
+      batch_update_raw_lead_decisions: {
+        Args: { decisions: Json }
+        Returns: number
+      }
       admin_ensure_access_code: { Args: { _user_id: string }; Returns: string }
       admin_list_access_codes: {
         Args: never
@@ -1087,6 +1094,10 @@ export type Database = {
         }
         Returns: string
       }
+      crisp_delete_workspace_secret: {
+        Args: { p_secret_id: string }
+        Returns: boolean
+      }
       crisp_get_workspace_secret: {
         Args: { p_secret_id: string }
         Returns: Json
@@ -1099,6 +1110,41 @@ export type Database = {
           p_webhook_secret: string
         }
         Returns: boolean
+      }
+      get_crisp_conversations_page: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_website_ids: string[]
+        }
+        Returns: {
+          created_at: string
+          crisp_session_id: string
+          crisp_website_id: string
+          customer_avatar: string | null
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          id: string
+          last_customer_unread_at: string | null
+          last_message: string | null
+          last_message_at: string | null
+          metadata: Json
+          status: string | null
+          unread_count: number
+          updated_at: string
+        }[]
+      }
+      get_crisp_workspace_summaries: {
+        Args: never
+        Returns: {
+          crisp_website_id: string
+          has_unread: boolean
+          latest_unread_at: string | null
+          total_chat_count: number
+          unreplied_chat_count: number
+        }[]
       }
       cs_leads_status_counts: { Args: never; Returns: Json }
       cs_user_assignment_totals: {
@@ -1443,6 +1489,7 @@ export type Database = {
         | "wrong_service"
         | "wrong_person"
         | "small_service"
+        | "already_received_before"
       raw_lead_cancel_reason:
         | "not_a_lead"
         | "general_post"
