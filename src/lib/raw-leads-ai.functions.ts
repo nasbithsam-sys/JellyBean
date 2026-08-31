@@ -102,6 +102,7 @@ async function loadActor(userId: string) {
   };
 }
 
+// Extracts completion text from OpenAI chat completions or legacy responses output
 function extractOutputText(response: OpenAiResponse) {
   if (response.choices?.[0]?.message?.content) {
     return response.choices[0].message.content;
