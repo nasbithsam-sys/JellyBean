@@ -64,6 +64,12 @@ type OpenAiResponse = {
       type?: string;
     }>;
   }>;
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+      role?: string;
+    };
+  }>;
   error?: {
     message?: string;
   };
@@ -97,6 +103,9 @@ async function loadActor(userId: string) {
 }
 
 function extractOutputText(response: OpenAiResponse) {
+  if (response.choices?.[0]?.message?.content) {
+    return response.choices[0].message.content;
+  }
   if (response.output_text) return response.output_text;
 
   const parts: string[] = [];
