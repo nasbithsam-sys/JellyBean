@@ -1149,7 +1149,22 @@ function Inner() {
     }
   }
 
-  const [isAutoChecking, setIsAutoChecking] = useState(false);
+  const [isAutoChecking, setIsAutoChecking] = useState(() => {
+    try {
+      return window.localStorage.getItem("raw_leads.auto_check") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("raw_leads.auto_check", isAutoChecking ? "true" : "false");
+    } catch {
+      // ignore
+    }
+  }, [isAutoChecking]);
+
   const isAutoCheckingRef = useRef(isAutoChecking);
   isAutoCheckingRef.current = isAutoChecking;
 
