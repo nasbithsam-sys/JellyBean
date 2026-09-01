@@ -66,3 +66,9 @@ export function toPktWallClockDate(input: Date | string | number): Date {
   const p = pktParts(d);
   return new Date(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
 }
+
+/** Calculate next midnight in PKT (UTC Date of next 00:00:00 PKT). */
+export function pktNextMidnight(now: Date = new Date()): Date {
+  const p = pktParts(now);
+  return new Date(Date.UTC(p.year, p.month - 1, p.day + 1, -5, 0, 0));
+}

@@ -66,7 +66,7 @@ type OpenAiResponse = {
   }>;
   // Chat Completions shape
   choices?: Array<{
-    message?: { content?: string | null; refusal?: string | null };
+    message?: { content?: string | null; refusal?: string | null; role?: string };
     finish_reason?: string;
   }>;
   error?: {
@@ -102,6 +102,7 @@ async function loadActor(userId: string) {
   };
 }
 
+// Extracts completion text from OpenAI chat completions or legacy responses output
 function extractOutputText(response: OpenAiResponse) {
   // Chat Completions (what this function calls) returns choices[].message.content
   const choice = response.choices?.[0];
