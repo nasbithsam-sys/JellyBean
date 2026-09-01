@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { RouteSkeleton } from "@/components/route-skeleton";
 import { useServerFn } from "@tanstack/react-start";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "sonner";
@@ -1149,6 +1149,32 @@ function Inner() {
     }
   }
 
+  const [isAutoChecking, setIsAutoChecking] = useState(false);
+  const isAutoCheckingRef = useRef(isAutoChecking);
+  isAutoCheckingRef.current = isAutoChecking;
+
+  const aiTargetsRef = useRef(aiTargets);
+  aiTargetsRef.current = aiTargets;
+
+  const runAiLeadCheckRef = useRef(runAiLeadCheck);
+  runAiLeadCheckRef.current = runAiLeadCheck;
+
+  useEffect(() => {
+    if (!aiRunning && isAutoCheckingRef.current && !aiLockedByOther) {
+      if (aiTargetsRef.current.length > 0) {
+        const timer = setTimeout(() => {
+          if (isAutoCheckingRef.current) {
+            runAiLeadCheckRef.current();
+          }
+        }, 1000);
+        return () => clearTimeout(timer);
+      } else {
+        setIsAutoChecking(false);
+        toast.success("Auto-check complete! No more leads to process.");
+      }
+    }
+  }, [aiRunning, aiLockedByOther]);
+
   return (
     <div className="space-y-4">
       {/* Tabs + search bar */}
@@ -1394,10 +1420,12 @@ function Inner() {
             Drafts
             {hasDraftLeads && (
               <span
-                className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background"
-                aria-label="Draft contains leads"
-                title="Draft contains leads"
-              />
+                className="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white ring-2 ring-background"
+                aria-label={`${draftCountQuery.data} draft leads`}
+                title={`${draftCountQuery.data} draft leads`}
+              >
+                {draftCountQuery.data}
+              </span>
             )}
           </Button>
 
@@ -1490,25 +1518,49 @@ function Inner() {
               </div>
             </div>
 
-            <Button
-              className="h-14 lg:w-[210px]"
-              onClick={runAiLeadCheck}
-              disabled={aiRunning || aiLockedByOther || aiTargets.length === 0}
-              title={
-                aiLockedByOther
-                  ? `AI is busy — ${aiLock?.user_name ?? "another user"} is processing leads`
-                  : `Analyze the next ${aiTargets.length} visible raw lead${aiTargets.length === 1 ? "" : "s"} with post text`
-              }
-            >
-              {aiRunning || aiLockedByOther ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4 mr-2" />
-              )}
-              {aiLockedByOther
-                ? "AI busy…"
-                : `Check ${aiTargets.length || 50} Lead${aiTargets.length === 1 ? "" : "s"}`}
-            </Button>
+            <div className="flex flex-col gap-2 shrink-0">
+              <Button
+                className="h-14 lg:w-[210px]"
+                onClick={() => {
+                  if (isAutoChecking) {
+                    setIsAutoChecking(false);
+                  } else {
+                    runAiLeadCheck();
+                  }
+                }}
+                disabled={(aiRunning && !isAutoChecking) || aiLockedByOther || (aiTargets.length === 0 && !isAutoChecking)}
+                title={
+                  aiLockedByOther
+                    ? `AI is busy — ${aiLock?.user_name ?? "another user"} is processing leads`
+                    : `Analyze the next ${aiTargets.length} visible raw lead${aiTargets.length === 1 ? "" : "s"} with post text`
+                }
+              >
+                {aiRunning || aiLockedByOther ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                {aiLockedByOther
+                  ? "AI busy…"
+                  : isAutoChecking
+                    ? "Stop Auto-check"
+                    : `Check ${aiTargets.length || 50} Lead${aiTargets.length === 1 ? "" : "s"}`}
+              </Button>
+              <div className="flex items-center gap-2 px-1">
+                <Checkbox
+                  id="auto-check-ai"
+                  checked={isAutoChecking}
+                  onCheckedChange={(c) => setIsAutoChecking(!!c)}
+                  disabled={aiRunning || aiLockedByOther}
+                />
+                <label
+                  htmlFor="auto-check-ai"
+                  className="text-xs text-muted-foreground cursor-pointer select-none font-medium"
+                >
+                  Auto-continue next batches
+                </label>
+              </div>
+            </div>
           </div>
           {aiLockedByOther && (
             <div className="text-[11.5px] text-muted-foreground">

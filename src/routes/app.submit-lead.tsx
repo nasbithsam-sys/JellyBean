@@ -250,10 +250,12 @@ function Dashboard() {
               Drafts
               {hasDraftLeads && (
                 <span
-                  className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background"
-                  aria-label="Draft contains leads"
-                  title="Draft contains leads"
-                />
+                  className="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white ring-2 ring-background"
+                  aria-label={`${draftCountQuery.data} draft leads`}
+                  title={`${draftCountQuery.data} draft leads`}
+                >
+                  {draftCountQuery.data}
+                </span>
               )}
             </Button>
             <Dialog open={open} onOpenChange={(newOpen) => {
