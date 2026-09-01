@@ -246,7 +246,14 @@ async function classifyWithOpenAi({
     throw new Error(body.error?.message ?? `OpenAI request failed (${response.status})`);
   }
 
-  return extractOutputText(body);
+  const text = extractOutputText(body);
+  if (!text) {
+    throw new Error(
+      `OpenAI returned an empty response (finish_reason: ${body.choices?.[0]?.finish_reason ?? "unknown"})`,
+    );
+  }
+  return text;
+
 }
 
 async function classifyBatch({
