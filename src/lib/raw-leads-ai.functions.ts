@@ -103,6 +103,15 @@ async function loadActor(userId: string) {
 }
 
 function extractOutputText(response: OpenAiResponse) {
+  // Chat Completions (what this function calls) returns choices[].message.content
+  const choice = response.choices?.[0];
+  if (choice?.message?.refusal) {
+    throw new Error(`OpenAI refused the request: ${choice.message.refusal}`);
+  }
+  const chatText = choice?.message?.content?.trim();
+  if (chatText) return chatText;
+
+  // Responses API fallback
   if (response.output_text) return response.output_text;
 
   const parts: string[] = [];
@@ -113,6 +122,7 @@ function extractOutputText(response: OpenAiResponse) {
   }
   return parts.join("\n").trim();
 }
+
 
 function trimForAi(value: string) {
   const trimmed = value.trim();
