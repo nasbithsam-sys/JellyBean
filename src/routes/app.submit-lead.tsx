@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { autoRephraseLeadWithAi } from "@/lib/raw-leads-ai.functions";
 import { toast } from "sonner";
@@ -45,7 +45,7 @@ import {
 import { SignedLeadImage } from "@/lib/lead-attachments";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { toPktWallClockDate } from "@/lib/timezone";
+import { toPktWallClockDate, pktNextMidnight } from "@/lib/timezone";
 import type { DateRange } from "react-day-picker";
 import { formatPhone } from "@/lib/crm-lite";
 const DraftsDialog = lazy(() =>
@@ -84,17 +84,80 @@ type LeadRow = {
 function Dashboard() {
   const auth = useAuth();
   const role = auth.primaryRole ?? "submitter";
+  const isFacebook = role === "facebook";
+
+  const getToday = () => (isFacebook ? toPktWallClockDate(new Date()) : new Date());
+
   const [open, setOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [draftsOpen, setDraftsOpen] = useState(false);
   const [activeDraft, setActiveDraft] = useState<LeadDraft | null>(null);
   const [range, setRange] = useState<DateRange | undefined>(() => {
-    const today = toPktWallClockDate(new Date());
+    const today = getToday();
     return {
       from: subDays(today, 29),
       to: today,
     };
   });
+
+  // Strict PKT live auto-sync exclusively for the Facebook role:
+  // Automatically advance date range when midnight rolls over in Pakistan (00:00 PKT)
+  // and when the browser tab becomes visible/focused.
+  useEffect(() => {
+    if (!isFacebook) return;
+
+    const syncPktDate = () => {
+      const currentPktToday = toPktWallClockDate(new Date());
+      setRange((prev) => {
+        if (!prev?.to) return prev;
+        const prevToKey = format(prev.to, "yyyy-MM-dd");
+        const currentTodayKey = format(currentPktToday, "yyyy-MM-dd");
+        if (prevToKey !== currentTodayKey) {
+          const diffDays = Math.max(
+            1,
+            prev.from
+              ? Math.round((prev.to.getTime() - prev.from.getTime()) / (1000 * 60 * 60 * 24))
+              : 29,
+          );
+          return {
+            from: subDays(currentPktToday, diffDays),
+            to: currentPktToday,
+          };
+        }
+        return prev;
+      });
+    };
+
+    // Run sync on mount/focus to immediately correct any stale date if tab stayed open
+    syncPktDate();
+
+    let timer: NodeJS.Timeout;
+    const scheduleMidnight = () => {
+      const nextMid = pktNextMidnight();
+      const delay = Math.max(1000, nextMid.getTime() - Date.now() + 500);
+      timer = setTimeout(() => {
+        syncPktDate();
+        scheduleMidnight();
+      }, delay);
+    };
+
+    scheduleMidnight();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        syncPktDate();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleVisibility);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleVisibility);
+    };
+  }, [isFacebook]);
 
   const draftCountQuery = useQuery({
     queryKey: ["lead-drafts-count", auth.user?.id, "manual_lead"],
@@ -104,8 +167,6 @@ function Dashboard() {
     refetchOnWindowFocus: false,
   });
   const hasDraftLeads = (draftCountQuery.data ?? 0) > 0;
-
-
 
   const all = useQuery({
     queryKey: ["my-submitted-leads", auth.user?.id],
@@ -127,7 +188,7 @@ function Dashboard() {
   const leads = useMemo(() => all.data ?? [], [all.data]);
 
   const stats = useMemo(() => {
-    const now = toPktWallClockDate(new Date());
+    const now = isFacebook ? toPktWallClockDate(new Date()) : new Date();
     const todayStart = startOfDay(now);
     const weekStart = startOfWeek(now, { weekStartsOn: 1 });
     const monthStart = startOfMonth(now);
@@ -143,7 +204,7 @@ function Dashboard() {
     const rTo = range?.to ? endOfDay(range.to) : range?.from ? endOfDay(range.from) : null;
 
     for (const lead of leads) {
-      const d = toPktWallClockDate(lead.created_at);
+      const d = isFacebook ? toPktWallClockDate(lead.created_at) : new Date(lead.created_at);
       if (d >= todayStart) today++;
       if (d >= weekStart) week++;
       if (d >= monthStart) month++;
@@ -258,21 +319,21 @@ function Dashboard() {
               <QuickRange
                 label="7d"
                 onClick={() => {
-                  const today = toPktWallClockDate(new Date());
+                  const today = getToday();
                   setRange({ from: subDays(today, 6), to: today });
                 }}
               />
               <QuickRange
                 label="30d"
                 onClick={() => {
-                  const today = toPktWallClockDate(new Date());
+                  const today = getToday();
                   setRange({ from: subDays(today, 29), to: today });
                 }}
               />
               <QuickRange
                 label="90d"
                 onClick={() => {
-                  const today = toPktWallClockDate(new Date());
+                  const today = getToday();
                   setRange({ from: subDays(today, 89), to: today });
                 }}
               />
@@ -288,7 +349,7 @@ function Dashboard() {
                     mode="range"
                     selected={range}
                     onSelect={setRange}
-                    today={toPktWallClockDate(new Date())}
+                    today={isFacebook ? toPktWallClockDate(new Date()) : undefined}
                     numberOfMonths={2}
                     className={cn("p-3 pointer-events-auto")}
                   />
