@@ -64,10 +64,16 @@ type OpenAiResponse = {
       type?: string;
     }>;
   }>;
+  // Chat Completions shape
+  choices?: Array<{
+    message?: { content?: string | null; refusal?: string | null };
+    finish_reason?: string;
+  }>;
   error?: {
     message?: string;
   };
 };
+
 
 async function ensureRequesterCanAnalyze(userId: string) {
   const { data, error } = await supabaseAdmin
@@ -97,6 +103,15 @@ async function loadActor(userId: string) {
 }
 
 function extractOutputText(response: OpenAiResponse) {
+  // Chat Completions (what this function calls) returns choices[].message.content
+  const choice = response.choices?.[0];
+  if (choice?.message?.refusal) {
+    throw new Error(`OpenAI refused the request: ${choice.message.refusal}`);
+  }
+  const chatText = choice?.message?.content?.trim();
+  if (chatText) return chatText;
+
+  // Responses API fallback
   if (response.output_text) return response.output_text;
 
   const parts: string[] = [];
@@ -107,6 +122,7 @@ function extractOutputText(response: OpenAiResponse) {
   }
   return parts.join("\n").trim();
 }
+
 
 function trimForAi(value: string) {
   const trimmed = value.trim();
@@ -230,7 +246,14 @@ async function classifyWithOpenAi({
     throw new Error(body.error?.message ?? `OpenAI request failed (${response.status})`);
   }
 
-  return extractOutputText(body);
+  const text = extractOutputText(body);
+  if (!text) {
+    throw new Error(
+      `OpenAI returned an empty response (finish_reason: ${body.choices?.[0]?.finish_reason ?? "unknown"})`,
+    );
+  }
+  return text;
+
 }
 
 async function classifyBatch({
