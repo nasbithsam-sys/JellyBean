@@ -64,10 +64,16 @@ type OpenAiResponse = {
       type?: string;
     }>;
   }>;
+  // Chat Completions shape
+  choices?: Array<{
+    message?: { content?: string | null; refusal?: string | null };
+    finish_reason?: string;
+  }>;
   error?: {
     message?: string;
   };
 };
+
 
 async function ensureRequesterCanAnalyze(userId: string) {
   const { data, error } = await supabaseAdmin
