@@ -1522,13 +1522,13 @@ function Inner() {
               <Button
                 className="h-14 lg:w-[210px]"
                 onClick={() => {
-                  if (isAutoChecking) {
+                  if (aiRunning && isAutoChecking) {
                     setIsAutoChecking(false);
                   } else {
                     runAiLeadCheck();
                   }
                 }}
-                disabled={(aiRunning && !isAutoChecking) || aiLockedByOther || (aiTargets.length === 0 && !isAutoChecking)}
+                disabled={(aiRunning && !isAutoChecking) || aiLockedByOther || (aiTargets.length === 0 && !aiRunning)}
                 title={
                   aiLockedByOther
                     ? `AI is busy — ${aiLock?.user_name ?? "another user"} is processing leads`
@@ -1542,9 +1542,11 @@ function Inner() {
                 )}
                 {aiLockedByOther
                   ? "AI busy…"
-                  : isAutoChecking
+                  : (aiRunning && isAutoChecking)
                     ? "Stop Auto-check"
-                    : `Check ${aiTargets.length || 50} Lead${aiTargets.length === 1 ? "" : "s"}`}
+                    : isAutoChecking
+                      ? `Start Auto-check (${aiTargets.length || 50})`
+                      : `Check ${aiTargets.length || 50} Lead${aiTargets.length === 1 ? "" : "s"}`}
               </Button>
               <div className="flex items-center gap-2 px-1">
                 <Checkbox
