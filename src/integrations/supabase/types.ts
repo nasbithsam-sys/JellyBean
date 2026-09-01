@@ -167,9 +167,9 @@ export type Database = {
           customer_name: string | null
           customer_phone: string | null
           id: string
+          last_customer_unread_at: string | null
           last_message: string | null
           last_message_at: string | null
-          last_customer_unread_at: string | null
           metadata: Json | null
           status: string | null
           unread_count: number | null
@@ -184,9 +184,9 @@ export type Database = {
           customer_name?: string | null
           customer_phone?: string | null
           id?: string
+          last_customer_unread_at?: string | null
           last_message?: string | null
           last_message_at?: string | null
-          last_customer_unread_at?: string | null
           metadata?: Json | null
           status?: string | null
           unread_count?: number | null
@@ -201,9 +201,9 @@ export type Database = {
           customer_name?: string | null
           customer_phone?: string | null
           id?: string
+          last_customer_unread_at?: string | null
           last_message?: string | null
           last_message_at?: string | null
-          last_customer_unread_at?: string | null
           metadata?: Json | null
           status?: string | null
           unread_count?: number | null
@@ -1057,10 +1057,6 @@ export type Database = {
         Args: { _assigned_to: string; _category_key: string; _delta: number }
         Returns: undefined
       }
-      batch_update_raw_lead_decisions: {
-        Args: { decisions: Json }
-        Returns: number
-      }
       admin_ensure_access_code: { Args: { _user_id: string }; Returns: string }
       admin_list_access_codes: {
         Args: never
@@ -1074,6 +1070,10 @@ export type Database = {
       admin_regenerate_access_code: {
         Args: { _user_id: string }
         Returns: string
+      }
+      batch_update_raw_lead_decisions: {
+        Args: { decisions: Json }
+        Returns: number
       }
       check_qualified_lead_phone_duplicates: {
         Args: { _phone_digits: string; _since: string }
@@ -1111,41 +1111,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      get_crisp_conversations_page: {
-        Args: {
-          p_limit?: number
-          p_offset?: number
-          p_search?: string
-          p_website_ids: string[]
-        }
-        Returns: {
-          created_at: string
-          crisp_session_id: string
-          crisp_website_id: string
-          customer_avatar: string | null
-          customer_email: string | null
-          customer_name: string | null
-          customer_phone: string | null
-          id: string
-          last_customer_unread_at: string | null
-          last_message: string | null
-          last_message_at: string | null
-          metadata: Json
-          status: string | null
-          unread_count: number
-          updated_at: string
-        }[]
-      }
-      get_crisp_workspace_summaries: {
-        Args: never
-        Returns: {
-          crisp_website_id: string
-          has_unread: boolean
-          latest_unread_at: string | null
-          total_chat_count: number
-          unreplied_chat_count: number
-        }[]
-      }
       cs_leads_status_counts: { Args: never; Returns: Json }
       cs_user_assignment_totals: {
         Args: { _from?: string; _to?: string }
@@ -1180,6 +1145,48 @@ export type Database = {
           wrong_count: number
         }[]
       }
+      get_crisp_conversations_page: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_website_ids: string[]
+        }
+        Returns: {
+          created_at: string
+          crisp_session_id: string
+          crisp_website_id: string
+          customer_avatar: string
+          customer_email: string
+          customer_name: string
+          customer_phone: string
+          id: string
+          last_customer_unread_at: string
+          last_message: string
+          last_message_at: string
+          metadata: Json
+          status: string
+          unread_count: number
+          updated_at: string
+        }[]
+      }
+      get_crisp_today_visitors_summary: {
+        Args: { p_today_start: string }
+        Returns: {
+          crisp_website_id: string
+          today_visitor_count: number
+        }[]
+      }
+      get_crisp_workspace_summaries: {
+        Args: never
+        Returns: {
+          crisp_website_id: string
+          has_unread: boolean
+          latest_unread_at: string
+          total_chat_count: number
+          unreplied_chat_count: number
+        }[]
+      }
       get_raw_lead_duplicate_match_preview: {
         Args: { _current_raw_lead_id: string }
         Returns: Json
@@ -1191,6 +1198,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_crisp_masked_content: { Args: { p_content: string }; Returns: boolean }
       is_my_access_verified: { Args: never; Returns: boolean }
       list_service_assignments: {
         Args: never
@@ -1651,13 +1659,13 @@ export const Constants = {
         "undeliver",
         "wrong_number",
         "already_got_someone",
-        "already_received_before",
         "service_provider_himself",
         "need_follow_up",
         "wrong_lead",
         "wrong_service",
         "wrong_person",
         "small_service",
+        "already_received_before",
       ],
       raw_lead_cancel_reason: [
         "not_a_lead",
