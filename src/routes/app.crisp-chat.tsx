@@ -931,6 +931,26 @@ function CrispInboxInner() {
         toast.error(res.error || "Could not send message");
         setMessageInput(content);
       } else {
+        // Optimistically append message to UI instantly
+        setMessages((prev) => {
+          const tempMsg: MessageRecord = {
+            id: `temp_${Date.now()}`,
+            conversation_id: selectedConversationId,
+            crisp_website_id: activeConversation?.crisp_website_id || "",
+            crisp_session_id: activeConversation?.crisp_session_id || "",
+            crisp_message_id: `temp_${Date.now()}`,
+            sender_type: "operator",
+            direction: "outgoing",
+            content: content,
+            message_type: "text",
+            sent_at: res.sent_at || new Date().toISOString(),
+            raw_payload: {},
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          return [...prev, tempMsg];
+        });
+        
         // Clear needs-reply state locally and reload workspace counts
         setConversations((prev) =>
           prev.map((c) =>
@@ -946,7 +966,6 @@ function CrispInboxInner() {
           )
         );
         loadWorkspaceCounts();
-        await loadMessages(selectedConversationId);
         scrollToBottom("smooth");
       }
     } catch (err: any) {
