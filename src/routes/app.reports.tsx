@@ -91,6 +91,26 @@ const CS_LABELS: Record<string, string> = {
   need_follow_up: "Need follow-up",
 };
 
+const RAW_COLORS: Record<string, string> = {
+  new: "var(--color-chart-1, #3b82f6)",
+  forwarded: "var(--color-success, #10b981)",
+  not_found: "var(--color-warning, #f59e0b)",
+  wrong: "var(--color-destructive, #ef4444)",
+  duplicate: "#a855f7",
+};
+
+const CS_STATUS_COLORS: Record<string, string> = {
+  new: "#3b82f6",
+  converted: "#10b981",
+  need_follow_up: "#f59e0b",
+  undeliver: "#64748b",
+  wrong_number: "#ef4444",
+  wrong_lead: "#f43f5e",
+  already_got_someone: "#8b5cf6",
+  service_provider_himself: "#ec4899",
+  small_service: "#14b8a6",
+};
+
 function Page() {
   const auth = useAuth();
   return (
@@ -158,35 +178,6 @@ function Inner() {
       return c;
     },
   });
-  const byAccount = useQuery({
-    queryKey: ["report-leads-by-account", range.from, range.to],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("report_leads_by_account", {
-        _from: range.from ?? undefined,
-        _to: range.to ?? undefined,
-      });
-      if (error) throw error;
-      return (data ?? []) as Array<{
-        account: string;
-        yes_count: number;
-        no_count: number;
-        pending_count: number;
-        total_count: number;
-      }>;
-    },
-  });
-
-  const accountsCount = useQuery({
-    queryKey: ["report-accounts"],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("accounts")
-        .select("id", { count: "exact", head: true });
-      if (error) throw error;
-      return count ?? 0;
-    },
-  });
-
   const byMaturing = useQuery({
     queryKey: ["report-forwarded-by-maturing", range.from, range.to],
     queryFn: async () => {
@@ -221,6 +212,41 @@ function Inner() {
     },
   });
 
+  const [searchMaturing, setSearchMaturing] = useState("");
+  const [searchNotFound, setSearchNotFound] = useState("");
+
+  const rawTotal = useMemo(
+    () => Object.values(raw.data ?? {}).reduce((acc, v) => acc + v, 0),
+    [raw.data],
+  );
+
+  const csTotal = useMemo(
+    () => Object.values(cs.data ?? {}).reduce((acc, v) => acc + v, 0),
+    [cs.data],
+  );
+
+  const maturingRows = useMemo(() => {
+    const list = byMaturing.data ?? [];
+    if (!searchMaturing.trim()) return list;
+    const q = searchMaturing.toLowerCase();
+    return list.filter(
+      (r) =>
+        r.maturing_name.toLowerCase().includes(q) ||
+        (r.maturing_email && r.maturing_email.toLowerCase().includes(q)),
+    );
+  }, [byMaturing.data, searchMaturing]);
+
+  const notFoundRows = useMemo(() => {
+    const list = notFoundByUser.data ?? [];
+    if (!searchNotFound.trim()) return list;
+    const q = searchNotFound.toLowerCase();
+    return list.filter(
+      (r) =>
+        r.user_name.toLowerCase().includes(q) ||
+        (r.user_email && r.user_email.toLowerCase().includes(q)),
+    );
+  }, [notFoundByUser.data, searchNotFound]);
+
   function exportReport() {
     downloadCsv(
       "crm-report.csv",
@@ -236,307 +262,271 @@ function Inner() {
           CS_LABELS[label] ?? label.replace(/_/g, " "),
           value,
         ]),
-        ["Sources", "Total accounts", accountsCount.data ?? 0],
       ],
     );
   }
 
-  function exportByAccount() {
-    downloadCsv(
-      "leads-by-account.csv",
-      ["Account", "Yes", "No", "Pending", "Total", "Yes %"],
-      (byAccount.data ?? []).map((r) => [
-        r.account,
-        r.yes_count,
-        r.no_count,
-        r.pending_count,
-        r.total_count,
-        r.yes_count + r.no_count > 0
-          ? ((r.yes_count / (r.yes_count + r.no_count)) * 100).toFixed(1) + "%"
-          : "—",
-      ]),
-    );
-  }
-
-  const accountRows = byAccount.data ?? [];
-  const totals = accountRows.reduce(
-    (acc, r) => ({
-      yes: acc.yes + r.yes_count,
-      no: acc.no + r.no_count,
-      pending: acc.pending + r.pending_count,
-      total: acc.total + r.total_count,
-    }),
-    { yes: 0, no: 0, pending: 0, total: 0 },
-  );
-
   return (
     <div className="space-y-8">
+      {/* ─── Date Range Toolbar ─── */}
       <div className="crm-toolbar-panel">
-        <div className="flex flex-wrap items-center gap-2">
-        {(
-          [
-            ["all", "All time"],
-            ["today", "Today"],
-            ["yesterday", "Yesterday"],
-            ["7d", "Weekly"],
-            ["30d", "Monthly"],
-            ["custom", "Custom"],
-          ] as Array<[DatePreset, string]>
-        ).map(([key, label]) => (
-          <Button
-            key={key}
-            size="sm"
-            variant={preset === key ? "default" : "outline"}
-            className="h-8 px-2.5 text-xs"
-            onClick={() => setPreset(key)}
-          >
-            {label}
-          </Button>
-        ))}
-        {preset === "custom" && (
-          <>
-            <Input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="h-8 w-[140px] text-xs"
-            />
-            <Input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="h-8 w-[140px] text-xs"
-            />
-          </>
-        )}
-        {isAdmin && (
-          <Button size="sm" variant="outline" className="h-8 ml-auto" onClick={exportReport}>
-            <Download className="h-3.5 w-3.5 mr-1.5" />
-            Export counts
-          </Button>
-        )}
-        </div>
-      </div>
-      <Section title="Raw leads by status">
-        <Grid>
-          {Object.entries(raw.data ?? {}).map(([k, v]) => (
-            <Stat key={k} label={RAW_LABELS[k] ?? k.replace(/_/g, " ")} value={v} />
-          ))}
-        </Grid>
-      </Section>
-      <Section title="CS pipeline by status">
-        <Grid>
-          {Object.entries(cs.data ?? {}).map(([k, v]) => (
-            <Stat key={k} label={CS_LABELS[k] ?? k.replace(/_/g, " ")} value={v} />
-          ))}
-        </Grid>
-      </Section>
-      <Section title="Sources">
-        <Grid>
-          <Stat label="Total accounts" value={accountsCount.data ?? 0} />
-        </Grid>
-      </Section>
-      <Section title="Leads by account">
-        <div className="crm-surface-card overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b">
-            <div className="flex flex-wrap items-center gap-1">
-              {(
-                [
-                  ["all", "All time"],
-                  ["today", "Today"],
-                  ["yesterday", "Yesterday"],
-                  ["7d", "Weekly"],
-                  ["30d", "Monthly"],
-                  ["custom", "Custom"],
-                ] as Array<[DatePreset, string]>
-              ).map(([key, label]) => (
-                <Button
-                  key={key}
-                  size="sm"
-                  variant={preset === key ? "default" : "outline"}
-                  className="h-7 px-2.5 text-xs"
-                  onClick={() => setPreset(key)}
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                ["all", "All time"],
+                ["today", "Today"],
+                ["yesterday", "Yesterday"],
+                ["7d", "Weekly"],
+                ["30d", "Monthly"],
+                ["custom", "Custom"],
+              ] as Array<[DatePreset, string]>
+            ).map(([key, label]) => (
+              <Button
+                key={key}
+                size="sm"
+                variant={preset === key ? "default" : "outline"}
+                className={cn(
+                  "h-8 px-3 text-xs transition-all",
+                  preset === key && "font-semibold shadow-xs",
+                )}
+                onClick={() => setPreset(key)}
+              >
+                {label}
+              </Button>
+            ))}
+
             {preset === "custom" && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 ml-1">
                 <Input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="h-7 w-[140px] text-xs"
+                  className="h-8 w-[140px] text-xs"
                 />
                 <span className="text-xs text-muted-foreground">→</span>
                 <Input
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="h-7 w-[140px] text-xs"
+                  className="h-8 w-[140px] text-xs"
                 />
               </div>
             )}
-            <div className="text-xs text-muted-foreground ml-auto flex items-center gap-3">
-              <span>
-                {accountRows.length} accounts · {totals.total} total ·{" "}
-                <span className="text-emerald-600 font-medium">{totals.yes} yes</span> /{" "}
-                <span className="text-red-600 font-medium">{totals.no} no</span> · {totals.pending}{" "}
-                pending
-              </span>
-              {isAdmin && (
-                <Button size="sm" variant="outline" onClick={exportByAccount}>
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
-                  Export CSV
-                </Button>
+          </div>
+
+          {isAdmin && (
+            <Button size="sm" variant="outline" className="h-8" onClick={exportReport}>
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export counts
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Raw Leads by Status ─── */}
+      <Section
+        title="Raw leads by status"
+        subtitle={`Captured leads pipeline distribution (${rawTotal.toLocaleString()} total)`}
+      >
+        <Grid>
+          {RAW_STATUSES.map((k) => (
+            <StatCard
+              key={k}
+              label={RAW_LABELS[k] ?? k.replace(/_/g, " ")}
+              value={raw.data?.[k] ?? 0}
+              total={rawTotal}
+              color={RAW_COLORS[k]}
+            />
+          ))}
+        </Grid>
+      </Section>
+
+      {/* ─── CS Pipeline by Status ─── */}
+      <Section
+        title="CS pipeline by status"
+        subtitle={`Qualified leads across customer service stages (${csTotal.toLocaleString()} total)`}
+      >
+        <Grid>
+          {CS_STATUSES.map((k) => (
+            <StatCard
+              key={k}
+              label={CS_LABELS[k] ?? k.replace(/_/g, " ")}
+              value={cs.data?.[k] ?? 0}
+              total={csTotal}
+              color={CS_STATUS_COLORS[k]}
+            />
+          ))}
+        </Grid>
+      </Section>
+
+      {/* ─── Leads Forwarded Per Maturing ─── */}
+      <Section
+        title="Leads forwarded per maturing"
+        subtitle="Qualified leads assigned in selected range"
+        badge={`${maturingRows.length} member${maturingRows.length === 1 ? "" : "s"}`}
+      >
+        <div className="crm-surface-card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b bg-muted/20">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={searchMaturing}
+                onChange={(e) => setSearchMaturing(e.target.value)}
+                placeholder="Search maturing member..."
+                className="h-8 pl-8 pr-7 text-xs bg-background"
+              />
+              {searchMaturing && (
+                <button
+                  type="button"
+                  onClick={() => setSearchMaturing("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Total forwarded:{" "}
+              <span className="font-semibold text-foreground tabular-nums">
+                {maturingRows.reduce((acc, r) => acc + r.forwarded_count, 0).toLocaleString()}
+              </span>
             </div>
           </div>
 
-          <div className="max-h-[560px] overflow-auto">
+          <div className="max-h-[420px] overflow-auto">
             <table className="crm-data-table">
               <thead className="bg-muted/40 sticky top-0">
                 <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-2 font-medium">Account</th>
-                  <th className="px-4 py-2 font-medium text-right">Yes</th>
-                  <th className="px-4 py-2 font-medium text-right">No</th>
-                  <th className="px-4 py-2 font-medium text-right">Pending</th>
-                  <th className="px-4 py-2 font-medium text-right">Total</th>
-                  <th className="px-4 py-2 font-medium text-right">Yes %</th>
+                  <th className="px-4 py-2.5 font-medium">Maturing Member</th>
+                  <th className="px-4 py-2.5 font-medium">Email</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Forwarded Leads</th>
                 </tr>
               </thead>
               <tbody>
-                {byAccount.isLoading && (
+                {byMaturing.isLoading && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                      Loading…
+                    <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin inline mr-2 text-primary" />
+                      Loading maturing data…
                     </td>
                   </tr>
                 )}
-                {!byAccount.isLoading && accountRows.length === 0 && (
+                {!byMaturing.isLoading && maturingRows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                      No data yet.
+                    <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground text-xs">
+                      {searchMaturing ? "No matching maturing members found." : "No leads forwarded in this range."}
                     </td>
                   </tr>
                 )}
-                {accountRows.map((r) => {
-                  const decided = r.yes_count + r.no_count;
-                  const yesPct = decided > 0 ? (r.yes_count / decided) * 100 : null;
-                  return (
-                    <tr key={r.account} className="border-t hover:bg-muted/30">
-                      <td className="px-4 py-2 font-medium">{r.account}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-emerald-600">
-                        {r.yes_count}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-red-600">
-                        {r.no_count}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                        {r.pending_count}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums font-semibold">
-                        {r.total_count}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums">
-                        {yesPct === null ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          `${yesPct.toFixed(1)}%`
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {maturingRows.map((r, i) => (
+                  <tr key={r.maturing_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-2.5 font-medium">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                          {getInitials(r.maturing_name)}
+                        </div>
+                        <span className="truncate">{r.maturing_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                      {r.maturing_email ?? "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary">
+                        {r.forwarded_count.toLocaleString()}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       </Section>
 
-      <Section title="Leads forwarded per maturing">
+      {/* ─── Number-Not-Found Checks Per User ─── */}
+      <Section
+        title="Number-not-found checks per user"
+        subtitle="Raw leads marked as Number not found in range"
+        badge={`${notFoundRows.length} user${notFoundRows.length === 1 ? "" : "s"}`}
+      >
         <div className="crm-surface-card overflow-hidden">
-          <div className="px-4 py-3 border-b text-xs text-muted-foreground">
-            Uses the same range controls above: Today, Yesterday, Weekly, Monthly, or Custom.
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b bg-muted/20">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={searchNotFound}
+                onChange={(e) => setSearchNotFound(e.target.value)}
+                placeholder="Search user..."
+                className="h-8 pl-8 pr-7 text-xs bg-background"
+              />
+              {searchNotFound && (
+                <button
+                  type="button"
+                  onClick={() => setSearchNotFound("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Total marked not found:{" "}
+              <span className="font-semibold text-foreground tabular-nums">
+                {notFoundRows.reduce((acc, r) => acc + r.not_found_count, 0).toLocaleString()}
+              </span>
+            </div>
           </div>
-          <table className="crm-data-table">
-            <thead className="bg-muted/40">
-              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2 font-medium">Maturing</th>
-                <th className="px-4 py-2 font-medium">Email</th>
-                <th className="px-4 py-2 font-medium text-right">Forwarded</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byMaturing.isLoading && (
-                <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
-                    Loading…
-                  </td>
-                </tr>
-              )}
-              {!byMaturing.isLoading && (byMaturing.data ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
-                    No leads forwarded in this range.
-                  </td>
-                </tr>
-              )}
-              {(byMaturing.data ?? []).map((r, i) => (
-                <tr key={r.maturing_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30">
-                  <td className="px-4 py-2 font-medium">{r.maturing_name}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{r.maturing_email ?? "—"}</td>
-                  <td className="px-4 py-2 text-right tabular-nums font-semibold">
-                    {r.forwarded_count}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Section>
 
-      <Section title="Number-not-found checks per user">
-        <div className="crm-surface-card overflow-hidden">
-          <div className="px-4 py-3 border-b text-xs text-muted-foreground">
-            Counts raw leads marked as “Number not found”. Uses the same date range as above. Only
-            marks made after this report was added are attributed to a user.
+          <div className="max-h-[420px] overflow-auto">
+            <table className="crm-data-table">
+              <thead className="bg-muted/40 sticky top-0">
+                <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium">User</th>
+                  <th className="px-4 py-2.5 font-medium">Email</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Marked Not Found</th>
+                </tr>
+              </thead>
+              <tbody>
+                {notFoundByUser.isLoading && (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin inline mr-2 text-primary" />
+                      Loading user checks…
+                    </td>
+                  </tr>
+                )}
+                {!notFoundByUser.isLoading && notFoundRows.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground text-xs">
+                      {searchNotFound ? "No matching users found." : "No Number not found marks in this range."}
+                    </td>
+                  </tr>
+                )}
+                {notFoundRows.map((r, i) => (
+                  <tr key={r.user_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-2.5 font-medium">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center text-xs font-bold shrink-0">
+                          {getInitials(r.user_name)}
+                        </div>
+                        <span className="truncate">{r.user_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                      {r.user_email ?? "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-500">
+                        {r.not_found_count.toLocaleString()}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <table className="crm-data-table">
-            <thead className="bg-muted/40">
-              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2 font-medium">User</th>
-                <th className="px-4 py-2 font-medium">Email</th>
-                <th className="px-4 py-2 font-medium text-right">Marked not found</th>
-              </tr>
-            </thead>
-            <tbody>
-              {notFoundByUser.isLoading && (
-                <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
-                    Loading…
-                  </td>
-                </tr>
-              )}
-              {!notFoundByUser.isLoading && (notFoundByUser.data ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
-                    No “Number not found” marks in this range.
-                  </td>
-                </tr>
-              )}
-              {(notFoundByUser.data ?? []).map((r, i) => (
-                <tr key={r.user_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30">
-                  <td className="px-4 py-2 font-medium">{r.user_name}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{r.user_email ?? "—"}</td>
-                  <td className="px-4 py-2 text-right tabular-nums font-semibold">
-                    {r.not_found_count}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       </Section>
 
@@ -546,24 +536,92 @@ function Inner() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  subtitle,
+  badge,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="crm-section-panel">
-      <h2 className="crm-section-title mb-3">{title}</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+        <div>
+          <h2 className="crm-section-title">{title}</h2>
+          {subtitle && <p className="crm-card-label mt-0.5">{subtitle}</p>}
+        </div>
+        {badge && (
+          <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground">
+            {badge}
+          </span>
+        )}
+      </div>
       {children}
     </div>
   );
 }
+
 function Grid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">{children}</div>;
 }
-function Stat({ label, value }: { label: string; value: number }) {
+
+function StatCard({
+  label,
+  value,
+  total,
+  color,
+}: {
+  label: string;
+  value: number;
+  total?: number;
+  color?: string;
+}) {
+  const pct = total && total > 0 ? ((value / total) * 100).toFixed(1) : null;
   return (
-    <div className="crm-surface-card p-4">
-      <div className="crm-card-label capitalize">{label}</div>
-      <div className="crm-card-value mt-1">{value}</div>
+    <div className="crm-surface-card p-4 hover:border-primary/40 transition-colors flex flex-col justify-between">
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground truncate">{label}</span>
+          {color && (
+            <span
+              className="h-2 w-2 rounded-full shrink-0"
+              style={{ backgroundColor: color }}
+            />
+          )}
+        </div>
+        <div className="text-2xl font-bold tabular-nums text-foreground mt-2">
+          {value.toLocaleString()}
+        </div>
+      </div>
+      {pct !== null && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+            <span>Share</span>
+            <span className="tabular-nums font-medium">{pct}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${pct}%`,
+                backgroundColor: color ?? "var(--color-primary)",
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return (name.slice(0, 2) || "??").toUpperCase();
 }
 
 // ─── Per-Person Leads by Service Report ───────────────────────────────────────

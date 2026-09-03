@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { addDays, differenceInCalendarDays, format, subDays, startOfDay } from "date-fns";
 import {
   ResponsiveContainer,
+  AreaChart,
   Area,
   XAxis,
   YAxis,
@@ -19,8 +20,9 @@ import {
   ComposedChart,
   Line,
   LabelList,
+  ReferenceLine,
 } from "recharts";
-import { AlertCircle, ArrowDownRight, ArrowUpRight, Loader2, Minus } from "lucide-react";
+import { AlertCircle, ArrowDownRight, ArrowUpRight, Filter, Loader2, Minus } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -165,7 +167,7 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
   const analytics = useQuery({
     queryKey: ["analytics-v2", range.since, range.until],
     queryFn: async () => {
-      const [series, prevSeries, csResults, accountsRes, forwardersRes, notFoundRes] =
+      const [series, prevSeries, csResults, forwardersRes] =
         await Promise.all([
           fetchDailySeries(range.since, range.until, range.start, range.end),
           fetchDailySeries(range.prevSince, range.prevUntil, range.prevStart, range.start),
@@ -179,15 +181,8 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
                 .lt("assigned_at", range.until),
             ),
           ),
-          supabase.rpc("report_leads_by_account", { _from: range.since, _to: range.until }),
           isAdmin
             ? supabase.rpc("report_leads_forwarded_by_maturing", {
-              _from: range.since,
-              _to: range.until,
-            })
-            : Promise.resolve({ data: [], error: null }),
-          isAdmin
-            ? supabase.rpc("report_not_found_by_user", {
               _from: range.since,
               _to: range.until,
             })
@@ -207,13 +202,9 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
         .sort((a, b) => b.count - a.count);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const accounts = (accountsRes.data ?? []) as any[];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const forwarders = (forwardersRes.data ?? []) as any[];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const notFound = (notFoundRes.data ?? []) as any[];
 
-      return { series, prevSeries, csBuckets, accounts, forwarders, notFound };
+      return { series, prevSeries, csBuckets, forwarders };
     },
     staleTime: 5 * 60_000,
     placeholderData: keepPreviousData,
@@ -222,9 +213,7 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
   const series = analytics.data?.series ?? [];
   const prevSeries = analytics.data?.prevSeries ?? [];
   const csBuckets = analytics.data?.csBuckets ?? [];
-  const accounts = analytics.data?.accounts ?? [];
   const forwarders = analytics.data?.forwarders ?? [];
-  const notFound = analytics.data?.notFound ?? [];
 
   const totals = useMemo(() => {
     const t = { captured: 0, forwarded: 0, sentToCS: 0, wrong: 0 };
@@ -448,84 +437,26 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
         </Card>
       </div>
 
-      {/* Top accounts + Sent to CS by day */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card title="Top accounts" subtitle="By total leads in range">
-          {accounts.length === 0 ? (
-            <EmptyState label="No account data in this range" />
-          ) : (
-            <ul className="space-y-2">
-              {accounts.slice(0, 8).map((a) => {
-                const total = Number(a.total_count);
-                const yes = Number(a.yes_count);
-                const pct = total ? (yes / total) * 100 : 0;
-                const max = Number(accounts[0].total_count) || 1;
-                return (
-                  <li key={a.account} className="space-y-1">
-                    <div className="flex items-baseline justify-between text-[12px]">
-                      <span className="font-medium tracking-tight truncate max-w-[60%]">{a.account}</span>
-                      <span className="tabular-nums text-muted-foreground">
-                        {total} <span className="opacity-60">· {pct.toFixed(0)}% yes</span>
-                      </span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted/40 overflow-hidden flex">
-                      <div className="h-full bg-success/80" style={{ width: `${(yes / max) * 100}%` }} />
-                      <div className="h-full bg-primary/50" style={{ width: `${((total - yes) / max) * 100}%` }} />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
+      {/* ─── Sent to CS Pipeline Analysis (with interactive time & source filters) ─── */}
+      <SentToCsSection
+        series={series}
+        prevSeries={prevSeries}
+        since={range.since}
+        until={range.until}
+      />
 
-        <Card title="Sent to CS" subtitle="Handoffs per day">
-          <div className="h-64">
-            <ResponsiveContainer>
-              <BarChart data={series} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} interval={Math.max(0, Math.floor(series.length / 8))} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="sentToCS" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+      {/* ─── Team Leaderboards (Admin) ─── */}
+      {isAdmin && forwarders.length > 0 && (
+        <Card title="Top forwarders" subtitle="Qualified leads forwarded by maturing in this range">
+          <Leaderboard
+            rows={forwarders.map((r) => ({
+              label: r.maturing_name ?? "(unknown)",
+              sub: r.maturing_email,
+              value: Number(r.forwarded_count),
+            }))}
+            accent="var(--color-primary)"
+          />
         </Card>
-      </div>
-
-      {/* Team leaderboards (admin) */}
-      {isAdmin && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <Card title="Top forwarders" subtitle="Qualified leads assigned">
-            {forwarders.length === 0 ? (
-              <EmptyState label="No forwarding activity in this range" />
-            ) : (
-              <Leaderboard
-                rows={forwarders.map((r) => ({
-                  label: r.maturing_name ?? "(unknown)",
-                  sub: r.maturing_email,
-                  value: Number(r.forwarded_count),
-                }))}
-                accent="var(--color-primary)"
-              />
-            )}
-          </Card>
-          <Card title="Not-found by user" subtitle="Marked as not_found in range">
-            {notFound.length === 0 ? (
-              <EmptyState label="No not-found activity in this range" />
-            ) : (
-              <Leaderboard
-                rows={notFound.map((r) => ({
-                  label: r.user_name ?? "(unknown)",
-                  sub: r.user_email,
-                  value: Number(r.not_found_count),
-                }))}
-                accent="var(--color-warning)"
-              />
-            )}
-          </Card>
-        </div>
       )}
 
       {/* ─── Department Leads by Service ─── */}
@@ -647,6 +578,449 @@ function Card({
       </div>
       {children}
     </div>
+  );
+}
+
+type SentToCsGranularity = "daily" | "cumulative" | "day_of_week";
+type SentToCsChartType = "area" | "bar";
+
+function SentToCsSection({
+  series,
+  prevSeries,
+  since,
+  until,
+}: {
+  series: DailyRow[];
+  prevSeries: DailyRow[];
+  since: string;
+  until: string;
+}) {
+  const [granularity, setGranularity] = useState<SentToCsGranularity>("daily");
+  const [chartType, setChartType] = useState<SentToCsChartType>("area");
+  const [selectedDept, setSelectedDept] = useState<DeptKey | "all">("all");
+
+  // Fetch department breakdown for leads sent to CS in this date range
+  const deptLeadsQuery = useQuery({
+    queryKey: ["sent-to-cs-dept-breakdown", since, until],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("qualified_leads")
+        .select("assigned_at, submitted_by_role")
+        .gte("assigned_at", since)
+        .lt("assigned_at", until);
+      if (error) {
+        console.warn("Could not fetch sent-to-cs dept breakdown:", error);
+        return [];
+      }
+      return (data ?? []) as Array<{ assigned_at: string | null; submitted_by_role: string | null }>;
+    },
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+  });
+
+  const deptRows = deptLeadsQuery.data ?? [];
+
+  // Totals by department for pills
+  const deptCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: 0,
+      maturing: 0,
+      sub_admin: 0,
+      seo: 0,
+      facebook: 0,
+    };
+    for (const r of deptRows) {
+      counts.all += 1;
+      const role = r.submitted_by_role as DeptKey;
+      if (role && role in counts) {
+        counts[role] += 1;
+      }
+    }
+    return counts;
+  }, [deptRows]);
+
+  // Compute active daily series based on selected department
+  const filteredDailySeries = useMemo(() => {
+    if (selectedDept === "all") {
+      return series.map((d) => ({
+        day: d.day,
+        key: d.key,
+        count: d.sentToCS,
+      }));
+    }
+
+    // Filter by department
+    const map = new Map<string, number>();
+    for (const r of deptRows) {
+      if (r.submitted_by_role === selectedDept && r.assigned_at) {
+        const dayKey = r.assigned_at.slice(0, 10);
+        map.set(dayKey, (map.get(dayKey) ?? 0) + 1);
+      }
+    }
+
+    return series.map((d) => ({
+      day: d.day,
+      key: d.key,
+      count: map.get(d.key) ?? 0,
+    }));
+  }, [selectedDept, series, deptRows]);
+
+  // Compute metrics
+  const totalCount = useMemo(
+    () => filteredDailySeries.reduce((acc, d) => acc + d.count, 0),
+    [filteredDailySeries],
+  );
+
+  const prevTotalCount = useMemo(
+    () => prevSeries.reduce((acc, d) => acc + d.sentToCS, 0),
+    [prevSeries],
+  );
+
+  const daysCount = Math.max(1, filteredDailySeries.length);
+  const dailyAvg = Math.round((totalCount / daysCount) * 10) / 10;
+
+  const peakDay = useMemo(() => {
+    if (filteredDailySeries.length === 0) return { day: "—", count: 0 };
+    return filteredDailySeries.reduce(
+      (max, d) => (d.count > max.count ? d : max),
+      filteredDailySeries[0],
+    );
+  }, [filteredDailySeries]);
+
+  const pctChange =
+    prevTotalCount > 0
+      ? Math.round(((totalCount - prevTotalCount) / prevTotalCount) * 1000) / 10
+      : null;
+
+  // Compute cumulative series
+  const cumulativeSeries = useMemo(() => {
+    let running = 0;
+    return filteredDailySeries.map((d) => {
+      running += d.count;
+      return {
+        day: d.day,
+        key: d.key,
+        count: running,
+      };
+    });
+  }, [filteredDailySeries]);
+
+  // Compute day of week series (Mon - Sun)
+  const dayOfWeekSeries = useMemo(() => {
+    const daysName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const buckets: Record<string, { total: number; occurrences: number }> = {};
+    daysName.forEach((n) => {
+      buckets[n] = { total: 0, occurrences: 0 };
+    });
+
+    for (const d of filteredDailySeries) {
+      if (!d.key) continue;
+      const dateObj = new Date(d.key + "T12:00:00");
+      const name = daysName[dateObj.getDay()];
+      if (buckets[name]) {
+        buckets[name].total += d.count;
+        buckets[name].occurrences += 1;
+      }
+    }
+
+    const order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    return order.map((name) => {
+      const b = buckets[name];
+      const avg = b.occurrences > 0 ? Math.round((b.total / b.occurrences) * 10) / 10 : 0;
+      return {
+        day: name,
+        count: b.total,
+        avg,
+      };
+    });
+  }, [filteredDailySeries]);
+
+  // Selected chart data depending on granularity
+  const chartData = useMemo(() => {
+    if (granularity === "cumulative") return cumulativeSeries;
+    if (granularity === "day_of_week") return dayOfWeekSeries;
+    return filteredDailySeries;
+  }, [granularity, cumulativeSeries, dayOfWeekSeries, filteredDailySeries]);
+
+  const activeColor =
+    selectedDept === "all"
+      ? "var(--color-primary)"
+      : DEPARTMENTS.find((d) => d.key === selectedDept)?.color ?? "var(--color-primary)";
+
+  return (
+    <Card
+      title="Sent to CS Pipeline"
+      subtitle={`Track handoff volume and velocity to the CS pipeline over time (${totalCount.toLocaleString()} total)`}
+    >
+      {/* ─── Top KPI Metric Cards ─── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
+          <div className="text-[11px] font-medium text-muted-foreground">Total Sent to CS</div>
+          <div className="mt-1 text-xl font-bold tabular-nums text-foreground">
+            {totalCount.toLocaleString()}
+          </div>
+          {pctChange !== null && (
+            <div className="mt-0.5 flex items-center text-[10.5px] gap-0.5">
+              {pctChange >= 0 ? (
+                <span className="text-emerald-500 font-medium flex items-center">
+                  <ArrowUpRight className="h-3 w-3" />+{pctChange}%
+                </span>
+              ) : (
+                <span className="text-destructive font-medium flex items-center">
+                  <ArrowDownRight className="h-3 w-3" />{pctChange}%
+                </span>
+              )}
+              <span className="text-muted-foreground text-[10px]">vs prev</span>
+            </div>
+          )}
+        </div>
+
+        <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
+          <div className="text-[11px] font-medium text-muted-foreground">Daily Average</div>
+          <div className="mt-1 text-xl font-bold tabular-nums text-foreground">
+            {dailyAvg.toLocaleString()}
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-muted-foreground">leads / day</div>
+        </div>
+
+        <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
+          <div className="text-[11px] font-medium text-muted-foreground">Peak Day</div>
+          <div className="mt-1 text-xl font-bold tabular-nums text-foreground">
+            {peakDay.count.toLocaleString()}
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-muted-foreground truncate">{peakDay.day}</div>
+        </div>
+
+        <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
+          <div className="text-[11px] font-medium text-muted-foreground">Active Days</div>
+          <div className="mt-1 text-xl font-bold tabular-nums text-foreground">
+            {daysCount}
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-muted-foreground">in selected range</div>
+        </div>
+      </div>
+
+      {/* ─── Control Toolbar (Source + Granularity + Chart Style) ─── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-border/50">
+        {/* Source / Department Filter */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-muted-foreground font-medium mr-1 flex items-center gap-1">
+            <Filter className="h-3 w-3" /> Source:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedDept("all")}
+            className={cn(
+              "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+              selectedDept === "all"
+                ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                : "bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground",
+            )}
+          >
+            All Sources
+            {deptCounts.all > 0 && (
+              <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
+                ({deptCounts.all})
+              </span>
+            )}
+          </button>
+          {DEPARTMENTS.map((dept) => {
+            const isSelected = selectedDept === dept.key;
+            const count = deptCounts[dept.key] ?? 0;
+            return (
+              <button
+                key={dept.key}
+                type="button"
+                onClick={() => setSelectedDept(dept.key)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                  isSelected
+                    ? "shadow-xs font-semibold text-foreground ring-1"
+                    : "bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground",
+                )}
+                style={
+                  isSelected
+                    ? {
+                        backgroundColor: `${dept.color}25`,
+                        borderColor: dept.color,
+                      }
+                    : undefined
+                }
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: dept.color }} />
+                <span>{dept.label}</span>
+                {count > 0 && (
+                  <span className="opacity-80 text-[10px] tabular-nums">({count})</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Time Granularity & Chart Type Toggles */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Granularity */}
+          <div className="flex items-center rounded-lg bg-muted/60 p-0.5 border border-border/50 text-xs">
+            {(
+              [
+                ["daily", "Daily"],
+                ["cumulative", "Cumulative"],
+                ["day_of_week", "Day of Week"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setGranularity(key)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer",
+                  granularity === key
+                    ? "bg-card text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Chart Style (Area vs Bar) */}
+          <div className="flex items-center rounded-lg bg-muted/60 p-0.5 border border-border/50 text-xs">
+            <button
+              type="button"
+              onClick={() => setChartType("area")}
+              className={cn(
+                "px-2 py-1 rounded-md font-medium transition-colors cursor-pointer",
+                chartType === "area"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              title="Area Chart"
+            >
+              Area
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartType("bar")}
+              className={cn(
+                "px-2 py-1 rounded-md font-medium transition-colors cursor-pointer",
+                chartType === "bar"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              title="Bar Chart"
+            >
+              Bar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Main Chart ─── */}
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          {chartType === "area" ? (
+            <AreaChart data={chartData} margin={{ top: 15, right: 15, left: -20, bottom: 5 }}>
+              <defs>
+                <linearGradient id="sentToCsGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={activeColor} stopOpacity={0.4} />
+                  <stop offset="95%" stopColor={activeColor} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+                interval={granularity === "day_of_week" ? 0 : Math.max(0, Math.floor(chartData.length / 8))}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(val: any) => [
+                  `${Number(val).toLocaleString()} leads`,
+                  granularity === "cumulative"
+                    ? "Cumulative to CS"
+                    : granularity === "day_of_week"
+                      ? "Total on this day"
+                      : "Sent to CS",
+                ]}
+              />
+              {granularity === "daily" && dailyAvg > 0 && (
+                <ReferenceLine
+                  y={dailyAvg}
+                  stroke="var(--color-muted-foreground)"
+                  strokeDasharray="4 4"
+                  strokeOpacity={0.7}
+                  label={{
+                    value: `Avg ${dailyAvg}`,
+                    position: "top",
+                    fill: "var(--color-muted-foreground)",
+                    fontSize: 10,
+                  }}
+                />
+              )}
+              <Area
+                type="monotone"
+                dataKey="count"
+                stroke={activeColor}
+                strokeWidth={2.5}
+                fill="url(#sentToCsGradient)"
+              />
+            </AreaChart>
+          ) : (
+            <BarChart data={chartData} margin={{ top: 15, right: 15, left: -20, bottom: 5 }}>
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+                interval={granularity === "day_of_week" ? 0 : Math.max(0, Math.floor(chartData.length / 8))}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(val: any) => [
+                  `${Number(val).toLocaleString()} leads`,
+                  granularity === "cumulative"
+                    ? "Cumulative to CS"
+                    : granularity === "day_of_week"
+                      ? "Total on this day"
+                      : "Sent to CS",
+                ]}
+              />
+              {granularity === "daily" && dailyAvg > 0 && (
+                <ReferenceLine
+                  y={dailyAvg}
+                  stroke="var(--color-muted-foreground)"
+                  strokeDasharray="4 4"
+                  strokeOpacity={0.7}
+                  label={{
+                    value: `Avg ${dailyAvg}`,
+                    position: "top",
+                    fill: "var(--color-muted-foreground)",
+                    fontSize: 10,
+                  }}
+                />
+              )}
+              <Bar dataKey="count" fill={activeColor} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    </Card>
   );
 }
 
