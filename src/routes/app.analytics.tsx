@@ -18,6 +18,7 @@ import {
   Legend,
   ComposedChart,
   Line,
+  LabelList,
 } from "recharts";
 import { AlertCircle, ArrowDownRight, ArrowUpRight, Loader2, Minus } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -774,28 +775,32 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
       ) : servicesData.length === 0 ? (
         <EmptyState label={`No leads recorded for ${activeDeptConfig.label} in this date range`} />
       ) : (
-        /* SINGLE GRAPH FOR SELECTED DEPARTMENT */
-        <div className="h-80">
-          <ResponsiveContainer>
+        /* HORIZONTAL BAR CHART - Full service names on the left, never hidden at bottom */
+        <div
+          className="w-full"
+          style={{ height: Math.max(280, servicesData.length * 42 + 40) }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart
+              layout="vertical"
               data={servicesData}
-              margin={{ top: 10, right: 10, left: -20, bottom: 35 }}
+              margin={{ top: 10, right: 75, left: 10, bottom: 10 }}
             >
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" horizontal={false} />
               <XAxis
-                dataKey="service"
-                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                axisLine={false}
-                tickLine={false}
-                interval={0}
-                angle={-25}
-                textAnchor="end"
-              />
-              <YAxis
+                type="number"
                 tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                 axisLine={false}
                 tickLine={false}
                 allowDecimals={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="service"
+                width={160}
+                tick={{ fontSize: 12, fill: "var(--color-foreground)", fontWeight: 500 }}
+                axisLine={false}
+                tickLine={false}
               />
               <Tooltip
                 contentStyle={tooltipStyle}
@@ -808,8 +813,16 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
                 dataKey="count"
                 name={activeDeptConfig.label}
                 fill={activeDeptConfig.color}
-                radius={[4, 4, 0, 0]}
-              />
+                radius={[0, 6, 6, 0]}
+                barSize={20}
+              >
+                <LabelList
+                  dataKey="count"
+                  position="right"
+                  formatter={(val: any) => `${val} leads`}
+                  style={{ fontSize: 11, fill: "var(--color-muted-foreground)", fontWeight: 500 }}
+                />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
