@@ -2,6 +2,20 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+const CRISP_ROLES = ["admin", "cs_admin", "cs"];
+
+async function assertCrispAccess(supabase: any, userId: string) {
+  const { data: roleRows, error: roleErr } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  if (roleErr) throw new Error("Could not verify user roles");
+  const roles = (roleRows ?? []).map((r: { role: string }) => String(r.role));
+  if (!roles.some((r: string) => CRISP_ROLES.includes(r))) {
+    throw new Error("Forbidden: Crisp Chat is restricted to admin, cs_admin and cs roles.");
+  }
+}
+
 export const syncCrispHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input?: { websiteId?: string }) => {
@@ -10,33 +24,49 @@ export const syncCrispHistory = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    await assertCrispAccess(supabase, userId);
 
-    const { data: roleRows, error: roleErr } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    if (roleErr) throw new Error("Could not verify user roles");
-    const roles = (roleRows ?? []).map((r) => String(r.role));
-    if (!roles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
-      throw new Error("Forbidden: Crisp Chat is restricted to admin, cs_admin and cs roles.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { syncWorkspace } = await import("./crisp.server");
+
+    let query = supabaseAdmin
+      .from("crisp_workspaces")
+      .select("id, crisp_website_id, workspace_name, credential_secret_id, enabled")
+      .eq("enabled", true);
+    if (data.websiteId) query = query.eq("crisp_website_id", data.websiteId);
+
+    const { data: workspaces, error: wsErr } = await query;
+    if (wsErr) return { ok: false as const, error: `Could not load Crisp workspaces: ${wsErr.message}` };
+    if (!workspaces || workspaces.length === 0) {
+      return { ok: false as const, error: "No enabled Crisp workspace is configured yet." };
     }
 
-    const { data: resData, error: fnErr } = await supabase.functions.invoke("crisp-sync-history", {
-      body: { websiteId: data.websiteId },
-    });
+    let syncedConversations = 0;
+    let syncedMessages = 0;
+    const errors: string[] = [];
 
-    if (fnErr) {
-      return { ok: false as const, error: fnErr.message || "Failed to invoke sync history function" };
+    for (const ws of workspaces) {
+      try {
+        const res = await syncWorkspace(supabaseAdmin as never, ws as never, { maxPages: 3 });
+        syncedConversations += res.conversations;
+        syncedMessages += res.messages;
+        if (res.error) errors.push(`${ws.workspace_name || ws.crisp_website_id}: ${res.error}`);
+      } catch (err) {
+        errors.push(
+          `${ws.workspace_name || ws.crisp_website_id}: ${err instanceof Error ? err.message : "Sync failed"}`,
+        );
+      }
     }
 
-    if (resData?.error) {
-      return { ok: false as const, error: resData.error };
+    if (syncedConversations === 0 && errors.length > 0) {
+      return { ok: false as const, error: errors.join(" | ") };
     }
 
     return {
       ok: true as const,
-      synced_conversations: resData?.synced_conversations ?? 0,
-      synced_messages: resData?.synced_messages ?? 0,
+      synced_conversations: syncedConversations,
+      synced_messages: syncedMessages,
+      errors: errors.length > 0 ? errors : undefined,
     };
   });
 
@@ -50,34 +80,73 @@ export const sendCrispMessage = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    await assertCrispAccess(supabase, userId);
 
-    const { data: roleRows, error: roleErr } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    if (roleErr) throw new Error("Could not verify user roles");
-    const roles = (roleRows ?? []).map((r) => String(r.role));
-    if (!roles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
-      throw new Error("Forbidden: Crisp Chat is restricted to admin, cs_admin and cs roles.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getWorkspaceCreds, crispHeaders, crispErrorReason } = await import("./crisp.server");
+
+    const { data: conv } = await supabaseAdmin
+      .from("crisp_conversations")
+      .select("id, crisp_website_id, crisp_session_id")
+      .eq("id", data.conversationId)
+      .maybeSingle();
+    if (!conv) return { ok: false as const, error: "Conversation not found" };
+
+    const { data: ws } = await supabaseAdmin
+      .from("crisp_workspaces")
+      .select("credential_secret_id, enabled")
+      .eq("crisp_website_id", conv.crisp_website_id)
+      .maybeSingle();
+    if (!ws?.enabled || !ws.credential_secret_id) {
+      return { ok: false as const, error: "Workspace is missing, disabled or not configured." };
     }
 
-    const { data: resData, error: fnErr } = await supabase.functions.invoke("crisp-send-message", {
-      body: { conversationId: data.conversationId, content: data.content },
+    const credsRes = await getWorkspaceCreds(supabaseAdmin as never, ws.credential_secret_id);
+    if (!credsRes.ok) return { ok: false as const, error: credsRes.error };
+
+    const res = await fetch(
+      `https://api.crisp.chat/v1/website/${conv.crisp_website_id}/conversation/${conv.crisp_session_id}/message`,
+      {
+        method: "POST",
+        headers: crispHeaders(credsRes.creds),
+        body: JSON.stringify({ type: "text", from: "operator", origin: "chat", content: data.content }),
+      },
+    );
+
+    if (!res.ok) {
+      return { ok: false as const, error: `Crisp API error: ${await crispErrorReason(res)}` };
+    }
+
+    const payload: any = await res.json().catch(() => ({}));
+    const msg = payload?.data ?? payload;
+    const crispMessageId = String(msg?.fingerprint ?? Date.now());
+    const sentAt = msg?.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString();
+
+    await supabaseAdmin
+      .from("crisp_conversations")
+      .update({
+        last_message: data.content,
+        last_message_at: sentAt,
+        unread_count: 0,
+        last_customer_unread_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conv.id);
+
+    await supabaseAdmin.from("crisp_messages").insert({
+      conversation_id: conv.id,
+      crisp_website_id: conv.crisp_website_id,
+      crisp_session_id: conv.crisp_session_id,
+      crisp_message_id: crispMessageId,
+      sender_type: "operator",
+      direction: "outgoing",
+      content: data.content,
+      message_type: "text",
+      sent_at: sentAt,
+      raw_payload: payload,
     });
 
-    if (fnErr) {
-      return { ok: false as const, error: fnErr.message || "Failed to invoke send message function" };
-    }
-
-    if (resData?.error) {
-      return { ok: false as const, error: resData.error };
-    }
-
-    return {
-      ok: true as const,
-      crisp_message_id: resData?.crisp_message_id,
-      sent_at: resData?.sent_at,
-    };
+    return { ok: true as const, crisp_message_id: crispMessageId, sent_at: sentAt };
   });
 
 export const markCrispConversationRead = createServerFn({ method: "POST" })
@@ -89,31 +158,52 @@ export const markCrispConversationRead = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+    await assertCrispAccess(supabase, userId);
 
-    const { data: roleRows, error: roleErr } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    if (roleErr) throw new Error("Could not verify user roles");
-    const roles = (roleRows ?? []).map((r) => String(r.role));
-    if (!roles.some((r) => ["admin", "cs_admin", "cs"].includes(r))) {
-      throw new Error("Forbidden: Crisp Chat is restricted to admin, cs_admin and cs roles.");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getWorkspaceCreds, crispHeaders, crispErrorReason } = await import("./crisp.server");
+
+    const { data: conv } = await supabaseAdmin
+      .from("crisp_conversations")
+      .select("id, crisp_website_id, crisp_session_id")
+      .eq("id", data.conversationId)
+      .maybeSingle();
+    if (!conv) return { ok: false as const, error: "Conversation not found" };
+
+    const { data: ws } = await supabaseAdmin
+      .from("crisp_workspaces")
+      .select("credential_secret_id, enabled")
+      .eq("crisp_website_id", conv.crisp_website_id)
+      .maybeSingle();
+    if (!ws?.enabled || !ws.credential_secret_id) {
+      return { ok: false as const, error: "Workspace is missing, disabled or not configured." };
     }
 
-    const { data: resData, error: fnErr } = await supabase.functions.invoke("crisp-mark-read", {
-      body: { conversationId: data.conversationId },
-    });
+    const credsRes = await getWorkspaceCreds(supabaseAdmin as never, ws.credential_secret_id);
+    if (!credsRes.ok) return { ok: false as const, error: credsRes.error };
 
-    if (fnErr) {
-      return { ok: false as const, error: fnErr.message || "Failed to invoke mark read function" };
-    }
+    const res = await fetch(
+      `https://api.crisp.chat/v1/website/${conv.crisp_website_id}/conversation/${conv.crisp_session_id}/read`,
+      {
+        method: "PATCH",
+        headers: crispHeaders(credsRes.creds),
+        body: JSON.stringify({ from: "user", origin: "chat" }),
+      },
+    );
 
-    if (resData?.error) {
-      return { ok: false as const, error: resData.error };
-    }
+    // A Crisp-side failure should not block clearing the local unread state.
+    const crispError = res.ok ? null : await crispErrorReason(res);
 
+    const { error: updErr } = await supabaseAdmin
+      .from("crisp_conversations")
+      .update({ unread_count: 0, last_customer_unread_at: null, updated_at: new Date().toISOString() })
+      .eq("id", conv.id);
+    if (updErr) return { ok: false as const, error: `Database update failed: ${updErr.message}` };
+
+    if (crispError) console.error("Crisp mark-read failed:", crispError);
     return { ok: true as const };
   });
+
 
 async function assertAdmin(supabase: any, userId: string) {
   const { data: roleRows, error: roleErr } = await supabase
