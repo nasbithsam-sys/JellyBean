@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { addDays, differenceInCalendarDays, format, subDays, startOfDay } from "date-fns";
 import {
   ResponsiveContainer,
-  
   Area,
   XAxis,
   YAxis,
@@ -20,7 +19,7 @@ import {
   ComposedChart,
   Line,
 } from "recharts";
-import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
+import { AlertCircle, ArrowDownRight, ArrowUpRight, Loader2, Minus } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -32,6 +31,18 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/app/analytics")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 type CsStatus = Database["public"]["Enums"]["cs_status"];
+
+// ─── Department config ────────────────────────────────────────────────────────
+type DeptKey = "maturing" | "sub_admin" | "seo" | "facebook" | "scraping" | "acc_handler";
+
+const DEPARTMENTS: { key: DeptKey; label: string; color: string }[] = [
+  { key: "maturing", label: "Maturing", color: "var(--color-chart-1)" },
+  { key: "sub_admin", label: "Sub Admin", color: "var(--color-chart-2)" },
+  { key: "seo", label: "SEO", color: "var(--color-chart-3)" },
+  { key: "facebook", label: "Facebook", color: "var(--color-chart-4)" },
+  { key: "scraping", label: "Scraping", color: "var(--color-chart-5)" },
+  { key: "acc_handler", label: "Acc Handler", color: "var(--color-primary-glow)" },
+];
 
 const CS_STATUSES = [
   "new",
@@ -172,15 +183,15 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
           supabase.rpc("report_leads_by_account", { _from: range.since, _to: range.until }),
           isAdmin
             ? supabase.rpc("report_leads_forwarded_by_maturing", {
-                _from: range.since,
-                _to: range.until,
-              })
+              _from: range.since,
+              _to: range.until,
+            })
             : Promise.resolve({ data: [], error: null }),
           isAdmin
             ? supabase.rpc("report_not_found_by_user", {
-                _from: range.since,
-                _to: range.until,
-              })
+              _from: range.since,
+              _to: range.until,
+            })
             : Promise.resolve({ data: [], error: null }),
         ]);
 
@@ -310,6 +321,29 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </div>
       </div>
+
+      {analytics.isError && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold text-destructive">Failed to load analytics data</div>
+              <div className="text-muted-foreground text-xs mt-1 break-words">
+                {(analytics.error as Error)?.message ?? "An error occurred while fetching analytics from the server."}
+              </div>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => analytics.refetch()}
+            disabled={analytics.isFetching}
+          >
+            {analytics.isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
@@ -494,6 +528,9 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
           </Card>
         </div>
       )}
+
+      {/* ─── Department Leads by Service ─── */}
+      <DeptLeadsChart since={range.since} until={range.until} />
     </div>
   );
 }
@@ -611,5 +648,349 @@ function Card({
       </div>
       {children}
     </div>
+  );
+}
+
+function DeptLeadsChart({ since, until }: { since: string; until: string }) {
+  const [selectedDept, setSelectedDept] = useState<DeptKey | "all">("all");
+
+  const deptQuery = useQuery({
+    queryKey: ["analytics-dept-leads-raw", since, until],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("qualified_leads")
+        .select("service, submitted_by_role")
+        .gte("assigned_at", since)
+        .lt("assigned_at", until);
+
+      if (error) {
+        console.warn("Could not fetch department leads by service:", error);
+        return [];
+      }
+      return (data ?? []) as Array<{ service: string | null; submitted_by_role: string | null }>;
+    },
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+  });
+
+  const rawRows = deptQuery.data ?? [];
+
+  // Calculate department totals
+  const deptTotals = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: 0,
+      maturing: 0,
+      sub_admin: 0,
+      seo: 0,
+      facebook: 0,
+      scraping: 0,
+      acc_handler: 0,
+    };
+    for (const r of rawRows) {
+      counts.all += 1;
+      const role = (r.submitted_by_role ?? "") as DeptKey;
+      if (role && role in counts) {
+        counts[role] = (counts[role] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [rawRows]);
+
+  const activeDeptConfig = DEPARTMENTS.find((d) => d.key === selectedDept);
+
+  // When "all" is selected: stacked top services across all departments
+  const allServicesData = useMemo(() => {
+    const map = new Map<string, { service: string; total: number } & Record<DeptKey, number>>();
+    for (const row of rawRows) {
+      const rawService = row.service?.trim() || "(no service)";
+      let entry = map.get(rawService);
+      if (!entry) {
+        entry = {
+          service: rawService,
+          total: 0,
+          maturing: 0,
+          sub_admin: 0,
+          seo: 0,
+          facebook: 0,
+          scraping: 0,
+          acc_handler: 0,
+        };
+        map.set(rawService, entry);
+      }
+      entry.total += 1;
+      const role = row.submitted_by_role as DeptKey;
+      if (role && role in entry) {
+        entry[role] = (entry[role] ?? 0) + 1;
+      }
+    }
+    return Array.from(map.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+  }, [rawRows]);
+
+  // When a specific department is selected: services for that department only
+  const singleDeptServicesData = useMemo(() => {
+    if (selectedDept === "all") return [];
+    const deptRows = rawRows.filter((r) => r.submitted_by_role === selectedDept);
+    const counts: Record<string, number> = {};
+    for (const r of deptRows) {
+      const svc = r.service?.trim() || "(no service)";
+      counts[svc] = (counts[svc] ?? 0) + 1;
+    }
+    const totalForDept = deptTotals[selectedDept] || 0;
+    return Object.entries(counts)
+      .map(([service, count]) => ({
+        service,
+        count,
+        pct: totalForDept > 0 ? (count / totalForDept) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [rawRows, selectedDept, deptTotals]);
+
+  const currentTotal = selectedDept === "all" ? deptTotals.all : (deptTotals[selectedDept] ?? 0);
+  const maxSingleCount = singleDeptServicesData[0]?.count ?? 1;
+
+  return (
+    <Card
+      title="Department leads by service"
+      subtitle={
+        selectedDept === "all"
+          ? `Top services across all departments (${deptTotals.all} total leads)`
+          : `Showing services for ${activeDeptConfig?.label} (${currentTotal} lead${currentTotal === 1 ? "" : "s"} across ${singleDeptServicesData.length} service${singleDeptServicesData.length === 1 ? "" : "s"})`
+      }
+    >
+      {/* Department Selector Filter Pills */}
+      <div className="mb-5 flex flex-wrap items-center gap-1.5 border-b border-border/50 pb-3">
+        <button
+          type="button"
+          onClick={() => setSelectedDept("all")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
+            selectedDept === "all"
+              ? "bg-primary text-primary-foreground shadow-sm font-semibold ring-2 ring-primary/30"
+              : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <span>All Departments</span>
+          <span
+            className={cn(
+              "px-1.5 py-0.5 rounded-full text-[10px] tabular-nums",
+              selectedDept === "all"
+                ? "bg-primary-foreground/20 text-primary-foreground font-bold"
+                : "bg-background/80 text-muted-foreground",
+            )}
+          >
+            {deptTotals.all}
+          </span>
+        </button>
+
+        {DEPARTMENTS.map((dept) => {
+          const count = deptTotals[dept.key] ?? 0;
+          const isSelected = selectedDept === dept.key;
+          return (
+            <button
+              key={dept.key}
+              type="button"
+              onClick={() => setSelectedDept(dept.key)}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
+                isSelected
+                  ? "shadow-sm font-semibold ring-2 text-foreground"
+                  : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground",
+              )}
+              style={
+                isSelected
+                  ? {
+                      backgroundColor: `${dept.color}25`,
+                      borderColor: dept.color,
+                      borderWidth: 1,
+                      borderStyle: "solid",
+                    }
+                  : undefined
+              }
+            >
+              <span
+                className="h-2 w-2 rounded-full shrink-0"
+                style={{ backgroundColor: dept.color }}
+              />
+              <span>{dept.label}</span>
+              <span
+                className={cn(
+                  "px-1.5 py-0.5 rounded-full text-[10px] tabular-nums",
+                  isSelected
+                    ? "font-bold text-foreground"
+                    : "bg-background/80 text-muted-foreground",
+                )}
+                style={isSelected ? { backgroundColor: `${dept.color}35` } : undefined}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {deptQuery.isLoading ? (
+        <div className="h-64 flex items-center justify-center text-muted-foreground text-xs gap-2">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          <span>Loading department data...</span>
+        </div>
+      ) : rawRows.length === 0 ? (
+        <EmptyState label="No department leads data in this date range" />
+      ) : selectedDept !== "all" && singleDeptServicesData.length === 0 ? (
+        <div className="py-12 text-center text-sm text-muted-foreground space-y-2">
+          <p>No leads submitted by <span className="font-semibold text-foreground">{activeDeptConfig?.label}</span> in this date range.</p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setSelectedDept("all")}
+            className="text-xs h-7"
+          >
+            View All Departments
+          </Button>
+        </div>
+      ) : selectedDept === "all" ? (
+        /* ALL DEPARTMENTS STACKED VIEW */
+        <div className="space-y-4">
+          <div className="h-72">
+            <ResponsiveContainer>
+              <BarChart data={allServicesData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="service"
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval={0}
+                  angle={-25}
+                  textAnchor="end"
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+                {DEPARTMENTS.map((dept) => (
+                  <Bar
+                    key={dept.key}
+                    dataKey={dept.key}
+                    name={dept.label}
+                    stackId="dept"
+                    fill={dept.color}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Quick department breakdown chips */}
+          <div className="pt-3 border-t border-border/40 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {DEPARTMENTS.map((dept) => {
+              const count = deptTotals[dept.key] ?? 0;
+              const share = deptTotals.all > 0 ? ((count / deptTotals.all) * 100).toFixed(0) : "0";
+              return (
+                <button
+                  key={dept.key}
+                  type="button"
+                  onClick={() => setSelectedDept(dept.key)}
+                  className="p-2.5 rounded-lg border border-border/60 bg-card hover:bg-muted/40 text-left transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground group-hover:text-foreground">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: dept.color }} />
+                    <span className="truncate">{dept.label}</span>
+                  </div>
+                  <div className="mt-1 flex items-baseline justify-between">
+                    <span className="text-base font-bold tabular-nums text-foreground">{count}</span>
+                    <span className="text-[11px] text-muted-foreground">{share}%</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        /* SINGLE SELECTED DEPARTMENT VIEW */
+        <div className="space-y-6">
+          {/* Bar Chart for Selected Department */}
+          <div className="h-64">
+            <ResponsiveContainer>
+              <BarChart
+                data={singleDeptServicesData.slice(0, 12)}
+                margin={{ top: 10, right: 10, left: -20, bottom: 25 }}
+              >
+                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="service"
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval={0}
+                  angle={-25}
+                  textAnchor="end"
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value: any) => [
+                    `${Number(value).toLocaleString()} leads (${currentTotal ? ((Number(value) / currentTotal) * 100).toFixed(1) : 0}%)`,
+                    activeDeptConfig?.label ?? "Leads",
+                  ]}
+                />
+                <Bar
+                  dataKey="count"
+                  name={activeDeptConfig?.label ?? "Leads"}
+                  fill={activeDeptConfig?.color ?? "var(--color-primary)"}
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Ranked Breakdown List */}
+          <div className="pt-3 border-t border-border/40">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Ranked Services for {activeDeptConfig?.label}
+            </div>
+            <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+              {singleDeptServicesData.map((row, idx) => (
+                <div key={row.service} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-5 text-muted-foreground tabular-nums text-[11px] font-mono">
+                        #{idx + 1}
+                      </span>
+                      <span className="font-medium text-foreground truncate">{row.service}</span>
+                    </div>
+                    <div className="flex items-center gap-2 tabular-nums shrink-0">
+                      <span className="font-semibold text-foreground">{row.count.toLocaleString()}</span>
+                      <span className="text-muted-foreground text-[11px] w-12 text-right">
+                        {row.pct.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{
+                        width: `${(row.count / maxSingleCount) * 100}%`,
+                        backgroundColor: activeDeptConfig?.color ?? "var(--color-primary)",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

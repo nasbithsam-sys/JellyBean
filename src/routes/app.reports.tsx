@@ -1,14 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { RouteSkeleton } from "@/components/route-skeleton";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { ChevronDown, Download, Loader2, Search, User, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadCsv } from "@/lib/crm-lite";
+import { cn } from "@/lib/utils";
 
 type DatePreset = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
 
@@ -537,6 +539,9 @@ function Inner() {
           </table>
         </div>
       </Section>
+
+      {/* ─── Per-Person Leads by Service ─── */}
+      <PersonServiceReport range={range} />
     </div>
   );
 }
@@ -560,3 +565,290 @@ function Stat({ label, value }: { label: string; value: number }) {
     </div>
   );
 }
+
+// ─── Per-Person Leads by Service Report ───────────────────────────────────────
+type RangeResult = { from: string | null; to: string | null };
+
+const DEPT_COLORS: Record<string, string> = {
+  maturing:    "var(--color-chart-1)",
+  sub_admin:   "var(--color-chart-2)",
+  seo:         "var(--color-chart-3)",
+  facebook:    "var(--color-chart-4)",
+  scraping:    "var(--color-chart-5)",
+  acc_handler: "var(--color-primary-glow)",
+};
+
+function PersonServiceReport({ range }: { range: RangeResult }) {
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Load all active profiles once
+  const profiles = useQuery({
+    queryKey: ["report-profiles-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email")
+        .eq("is_active", true)
+        .order("full_name");
+      if (error) throw error;
+      return (data ?? []) as Array<{ user_id: string; full_name: string; email: string }>;
+    },
+    staleTime: 10 * 60_000,
+  });
+
+  const allProfiles = profiles.data ?? [];
+  const filteredProfiles = useMemo(
+    () =>
+      allProfiles.filter(
+        (p) =>
+          p.full_name.toLowerCase().includes(search.toLowerCase()) ||
+          p.email.toLowerCase().includes(search.toLowerCase()),
+      ),
+    [allProfiles, search],
+  );
+
+  const selectedProfile = allProfiles.find((p) => p.user_id === selectedUserId);
+
+  // Query leads by service for the selected user + date range
+  const leadsQuery = useQuery({
+    queryKey: ["report-person-service", selectedUserId, range.from, range.to],
+    enabled: !!selectedUserId,
+    queryFn: async () => {
+      let q = supabase
+        .from("qualified_leads")
+        .select("service, submitted_by_role")
+        .eq("created_by", selectedUserId!);
+      if (range.from) q = q.gte("created_at", range.from);
+      if (range.to)   q = q.lt("created_at", range.to);
+      const { data, error } = await q;
+      if (error) throw error;
+
+      // Count by service client-side
+      const counts: Record<string, number> = {};
+      let dept = "";
+      for (const row of data ?? []) {
+        const svc = (row.service ?? "").trim() || "(no service)";
+        counts[svc] = (counts[svc] ?? 0) + 1;
+        if (!dept && row.submitted_by_role) dept = row.submitted_by_role;
+      }
+      const rows = Object.entries(counts)
+        .map(([service, count]) => ({ service, count }))
+        .sort((a, b) => b.count - a.count);
+      return { rows, dept, total: rows.reduce((s, r) => s + r.count, 0) };
+    },
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+  });
+
+  const result = leadsQuery.data;
+  const rows = result?.rows ?? [];
+  const maxCount = rows[0]?.count ?? 1;
+  const barColor = result?.dept
+    ? (DEPT_COLORS[result.dept] ?? "var(--color-primary)")
+    : "var(--color-primary)";
+
+  function exportPersonCsv() {
+    if (!result || !selectedProfile) return;
+    downloadCsv(
+      `leads-by-service-${selectedProfile.full_name.replace(/\s+/g, "-")}.csv`,
+      ["Rank", "Service", "Lead Count", "Share %"],
+      rows.map((r, i) => [
+        i + 1,
+        r.service,
+        r.count,
+        result.total ? ((r.count / result.total) * 100).toFixed(1) + "%" : "—",
+      ]),
+    );
+  }
+
+  return (
+    <Section title="Leads by Service — Per Person">
+      <div className="crm-surface-card">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b">
+          {/* Person picker dropdown with Radix Popover (portaled, solid background) */}
+          <Popover open={dropdownOpen} onOpenChange={setDropdownOpen}>
+            <PopoverTrigger asChild>
+              <button
+                id="person-service-picker"
+                type="button"
+                className={cn(
+                  "flex items-center justify-between gap-2 h-9 px-3 rounded-md border text-sm transition-colors cursor-pointer",
+                  "bg-background hover:bg-muted/50 border-border min-w-[240px] text-left",
+                  dropdownOpen && "ring-2 ring-primary/40 border-primary",
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate text-sm font-medium">
+                    {selectedProfile ? selectedProfile.full_name : "Select a person…"}
+                  </span>
+                </div>
+                <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-150", dropdownOpen && "rotate-180")} />
+              </button>
+            </PopoverTrigger>
+
+            <PopoverContent
+              align="start"
+              sideOffset={6}
+              className="w-80 p-0 rounded-xl border border-border shadow-2xl z-[9999] overflow-hidden"
+              style={{ backgroundColor: "var(--color-card, #17171a)", opacity: 1 }}
+            >
+              <div className="p-2 border-b border-border" style={{ backgroundColor: "var(--color-card, #17171a)" }}>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    id="person-search-input"
+                    autoFocus
+                    placeholder="Search name or email…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-8 pr-7 py-1.5 text-sm bg-muted/60 text-foreground placeholder:text-muted-foreground rounded-md outline-none border border-border/50 focus:border-primary/60"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <ul className="max-h-64 overflow-y-auto py-1" style={{ backgroundColor: "var(--color-card, #17171a)" }}>
+                {profiles.isLoading && (
+                  <li className="px-3 py-3 text-xs text-muted-foreground flex items-center justify-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> Loading users…
+                  </li>
+                )}
+                {!profiles.isLoading && filteredProfiles.length === 0 && (
+                  <li className="px-3 py-3 text-xs text-muted-foreground text-center">No users found</li>
+                )}
+                {filteredProfiles.map((p) => (
+                  <li
+                    key={p.user_id}
+                    onClick={() => {
+                      setSelectedUserId(p.user_id);
+                      setDropdownOpen(false);
+                      setSearch("");
+                    }}
+                    className={cn(
+                      "flex flex-col px-3 py-2 cursor-pointer transition-colors text-sm hover:bg-muted/80",
+                      p.user_id === selectedUserId && "bg-primary/20 text-primary font-medium",
+                    )}
+                  >
+                    <span className="font-medium text-foreground">{p.full_name}</span>
+                    <span className="text-xs text-muted-foreground">{p.email}</span>
+                  </li>
+                ))}
+              </ul>
+            </PopoverContent>
+          </Popover>
+
+          {/* Summary badge + export button */}
+          {result && (
+            <>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground tabular-nums">{result.total}</span>
+                {" "}leads
+                {result.dept && (
+                  <>
+                    {" "}·{" "}
+                    <span
+                      className="font-semibold capitalize px-1.5 py-0.5 rounded-md"
+                      style={{ background: `${barColor}20`, color: barColor }}
+                    >
+                      {result.dept.replace(/_/g, " ")}
+                    </span>
+                  </>
+                )}
+                {" "}· {rows.length} service{rows.length !== 1 ? "s" : ""}
+              </div>
+              <Button size="sm" variant="outline" className="h-8 ml-auto" onClick={exportPersonCsv}>
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Export CSV
+              </Button>
+            </>
+          )}
+        </div>
+
+        {/* Body */}
+        {!selectedUserId ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            Select a person above to see their leads broken down by service.
+            <br />
+            <span className="text-xs opacity-60 mt-1 block">Uses the date range selected at the top of the page.</span>
+          </div>
+        ) : leadsQuery.isLoading ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground animate-pulse">
+            Loading…
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No leads found for <strong>{selectedProfile?.full_name}</strong> in this date range.
+          </div>
+        ) : (
+          <div className="overflow-auto max-h-[560px]">
+            <table className="crm-data-table w-full">
+              <thead className="bg-muted/40 sticky top-0">
+                <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium w-8">#</th>
+                  <th className="px-4 py-2.5 font-medium">Service</th>
+                  <th className="px-4 py-2.5 font-medium">Volume</th>
+                  <th className="px-4 py-2.5 font-medium text-right w-20">Leads</th>
+                  <th className="px-4 py-2.5 font-medium text-right w-16">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const pct = result ? (r.count / result.total) * 100 : 0;
+                  const barW = (r.count / maxCount) * 100;
+                  return (
+                    <tr key={r.service} className="border-t hover:bg-muted/20">
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
+                      <td className="px-4 py-2.5 text-sm font-medium">
+                        <span className="block max-w-[280px] truncate">{r.service}</span>
+                      </td>
+                      <td className="px-4 py-2.5 min-w-[160px]">
+                        <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${barW}%`,
+                              background: `linear-gradient(90deg, ${barColor}, var(--color-primary-glow))`,
+                            }}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-sm">
+                        {r.count.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-xs text-muted-foreground">
+                        {pct.toFixed(1)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot className="bg-muted/20 border-t-2 border-border">
+                <tr>
+                  <td colSpan={3} className="px-4 py-2.5 text-xs text-muted-foreground font-medium">
+                    Total · {rows.length} service{rows.length !== 1 ? "s" : ""}
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-bold">
+                    {result?.total.toLocaleString()}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">100%</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
