@@ -191,7 +191,7 @@ export async function syncWorkspace(
           // Bulk insert; duplicates are ignored by the existing table trigger/constraint.
           const { error: insErr, data: inserted } = await admin
             .from("crisp_messages")
-            .upsert(rows, { onConflict: "crisp_session_id,crisp_message_id", ignoreDuplicates: true })
+            .upsert(rows, { onConflict: "crisp_website_id,crisp_message_id", ignoreDuplicates: true })
             .select("id");
           if (!insErr) messages += inserted?.length ?? 0;
 
