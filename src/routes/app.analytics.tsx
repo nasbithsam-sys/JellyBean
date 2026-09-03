@@ -33,15 +33,13 @@ export const Route = createFileRoute("/app/analytics")({ component: Page, pendin
 type CsStatus = Database["public"]["Enums"]["cs_status"];
 
 // ─── Department config ────────────────────────────────────────────────────────
-type DeptKey = "maturing" | "sub_admin" | "seo" | "facebook" | "scraping" | "acc_handler";
+type DeptKey = "maturing" | "sub_admin" | "seo" | "facebook";
 
 const DEPARTMENTS: { key: DeptKey; label: string; color: string }[] = [
   { key: "maturing", label: "Maturing", color: "var(--color-chart-1)" },
   { key: "sub_admin", label: "Sub Admin", color: "var(--color-chart-2)" },
   { key: "seo", label: "SEO", color: "var(--color-chart-3)" },
   { key: "facebook", label: "Facebook", color: "var(--color-chart-4)" },
-  { key: "scraping", label: "Scraping", color: "var(--color-chart-5)" },
-  { key: "acc_handler", label: "Acc Handler", color: "var(--color-primary-glow)" },
 ];
 
 const CS_STATUSES = [
@@ -652,7 +650,7 @@ function Card({
 }
 
 function DeptLeadsChart({ since, until }: { since: string; until: string }) {
-  const [selectedDept, setSelectedDept] = useState<DeptKey | "all">("all");
+  const [selectedDept, setSelectedDept] = useState<DeptKey>("maturing");
 
   const deptQuery = useQuery({
     queryKey: ["analytics-dept-leads-raw", since, until],
@@ -675,62 +673,27 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
 
   const rawRows = deptQuery.data ?? [];
 
-  // Calculate department totals
+  // Calculate department totals for the 4 departments
   const deptTotals = useMemo(() => {
-    const counts: Record<string, number> = {
-      all: 0,
+    const counts: Record<DeptKey, number> = {
       maturing: 0,
       sub_admin: 0,
       seo: 0,
       facebook: 0,
-      scraping: 0,
-      acc_handler: 0,
     };
     for (const r of rawRows) {
-      counts.all += 1;
       const role = (r.submitted_by_role ?? "") as DeptKey;
       if (role && role in counts) {
-        counts[role] = (counts[role] ?? 0) + 1;
+        counts[role] += 1;
       }
     }
     return counts;
   }, [rawRows]);
 
-  const activeDeptConfig = DEPARTMENTS.find((d) => d.key === selectedDept);
+  const activeDeptConfig = DEPARTMENTS.find((d) => d.key === selectedDept) ?? DEPARTMENTS[0];
 
-  // When "all" is selected: stacked top services across all departments
-  const allServicesData = useMemo(() => {
-    const map = new Map<string, { service: string; total: number } & Record<DeptKey, number>>();
-    for (const row of rawRows) {
-      const rawService = row.service?.trim() || "(no service)";
-      let entry = map.get(rawService);
-      if (!entry) {
-        entry = {
-          service: rawService,
-          total: 0,
-          maturing: 0,
-          sub_admin: 0,
-          seo: 0,
-          facebook: 0,
-          scraping: 0,
-          acc_handler: 0,
-        };
-        map.set(rawService, entry);
-      }
-      entry.total += 1;
-      const role = row.submitted_by_role as DeptKey;
-      if (role && role in entry) {
-        entry[role] = (entry[role] ?? 0) + 1;
-      }
-    }
-    return Array.from(map.values())
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
-  }, [rawRows]);
-
-  // When a specific department is selected: services for that department only
-  const singleDeptServicesData = useMemo(() => {
-    if (selectedDept === "all") return [];
+  // Filter services for the selected department
+  const servicesData = useMemo(() => {
     const deptRows = rawRows.filter((r) => r.submitted_by_role === selectedDept);
     const counts: Record<string, number> = {};
     for (const r of deptRows) {
@@ -744,46 +707,19 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
         count,
         pct: totalForDept > 0 ? (count / totalForDept) * 100 : 0,
       }))
-      .sort((a, b) => b.count - a.count);
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 15);
   }, [rawRows, selectedDept, deptTotals]);
 
-  const currentTotal = selectedDept === "all" ? deptTotals.all : (deptTotals[selectedDept] ?? 0);
-  const maxSingleCount = singleDeptServicesData[0]?.count ?? 1;
+  const currentTotal = deptTotals[selectedDept] ?? 0;
 
   return (
     <Card
       title="Department leads by service"
-      subtitle={
-        selectedDept === "all"
-          ? `Top services across all departments (${deptTotals.all} total leads)`
-          : `Showing services for ${activeDeptConfig?.label} (${currentTotal} lead${currentTotal === 1 ? "" : "s"} across ${singleDeptServicesData.length} service${singleDeptServicesData.length === 1 ? "" : "s"})`
-      }
+      subtitle={`Showing lead volume by service for ${activeDeptConfig.label} (${currentTotal} lead${currentTotal === 1 ? "" : "s"} across ${servicesData.length} service${servicesData.length === 1 ? "" : "s"})`}
     >
-      {/* Department Selector Filter Pills */}
-      <div className="mb-5 flex flex-wrap items-center gap-1.5 border-b border-border/50 pb-3">
-        <button
-          type="button"
-          onClick={() => setSelectedDept("all")}
-          className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
-            selectedDept === "all"
-              ? "bg-primary text-primary-foreground shadow-sm font-semibold ring-2 ring-primary/30"
-              : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <span>All Departments</span>
-          <span
-            className={cn(
-              "px-1.5 py-0.5 rounded-full text-[10px] tabular-nums",
-              selectedDept === "all"
-                ? "bg-primary-foreground/20 text-primary-foreground font-bold"
-                : "bg-background/80 text-muted-foreground",
-            )}
-          >
-            {deptTotals.all}
-          </span>
-        </button>
-
+      {/* Department Selector Filter Buttons */}
+      <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-border/50 pb-3">
         {DEPARTMENTS.map((dept) => {
           const count = deptTotals[dept.key] ?? 0;
           const isSelected = selectedDept === dept.key;
@@ -793,7 +729,7 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
               type="button"
               onClick={() => setSelectedDept(dept.key)}
               className={cn(
-                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
+                "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
                 isSelected
                   ? "shadow-sm font-semibold ring-2 text-foreground"
                   : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground",
@@ -833,162 +769,49 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
       {deptQuery.isLoading ? (
         <div className="h-64 flex items-center justify-center text-muted-foreground text-xs gap-2">
           <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          <span>Loading department data...</span>
+          <span>Loading department leads...</span>
         </div>
-      ) : rawRows.length === 0 ? (
-        <EmptyState label="No department leads data in this date range" />
-      ) : selectedDept !== "all" && singleDeptServicesData.length === 0 ? (
-        <div className="py-12 text-center text-sm text-muted-foreground space-y-2">
-          <p>No leads submitted by <span className="font-semibold text-foreground">{activeDeptConfig?.label}</span> in this date range.</p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setSelectedDept("all")}
-            className="text-xs h-7"
-          >
-            View All Departments
-          </Button>
-        </div>
-      ) : selectedDept === "all" ? (
-        /* ALL DEPARTMENTS STACKED VIEW */
-        <div className="space-y-4">
-          <div className="h-72">
-            <ResponsiveContainer>
-              <BarChart data={allServicesData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
-                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  dataKey="service"
-                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  angle={-25}
-                  textAnchor="end"
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                  allowDecimals={false}
-                />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
-                {DEPARTMENTS.map((dept) => (
-                  <Bar
-                    key={dept.key}
-                    dataKey={dept.key}
-                    name={dept.label}
-                    stackId="dept"
-                    fill={dept.color}
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Quick department breakdown chips */}
-          <div className="pt-3 border-t border-border/40 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-            {DEPARTMENTS.map((dept) => {
-              const count = deptTotals[dept.key] ?? 0;
-              const share = deptTotals.all > 0 ? ((count / deptTotals.all) * 100).toFixed(0) : "0";
-              return (
-                <button
-                  key={dept.key}
-                  type="button"
-                  onClick={() => setSelectedDept(dept.key)}
-                  className="p-2.5 rounded-lg border border-border/60 bg-card hover:bg-muted/40 text-left transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground group-hover:text-foreground">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: dept.color }} />
-                    <span className="truncate">{dept.label}</span>
-                  </div>
-                  <div className="mt-1 flex items-baseline justify-between">
-                    <span className="text-base font-bold tabular-nums text-foreground">{count}</span>
-                    <span className="text-[11px] text-muted-foreground">{share}%</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      ) : servicesData.length === 0 ? (
+        <EmptyState label={`No leads recorded for ${activeDeptConfig.label} in this date range`} />
       ) : (
-        /* SINGLE SELECTED DEPARTMENT VIEW */
-        <div className="space-y-6">
-          {/* Bar Chart for Selected Department */}
-          <div className="h-64">
-            <ResponsiveContainer>
-              <BarChart
-                data={singleDeptServicesData.slice(0, 12)}
-                margin={{ top: 10, right: 10, left: -20, bottom: 25 }}
-              >
-                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  dataKey="service"
-                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  angle={-25}
-                  textAnchor="end"
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                  allowDecimals={false}
-                />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value: any) => [
-                    `${Number(value).toLocaleString()} leads (${currentTotal ? ((Number(value) / currentTotal) * 100).toFixed(1) : 0}%)`,
-                    activeDeptConfig?.label ?? "Leads",
-                  ]}
-                />
-                <Bar
-                  dataKey="count"
-                  name={activeDeptConfig?.label ?? "Leads"}
-                  fill={activeDeptConfig?.color ?? "var(--color-primary)"}
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Ranked Breakdown List */}
-          <div className="pt-3 border-t border-border/40">
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Ranked Services for {activeDeptConfig?.label}
-            </div>
-            <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-              {singleDeptServicesData.map((row, idx) => (
-                <div key={row.service} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-5 text-muted-foreground tabular-nums text-[11px] font-mono">
-                        #{idx + 1}
-                      </span>
-                      <span className="font-medium text-foreground truncate">{row.service}</span>
-                    </div>
-                    <div className="flex items-center gap-2 tabular-nums shrink-0">
-                      <span className="font-semibold text-foreground">{row.count.toLocaleString()}</span>
-                      <span className="text-muted-foreground text-[11px] w-12 text-right">
-                        {row.pct.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: `${(row.count / maxSingleCount) * 100}%`,
-                        backgroundColor: activeDeptConfig?.color ?? "var(--color-primary)",
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        /* SINGLE GRAPH FOR SELECTED DEPARTMENT */
+        <div className="h-80">
+          <ResponsiveContainer>
+            <BarChart
+              data={servicesData}
+              margin={{ top: 10, right: 10, left: -20, bottom: 35 }}
+            >
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="service"
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+                interval={0}
+                angle={-25}
+                textAnchor="end"
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(value: any) => [
+                  `${Number(value).toLocaleString()} leads (${currentTotal ? ((Number(value) / currentTotal) * 100).toFixed(1) : 0}%)`,
+                  activeDeptConfig.label,
+                ]}
+              />
+              <Bar
+                dataKey="count"
+                name={activeDeptConfig.label}
+                fill={activeDeptConfig.color}
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       )}
     </Card>
