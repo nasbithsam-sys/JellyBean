@@ -563,6 +563,70 @@ function Page() {
   );
 }
 
+const RAW_LEADS_AUTO_CONTINUE_KEY = "raw_leads_auto_continue_enabled";
+
+function useAutoContinueToggle(userId: string | undefined) {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ["shared_state", RAW_LEADS_AUTO_CONTINUE_KEY],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shared_state")
+        .select("value")
+        .eq("key", RAW_LEADS_AUTO_CONTINUE_KEY)
+        .maybeSingle();
+      if (error) throw error;
+      if (
+        data?.value &&
+        typeof data.value === "object" &&
+        !Array.isArray(data.value) &&
+        "enabled" in data.value
+      ) {
+        return Boolean((data.value as { enabled?: boolean }).enabled);
+      }
+      return false; // Default is OFF
+    },
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`raw-leads-auto-continue-${crypto.randomUUID()}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "shared_state",
+          filter: `key=eq.${RAW_LEADS_AUTO_CONTINUE_KEY}`,
+        },
+        () => qc.invalidateQueries({ queryKey: ["shared_state", RAW_LEADS_AUTO_CONTINUE_KEY] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  const setEnabled = async (enabled: boolean) => {
+    qc.setQueryData(["shared_state", RAW_LEADS_AUTO_CONTINUE_KEY], enabled);
+    const { error } = await supabase.from("shared_state").upsert({
+      key: RAW_LEADS_AUTO_CONTINUE_KEY,
+      value: { enabled },
+      updated_by: userId ?? null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) {
+      qc.invalidateQueries({ queryKey: ["shared_state", RAW_LEADS_AUTO_CONTINUE_KEY] });
+      throw error;
+    }
+  };
+
+  return {
+    enabled: Boolean(query.data),
+    setEnabled,
+  };
+}
 function Inner() {
   const auth = useAuth();
   const qc = useQueryClient();
@@ -1149,21 +1213,9 @@ function Inner() {
     }
   }
 
-  const [isAutoChecking, setIsAutoChecking] = useState(() => {
-    try {
-      return window.localStorage.getItem("raw_leads.auto_check") === "true";
-    } catch {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("raw_leads.auto_check", isAutoChecking ? "true" : "false");
-    } catch {
-      // ignore
-    }
-  }, [isAutoChecking]);
+  const autoContinueToggle = useAutoContinueToggle(currentUserId ?? undefined);
+  const isAutoChecking = autoContinueToggle.enabled;
+  const setIsAutoChecking = (val: boolean) => autoContinueToggle.setEnabled(val).catch(console.error);
 
   const isAutoCheckingRef = useRef(isAutoChecking);
   isAutoCheckingRef.current = isAutoChecking;
@@ -1568,7 +1620,6 @@ function Inner() {
                   id="auto-check-ai"
                   checked={isAutoChecking}
                   onCheckedChange={(c) => setIsAutoChecking(!!c)}
-                  disabled={aiRunning || aiLockedByOther}
                 />
                 <label
                   htmlFor="auto-check-ai"
