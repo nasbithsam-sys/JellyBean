@@ -1439,6 +1439,16 @@ export type Database = {
           maturing_name: string
         }[]
       }
+      report_leads_forwarded_by_user: {
+        Args: { _from?: string; _to?: string }
+        Returns: {
+          forwarded_count: number
+          status_counts: Json
+          user_email: string
+          user_id: string
+          user_name: string
+        }[]
+      }
       report_not_found_by_user: {
         Args: { _from?: string; _to?: string }
         Returns: {

@@ -1,8 +1,19 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { RouteSkeleton } from "@/components/route-skeleton";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { ChevronDown, Download, Loader2, Search, User, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Download,
+  ExternalLink,
+  Loader2,
+  Search,
+  SlidersHorizontal,
+  User,
+  X,
+} from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
@@ -59,17 +70,22 @@ function computeRange(preset: DatePreset, from: string, to: string) {
 export const Route = createFileRoute("/app/reports")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 const RAW_STATUSES = ["new", "forwarded", "not_found", "wrong", "duplicate"] as const;
-const CS_STATUSES = [
+export const CS_STATUSES = [
   "new",
   "undeliver",
   "wrong_number",
   "wrong_lead",
+  "wrong_service",
+  "wrong_person",
   "already_got_someone",
+  "already_received_before",
   "service_provider_himself",
   "small_service",
   "converted",
   "need_follow_up",
 ] as const;
+
+export type CsStatus = (typeof CS_STATUSES)[number];
 
 const RAW_LABELS: Record<string, string> = {
   new: "New",
@@ -79,16 +95,19 @@ const RAW_LABELS: Record<string, string> = {
   duplicate: "Duplicate",
 };
 
-const CS_LABELS: Record<string, string> = {
+export const CS_LABELS: Record<string, string> = {
   new: "New to contact",
   undeliver: "Undeliver",
-  wrong_number: "Wrong number",
-  wrong_lead: "Wrong lead",
-  already_got_someone: "Already got someone",
-  service_provider_himself: "Service provider himself",
-  small_service: "Small service",
+  wrong_number: "Wrong Number",
+  wrong_lead: "Wrong Lead",
+  wrong_service: "Wrong Service",
+  wrong_person: "Wrong Person",
+  already_got_someone: "Already Got Someone",
+  already_received_before: "Already received before",
+  service_provider_himself: "Service Provider Himself",
+  small_service: "Small Service",
   converted: "Processed",
-  need_follow_up: "Need follow-up",
+  need_follow_up: "Need Follow Up",
 };
 
 const RAW_COLORS: Record<string, string> = {
@@ -99,17 +118,53 @@ const RAW_COLORS: Record<string, string> = {
   duplicate: "#a855f7",
 };
 
-const CS_STATUS_COLORS: Record<string, string> = {
-  new: "#3b82f6",
-  converted: "#10b981",
-  need_follow_up: "#f59e0b",
-  undeliver: "#64748b",
+export const CS_STATUS_COLORS: Record<string, string> = {
+  new: "#38bdf8",
+  converted: "#4ade80",
+  need_follow_up: "#60a5fa",
+  undeliver: "#f87171",
   wrong_number: "#ef4444",
   wrong_lead: "#f43f5e",
-  already_got_someone: "#8b5cf6",
-  service_provider_himself: "#ec4899",
-  small_service: "#14b8a6",
+  wrong_service: "#fb7185",
+  wrong_person: "#fda4af",
+  already_got_someone: "#94a3b8",
+  already_received_before: "#cbd5e1",
+  service_provider_himself: "#a8a29e",
+  small_service: "#94a3b8",
 };
+
+function statusDotTone(status: string) {
+  if (status === "converted" || status === "closed_won") return "bg-emerald-500";
+  if (
+    status === "need_follow_up" ||
+    status === "follow_up" ||
+    status === "called" ||
+    status === "messaged"
+  ) {
+    return "bg-sky-500";
+  }
+  if (
+    status === "undeliver" ||
+    status === "wrong_number" ||
+    status === "wrong_lead" ||
+    status === "wrong_service" ||
+    status === "wrong_person" ||
+    status === "not_interested" ||
+    status === "already_done" ||
+    status === "closed_lost"
+  ) {
+    return "bg-rose-500";
+  }
+  if (
+    status === "already_got_someone" ||
+    status === "already_received_before" ||
+    status === "service_provider_himself" ||
+    status === "small_service"
+  ) {
+    return "bg-slate-400";
+  }
+  return "bg-sky-400";
+}
 
 function Page() {
   const auth = useAuth();
@@ -178,23 +233,6 @@ function Inner() {
       return c;
     },
   });
-  const byMaturing = useQuery({
-    queryKey: ["report-forwarded-by-maturing", range.from, range.to],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("report_leads_forwarded_by_maturing", {
-        _from: range.from ?? undefined,
-        _to: range.to ?? undefined,
-      });
-      if (error) throw error;
-      return (data ?? []) as Array<{
-        maturing_id: string | null;
-        maturing_name: string;
-        maturing_email: string | null;
-        forwarded_count: number;
-      }>;
-    },
-  });
-
   const notFoundByUser = useQuery({
     queryKey: ["report-not-found-by-user", range.from, range.to],
     queryFn: async () => {
@@ -212,7 +250,6 @@ function Inner() {
     },
   });
 
-  const [searchMaturing, setSearchMaturing] = useState("");
   const [searchNotFound, setSearchNotFound] = useState("");
 
   const rawTotal = useMemo(
@@ -224,17 +261,6 @@ function Inner() {
     () => Object.values(cs.data ?? {}).reduce((acc, v) => acc + v, 0),
     [cs.data],
   );
-
-  const maturingRows = useMemo(() => {
-    const list = byMaturing.data ?? [];
-    if (!searchMaturing.trim()) return list;
-    const q = searchMaturing.toLowerCase();
-    return list.filter(
-      (r) =>
-        r.maturing_name.toLowerCase().includes(q) ||
-        (r.maturing_email && r.maturing_email.toLowerCase().includes(q)),
-    );
-  }, [byMaturing.data, searchMaturing]);
 
   const notFoundRows = useMemo(() => {
     const list = notFoundByUser.data ?? [];
@@ -360,90 +386,8 @@ function Inner() {
         </Grid>
       </Section>
 
-      {/* ─── Leads Forwarded Per Maturing ─── */}
-      <Section
-        title="Leads forwarded per maturing"
-        subtitle="Qualified leads assigned in selected range"
-        badge={`${maturingRows.length} member${maturingRows.length === 1 ? "" : "s"}`}
-      >
-        <div className="crm-surface-card overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b bg-muted/20">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                value={searchMaturing}
-                onChange={(e) => setSearchMaturing(e.target.value)}
-                placeholder="Search maturing member..."
-                className="h-8 pl-8 pr-7 text-xs bg-background"
-              />
-              {searchMaturing && (
-                <button
-                  type="button"
-                  onClick={() => setSearchMaturing("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Total forwarded:{" "}
-              <span className="font-semibold text-foreground tabular-nums">
-                {maturingRows.reduce((acc, r) => acc + r.forwarded_count, 0).toLocaleString()}
-              </span>
-            </div>
-          </div>
-
-          <div className="max-h-[420px] overflow-auto">
-            <table className="crm-data-table">
-              <thead className="bg-muted/40 sticky top-0">
-                <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-2.5 font-medium">Maturing Member</th>
-                  <th className="px-4 py-2.5 font-medium">Email</th>
-                  <th className="px-4 py-2.5 font-medium text-right">Forwarded Leads</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byMaturing.isLoading && (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin inline mr-2 text-primary" />
-                      Loading maturing data…
-                    </td>
-                  </tr>
-                )}
-                {!byMaturing.isLoading && maturingRows.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground text-xs">
-                      {searchMaturing ? "No matching maturing members found." : "No leads forwarded in this range."}
-                    </td>
-                  </tr>
-                )}
-                {maturingRows.map((r, i) => (
-                  <tr key={r.maturing_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-2.5 font-medium">
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
-                          {getInitials(r.maturing_name)}
-                        </div>
-                        <span className="truncate">{r.maturing_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                      {r.maturing_email ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary">
-                        {r.forwarded_count.toLocaleString()}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </Section>
+      {/* ─── Leads Forwarded Per User ─── */}
+      <ForwardedByUserSection range={range} preset={preset} csCounts={cs.data} />
 
       {/* ─── Number-Not-Found Checks Per User ─── */}
       <Section
@@ -624,8 +568,694 @@ function getInitials(name: string) {
   return (name.slice(0, 2) || "??").toUpperCase();
 }
 
-// ─── Per-Person Leads by Service Report ───────────────────────────────────────
 type RangeResult = { from: string | null; to: string | null };
+
+// ─── Leads Forwarded Per User Report ──────────────────────────────────────────
+export type ForwardedUserRow = {
+  user_id: string | null;
+  user_name: string;
+  user_email: string | null;
+  forwarded_count: number;
+  status_counts: Record<string, number>;
+};
+
+function ForwardedByUserSection({
+  range,
+  preset,
+  csCounts,
+}: {
+  range: RangeResult;
+  preset: DatePreset;
+  csCounts?: Record<string, number>;
+}) {
+  const [searchUser, setSearchUser] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState<CsStatus | "__all__">("__all__");
+  const [expandedUserIds, setExpandedUserIds] = useState<Set<string>>(new Set());
+
+  const byUserQuery = useQuery({
+    queryKey: ["report-forwarded-by-user", range.from, range.to],
+    queryFn: async (): Promise<ForwardedUserRow[]> => {
+      // 1. Try report_leads_forwarded_by_user RPC with status_counts
+      try {
+        const { data, error } = await supabase.rpc("report_leads_forwarded_by_user", {
+          _from: range.from ?? undefined,
+          _to: range.to ?? undefined,
+        });
+
+        const rows = data as any[];
+        if (!error && Array.isArray(rows) && rows.length > 0) {
+          return rows
+            .map((r) => ({
+              user_id: r.user_id ?? null,
+              user_name: r.user_name || "(unknown)",
+              user_email: r.user_email ?? null,
+              forwarded_count: Number(r.forwarded_count || 0),
+              status_counts: (r.status_counts && typeof r.status_counts === "object" ? r.status_counts : {}) as Record<string, number>,
+            }))
+            .filter((u) => {
+              if (!u.user_id) return false;
+              const name = u.user_name.trim().toLowerCase();
+              return name && name !== "(unknown)" && name !== "unknown" && !name.startsWith("unknown user");
+            });
+        }
+      } catch {
+        // Continue to fallback
+      }
+
+      // 2. Fallback to report_leads_forwarded_by_maturing
+      const { data, error } = await supabase.rpc("report_leads_forwarded_by_maturing", {
+        _from: range.from ?? undefined,
+        _to: range.to ?? undefined,
+      });
+      if (error) throw error;
+
+      return ((data ?? []) as any[])
+        .map((r) => ({
+          user_id: r.maturing_id ?? null,
+          user_name: r.maturing_name || "(unknown)",
+          user_email: r.maturing_email ?? null,
+          forwarded_count: Number(r.forwarded_count || 0),
+          status_counts: {},
+        }))
+        .filter((u) => {
+          if (!u.user_id) return false;
+          const name = u.user_name.trim().toLowerCase();
+          return name && name !== "(unknown)" && name !== "unknown" && !name.startsWith("unknown user");
+        });
+    },
+  });
+
+  const rawUsers = byUserQuery.data ?? [];
+  const totalForwardedAll = useMemo(
+    () => rawUsers.reduce((sum, u) => sum + u.forwarded_count, 0),
+    [rawUsers],
+  );
+
+  // Compute status totals across all users
+  const aggregatedStatusTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    for (const st of CS_STATUSES) {
+      const fromUsers = rawUsers.reduce((sum, u) => sum + (u.status_counts[st] ?? 0), 0);
+      totals[st] = fromUsers > 0 ? fromUsers : (csCounts?.[st] ?? 0);
+    }
+    return totals;
+  }, [rawUsers, csCounts]);
+
+  const toggleExpand = (id: string) => {
+    setExpandedUserIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const isAllExpanded = rawUsers.length > 0 && expandedUserIds.size === rawUsers.length;
+  const toggleExpandAll = () => {
+    if (isAllExpanded) {
+      setExpandedUserIds(new Set());
+    } else {
+      setExpandedUserIds(new Set(rawUsers.map((u, i) => u.user_id ?? `unknown-${i}`)));
+    }
+  };
+
+  // Filter and sort users
+  const filteredUsers = useMemo(() => {
+    let list = [...rawUsers];
+
+    // Filter by search
+    if (searchUser.trim()) {
+      const q = searchUser.toLowerCase();
+      list = list.filter(
+        (u) =>
+          u.user_name.toLowerCase().includes(q) ||
+          (u.user_email && u.user_email.toLowerCase().includes(q)),
+      );
+    }
+
+    // Sort by selected status or forwarded count
+    if (selectedStatus !== "__all__") {
+      list.sort((a, b) => {
+        const countA = a.status_counts[selectedStatus] ?? 0;
+        const countB = b.status_counts[selectedStatus] ?? 0;
+        if (countB !== countA) return countB - countA;
+        return b.forwarded_count - a.forwarded_count;
+      });
+    } else {
+      list.sort((a, b) => b.forwarded_count - a.forwarded_count);
+    }
+
+    return list;
+  }, [rawUsers, searchUser, selectedStatus]);
+
+  function exportUserBreakdownCsv() {
+    downloadCsv(
+      `leads-forwarded-per-user-${preset}.csv`,
+      [
+        "User Name",
+        "Email",
+        "Total Forwarded",
+        ...CS_STATUSES.map((st) => CS_LABELS[st] ?? st),
+      ],
+      filteredUsers.map((u) => [
+        u.user_name,
+        u.user_email ?? "—",
+        u.forwarded_count,
+        ...CS_STATUSES.map((st) => u.status_counts[st] ?? 0),
+      ]),
+    );
+  }
+
+  const activeStatusCount = selectedStatus !== "__all__" ? (aggregatedStatusTotals[selectedStatus] ?? 0) : null;
+
+  return (
+    <Section
+      title="Leads forwarded per user"
+      subtitle="Qualified leads assigned in selected range with lead status breakdown"
+      badge={`${rawUsers.length} user${rawUsers.length === 1 ? "" : "s"}`}
+    >
+      <div className="crm-surface-card overflow-hidden space-y-3">
+        {/* Status Pill Tabs (Matching CS Pipeline screenshot) */}
+        <div className="px-4 pt-3 pb-2 border-b bg-muted/10">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Lead Status Breakdown
+            </span>
+            {selectedStatus !== "__all__" && (
+              <button
+                type="button"
+                onClick={() => setSelectedStatus("__all__")}
+                className="text-xs text-primary hover:underline font-medium cursor-pointer"
+              >
+                Reset to all leads
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin">
+            {/* All Leads button */}
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("__all__")}
+              className={cn(
+                "px-3 h-8 text-xs font-medium rounded-lg inline-flex items-center gap-1.5 transition-all shrink-0 cursor-pointer",
+                selectedStatus === "__all__"
+                  ? "bg-primary text-primary-foreground shadow-sm font-semibold"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  selectedStatus === "__all__" ? "bg-primary-foreground" : "bg-muted-foreground",
+                )}
+              />
+              All Leads
+              <span
+                className={cn(
+                  "text-[10.5px] tabular-nums font-semibold",
+                  selectedStatus === "__all__" ? "text-primary-foreground/90" : "text-muted-foreground",
+                )}
+              >
+                {totalForwardedAll.toLocaleString()}
+              </span>
+            </button>
+
+            {/* Status buttons */}
+            {CS_STATUSES.map((st) => {
+              const count = aggregatedStatusTotals[st] ?? 0;
+              const isSelected = selectedStatus === st;
+              return (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setSelectedStatus(isSelected ? "__all__" : st)}
+                  className={cn(
+                    "px-2.5 h-8 text-xs font-medium rounded-lg inline-flex items-center gap-1.5 transition-all shrink-0 cursor-pointer",
+                    isSelected
+                      ? "bg-primary/20 text-primary border border-primary/40 shadow-xs font-semibold ring-1 ring-primary/30"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  )}
+                >
+                  <span className={cn("h-1.5 w-1.5 rounded-full", statusDotTone(st))} />
+                  <span>{CS_LABELS[st] ?? st}</span>
+                  <span
+                    className={cn(
+                      "text-[10.5px] tabular-nums",
+                      isSelected ? "text-primary font-bold" : "text-muted-foreground",
+                    )}
+                  >
+                    {count.toLocaleString()}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Toolbar: Search, Expand All, Export CSV, Counters */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[260px]">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={searchUser}
+                onChange={(e) => setSearchUser(e.target.value)}
+                placeholder="Search user by name or email..."
+                className="h-8 pl-8 pr-7 text-xs bg-background"
+              />
+              {searchUser && (
+                <button
+                  type="button"
+                  onClick={() => setSearchUser("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 text-xs"
+              onClick={toggleExpandAll}
+              title={isAllExpanded ? "Collapse all rows" : "Expand all rows"}
+            >
+              {isAllExpanded ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                  Collapse all
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                  Expand all
+                </>
+              )}
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 text-xs ml-auto sm:ml-0"
+              onClick={exportUserBreakdownCsv}
+              title="Export complete per-user lead status breakdown to CSV"
+            >
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export CSV
+            </Button>
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            {selectedStatus !== "__all__" ? (
+              <span>
+                {CS_LABELS[selectedStatus] ?? selectedStatus}:{" "}
+                <span className="font-bold text-primary tabular-nums">
+                  {activeStatusCount?.toLocaleString()}
+                </span>
+                {" "}of{" "}
+                <span className="font-semibold text-foreground tabular-nums">
+                  {totalForwardedAll.toLocaleString()}
+                </span>
+                {" "}total forwarded
+              </span>
+            ) : (
+              <span>
+                Total forwarded:{" "}
+                <span className="font-semibold text-foreground tabular-nums">
+                  {totalForwardedAll.toLocaleString()}
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="max-h-[560px] overflow-auto">
+          <table className="crm-data-table w-full">
+            <thead className="bg-muted/40 sticky top-0 z-10">
+              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="px-4 py-2.5 font-medium">User</th>
+                <th className="px-4 py-2.5 font-medium hidden md:table-cell">Lead Status Breakdown</th>
+                <th className="px-4 py-2.5 font-medium text-right">Forwarded Leads</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byUserQuery.isLoading && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-10 text-center text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin inline mr-2 text-primary" />
+                    Loading forwarded leads per user…
+                  </td>
+                </tr>
+              )}
+              {!byUserQuery.isLoading && filteredUsers.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-10 text-center text-muted-foreground text-xs">
+                    {searchUser ? "No matching users found." : "No leads forwarded in this range."}
+                  </td>
+                </tr>
+              )}
+              {filteredUsers.map((u, i) => {
+                const rowId = u.user_id ?? `unknown-${i}`;
+                const isExpanded = expandedUserIds.has(rowId);
+                return (
+                  <UserForwardedRow
+                    key={rowId}
+                    user={u}
+                    isExpanded={isExpanded}
+                    onToggleExpand={() => toggleExpand(rowId)}
+                    selectedStatus={selectedStatus}
+                    range={range}
+                    totalForwardedAll={totalForwardedAll}
+                  />
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function UserForwardedRow({
+  user,
+  isExpanded,
+  onToggleExpand,
+  selectedStatus,
+  range,
+  totalForwardedAll,
+}: {
+  user: ForwardedUserRow;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  selectedStatus: CsStatus | "__all__";
+  range: RangeResult;
+  totalForwardedAll: number;
+}) {
+  // If status_counts was empty (from legacy fallback), query on-demand when expanded
+  const hasStatusCounts = Object.keys(user.status_counts).length > 0;
+  const onDemandQuery = useQuery({
+    queryKey: ["user-status-counts-fallback", user.user_id, range.from, range.to],
+    enabled: isExpanded && !hasStatusCounts && !!user.user_id,
+    queryFn: async () => {
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        CS_STATUSES.map(async (st) => {
+          let q = supabase
+            .from("qualified_leads")
+            .select("id", { count: "exact", head: true })
+            .or(`created_by.eq.${user.user_id},assigned_by.eq.${user.user_id}`)
+            .eq("cs_status", st);
+          if (range.from) q = q.gte("assigned_at", range.from);
+          if (range.to) q = q.lt("assigned_at", range.to);
+          const { count } = await q;
+          if (count && count > 0) counts[st] = count;
+        })
+      );
+      return counts;
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const statusCounts = hasStatusCounts
+    ? user.status_counts
+    : onDemandQuery.data ?? user.status_counts;
+
+  const processedCount = statusCounts["converted"] ?? 0;
+  const undeliverCount = statusCounts["undeliver"] ?? 0;
+  const wrongNumberCount = statusCounts["wrong_number"] ?? 0;
+  const wrongLeadCount = statusCounts["wrong_lead"] ?? 0;
+  const needFollowUpCount = statusCounts["need_follow_up"] ?? 0;
+  const newCount = statusCounts["new"] ?? 0;
+
+  const total = user.forwarded_count || 1;
+  const processedPct = ((processedCount / total) * 100).toFixed(1);
+  const qualityIssuesCount =
+    (statusCounts["undeliver"] ?? 0) +
+    (statusCounts["wrong_number"] ?? 0) +
+    (statusCounts["wrong_lead"] ?? 0) +
+    (statusCounts["wrong_service"] ?? 0) +
+    (statusCounts["wrong_person"] ?? 0);
+  const issuesPct = ((qualityIssuesCount / total) * 100).toFixed(1);
+
+  const selectedCount = selectedStatus !== "__all__" ? (statusCounts[selectedStatus] ?? 0) : null;
+  const selectedPct = selectedCount !== null ? ((selectedCount / total) * 100).toFixed(1) : null;
+
+  return (
+    <>
+      <tr
+        onClick={onToggleExpand}
+        className={cn(
+          "border-t hover:bg-muted/30 transition-colors cursor-pointer select-none",
+          isExpanded && "bg-muted/25 border-b-0",
+        )}
+      >
+        {/* Expand Chevron + User Name */}
+        <td className="px-4 py-3 font-medium">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand();
+              }}
+              className="p-1 -ml-1 text-muted-foreground hover:text-foreground rounded-md transition-colors cursor-pointer"
+              aria-label={isExpanded ? "Collapse row" : "Expand row"}
+            >
+              <ChevronRight
+                className={cn(
+                  "h-4 w-4 transition-transform duration-200",
+                  isExpanded && "rotate-90 text-primary",
+                )}
+              />
+            </button>
+            <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0 border border-primary/20">
+              {getInitials(user.user_name)}
+            </div>
+            <div className="min-w-0">
+              <div className="font-semibold text-sm text-foreground truncate flex items-center gap-1.5">
+                <span>{user.user_name}</span>
+                {selectedCount !== null && selectedCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-primary/15 text-primary">
+                    {selectedCount} {CS_LABELS[selectedStatus] ?? selectedStatus}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground truncate">{user.user_email ?? "—"}</div>
+            </div>
+          </div>
+        </td>
+
+        {/* Lead Status Proportional Bar & Top Status Tags */}
+        <td className="px-4 py-3 hidden md:table-cell">
+          <div className="space-y-1.5 max-w-md">
+            {/* Visual ratio bar */}
+            <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden flex shadow-inner">
+              {processedCount > 0 && (
+                <div
+                  title={`Processed: ${processedCount} (${processedPct}%)`}
+                  style={{ width: `${(processedCount / total) * 100}%` }}
+                  className="h-full bg-emerald-500 transition-all duration-300"
+                />
+              )}
+              {qualityIssuesCount > 0 && (
+                <div
+                  title={`Quality issues: ${qualityIssuesCount} (${issuesPct}%)`}
+                  style={{ width: `${(qualityIssuesCount / total) * 100}%` }}
+                  className="h-full bg-rose-500 transition-all duration-300"
+                />
+              )}
+              {needFollowUpCount > 0 && (
+                <div
+                  title={`Need follow-up: ${needFollowUpCount}`}
+                  style={{ width: `${(needFollowUpCount / total) * 100}%` }}
+                  className="h-full bg-sky-500 transition-all duration-300"
+                />
+              )}
+              {newCount > 0 && (
+                <div
+                  title={`New to contact: ${newCount}`}
+                  style={{ width: `${(newCount / total) * 100}%` }}
+                  className="h-full bg-sky-400 opacity-60 transition-all duration-300"
+                />
+              )}
+            </div>
+
+            {/* Quick mini pills */}
+            <div className="flex flex-wrap items-center gap-1 text-[11px]">
+              {processedCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Processed: <strong className="tabular-nums">{processedCount.toLocaleString()}</strong>
+                </span>
+              )}
+              {undeliverCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                  Undeliver: <strong className="tabular-nums">{undeliverCount.toLocaleString()}</strong>
+                </span>
+              )}
+              {wrongNumberCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                  Wrong #: <strong className="tabular-nums">{wrongNumberCount.toLocaleString()}</strong>
+                </span>
+              )}
+              {wrongLeadCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                  Wrong Lead: <strong className="tabular-nums">{wrongLeadCount.toLocaleString()}</strong>
+                </span>
+              )}
+              {needFollowUpCount > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-400 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                  Follow-up: <strong className="tabular-nums">{needFollowUpCount.toLocaleString()}</strong>
+                </span>
+              )}
+            </div>
+          </div>
+        </td>
+
+        {/* Forwarded count badge */}
+        <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+          {selectedStatus !== "__all__" ? (
+            <div className="flex flex-col items-end">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary border border-primary/20">
+                <span className={cn("h-1.5 w-1.5 rounded-full", statusDotTone(selectedStatus))} />
+                {selectedCount?.toLocaleString() ?? 0} {CS_LABELS[selectedStatus] ?? selectedStatus}
+              </span>
+              <span className="text-[11px] text-muted-foreground mt-0.5">
+                {selectedPct}% of {user.forwarded_count.toLocaleString()} total
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-end">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20 shadow-xs">
+                {user.forwarded_count.toLocaleString()}
+              </span>
+              {totalForwardedAll > 0 && (
+                <span className="text-[10px] text-muted-foreground mt-0.5">
+                  {((user.forwarded_count / totalForwardedAll) * 100).toFixed(1)}% of all
+                </span>
+              )}
+            </div>
+          )}
+        </td>
+      </tr>
+
+      {/* Expanded Accordion Drawer */}
+      {isExpanded && (
+        <tr className="bg-muted/15 border-t border-border/50">
+          <td colSpan={3} className="px-4 py-4 sm:px-6">
+            <div className="space-y-4">
+              {/* Summary Stats Row */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-border/80 bg-background/80">
+                <div className="flex flex-wrap items-center gap-4 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Total Forwarded: </span>
+                    <strong className="font-bold text-foreground text-sm tabular-nums">
+                      {user.forwarded_count.toLocaleString()}
+                    </strong>
+                  </div>
+                  <div className="h-3 w-px bg-border hidden sm:block" />
+                  <div>
+                    <span className="text-muted-foreground">Processed Rate: </span>
+                    <strong className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      {processedPct}%
+                    </strong>
+                    <span className="text-muted-foreground text-[11px] ml-1">
+                      ({processedCount.toLocaleString()})
+                    </span>
+                  </div>
+                  <div className="h-3 w-px bg-border hidden sm:block" />
+                  <div>
+                    <span className="text-muted-foreground">Quality Issues: </span>
+                    <strong className="font-semibold text-rose-600 dark:text-rose-400 tabular-nums">
+                      {issuesPct}%
+                    </strong>
+                    <span className="text-muted-foreground text-[11px] ml-1">
+                      ({qualityIssuesCount.toLocaleString()})
+                    </span>
+                  </div>
+                </div>
+
+                {user.user_id && (
+                  <Link
+                    to="/app/forwarded-leads"
+                    search={{ forwardedByFilter: user.user_id } as any}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    View forwarded leads
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                )}
+              </div>
+
+              {/* Status Grid */}
+              {onDemandQuery.isLoading ? (
+                <div className="py-6 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  Loading lead status breakdown…
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                  {CS_STATUSES.map((st) => {
+                    const count = statusCounts[st] ?? 0;
+                    const pct = total > 0 ? ((count / total) * 100).toFixed(1) : "0.0";
+                    const isSelected = selectedStatus === st;
+                    return (
+                      <div
+                        key={st}
+                        className={cn(
+                          "p-2.5 rounded-lg border text-left transition-all",
+                          isSelected
+                            ? "border-primary bg-primary/10 shadow-xs ring-1 ring-primary/30"
+                            : "border-border/60 bg-background/50 hover:bg-background hover:border-border",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={cn("h-2 w-2 rounded-full shrink-0", statusDotTone(st))} />
+                            <span className="text-[11px] font-medium text-muted-foreground truncate">
+                              {CS_LABELS[st] ?? st}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-baseline justify-between mt-1">
+                          <span className={cn(
+                            "text-base font-bold tabular-nums",
+                            count > 0 ? "text-foreground" : "text-muted-foreground/60"
+                          )}>
+                            {count.toLocaleString()}
+                          </span>
+                          <span className="text-[10.5px] tabular-nums text-muted-foreground font-medium">
+                            {pct}%
+                          </span>
+                        </div>
+                        <div className="h-1 w-full rounded-full bg-muted/50 overflow-hidden mt-1.5">
+                          <div
+                            className={cn("h-full rounded-full", statusDotTone(st))}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// ─── Per-Person Leads by Service Report ───────────────────────────────────────
 
 const DEPT_COLORS: Record<string, string> = {
   maturing:    "var(--color-chart-1)",
