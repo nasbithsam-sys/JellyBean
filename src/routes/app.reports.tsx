@@ -19,9 +19,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadCsv } from "@/lib/crm-lite";
+import { isCsUser } from "@/lib/cs-filter";
 import { cn } from "@/lib/utils";
 
 type DatePreset = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
@@ -68,11 +68,7 @@ function computeRange(preset: DatePreset, from: string, to: string) {
   }
 }
 
-export const Route = createFileRoute("/app/reports")({
-  component: Page,
-  pendingComponent: () => <RouteSkeleton />,
-  pendingMs: 200,
-});
+export const Route = createFileRoute("/app/reports")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
 
 const RAW_STATUSES = ["new", "forwarded", "not_found", "wrong", "duplicate"] as const;
 export const CS_STATUSES = [
@@ -297,26 +293,6 @@ function Inner() {
     );
   }
 
-  if (raw.isLoading || cs.isLoading || notFoundByUser.isLoading) {
-    return (
-      <div className="space-y-6" aria-busy="true" aria-label="Loading reports">
-        <div className="crm-toolbar-panel">
-          <Skeleton className="h-8 w-full max-w-lg" />
-        </div>
-        {Array.from({ length: 3 }).map((_, index) => (
-          <div key={index} className="crm-section-panel space-y-4">
-            <Skeleton className="h-6 w-52" />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              {Array.from({ length: 5 }).map((__, cardIndex) => (
-                <Skeleton key={cardIndex} className="h-28 rounded-xl" />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-8">
       {/* ─── Date Range Toolbar ─── */}
@@ -328,8 +304,8 @@ function Inner() {
                 ["all", "All time"],
                 ["today", "Today"],
                 ["yesterday", "Yesterday"],
-                ["7d", "Last 7 days"],
-                ["30d", "Last 30 days"],
+                ["7d", "Weekly"],
+                ["30d", "Monthly"],
                 ["custom", "Custom"],
               ] as Array<[DatePreset, string]>
             ).map(([key, label]) => (
@@ -351,7 +327,6 @@ function Inner() {
               <div className="flex items-center gap-1.5 ml-1">
                 <Input
                   type="date"
-                  aria-label="Report start date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
                   className="h-8 w-[140px] text-xs"
@@ -359,7 +334,6 @@ function Inner() {
                 <span className="text-xs text-muted-foreground">→</span>
                 <Input
                   type="date"
-                  aria-label="Report end date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
                   className="h-8 w-[140px] text-xs"
@@ -471,17 +445,12 @@ function Inner() {
                 {!notFoundByUser.isLoading && notFoundRows.length === 0 && (
                   <tr>
                     <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground text-xs">
-                      {searchNotFound
-                        ? "No matching users found."
-                        : "No Number not found marks in this range."}
+                      {searchNotFound ? "No matching users found." : "No Number not found marks in this range."}
                     </td>
                   </tr>
                 )}
                 {notFoundRows.map((r, i) => (
-                  <tr
-                    key={r.user_id ?? `unknown-${i}`}
-                    className="border-t hover:bg-muted/30 transition-colors"
-                  >
+                  <tr key={r.user_id ?? `unknown-${i}`} className="border-t hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-2.5 font-medium">
                       <div className="flex items-center gap-2.5">
                         <div className="h-7 w-7 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center text-xs font-bold shrink-0">
@@ -563,7 +532,10 @@ function StatCard({
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-muted-foreground truncate">{label}</span>
           {color && (
-            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+            <span
+              className="h-2 w-2 rounded-full shrink-0"
+              style={{ backgroundColor: color }}
+            />
           )}
         </div>
         <div className="text-2xl font-bold tabular-nums text-foreground mt-2">
@@ -639,19 +611,13 @@ function ForwardedByUserSection({
               user_name: r.user_name || "(unknown)",
               user_email: r.user_email ?? null,
               forwarded_count: Number(r.forwarded_count || 0),
-              status_counts: (r.status_counts && typeof r.status_counts === "object"
-                ? r.status_counts
-                : {}) as Record<string, number>,
+              status_counts: (r.status_counts && typeof r.status_counts === "object" ? r.status_counts : {}) as Record<string, number>,
             }))
             .filter((u) => {
               if (!u.user_id) return false;
               const name = u.user_name.trim().toLowerCase();
-              return (
-                name &&
-                name !== "(unknown)" &&
-                name !== "unknown" &&
-                !name.startsWith("unknown user")
-              );
+              if (!name || name === "(unknown)" || name === "unknown" || name.startsWith("unknown user")) return false;
+              return !isCsUser({ user_id: u.user_id, full_name: u.user_name, email: u.user_email });
             });
         }
       } catch {
@@ -676,9 +642,8 @@ function ForwardedByUserSection({
         .filter((u) => {
           if (!u.user_id) return false;
           const name = u.user_name.trim().toLowerCase();
-          return (
-            name && name !== "(unknown)" && name !== "unknown" && !name.startsWith("unknown user")
-          );
+          if (!name || name === "(unknown)" || name === "unknown" || name.startsWith("unknown user")) return false;
+          return !isCsUser({ user_id: u.user_id, full_name: u.user_name, email: u.user_email });
         });
     },
   });
@@ -749,7 +714,12 @@ function ForwardedByUserSection({
   function exportUserBreakdownCsv() {
     downloadCsv(
       `leads-forwarded-per-user-${preset}.csv`,
-      ["User Name", "Email", "Total Forwarded", ...CS_STATUSES.map((st) => CS_LABELS[st] ?? st)],
+      [
+        "User Name",
+        "Email",
+        "Total Forwarded",
+        ...CS_STATUSES.map((st) => CS_LABELS[st] ?? st),
+      ],
       filteredUsers.map((u) => [
         u.user_name,
         u.user_email ?? "—",
@@ -759,8 +729,7 @@ function ForwardedByUserSection({
     );
   }
 
-  const activeStatusCount =
-    selectedStatus !== "__all__" ? (aggregatedStatusTotals[selectedStatus] ?? 0) : null;
+  const activeStatusCount = selectedStatus !== "__all__" ? (aggregatedStatusTotals[selectedStatus] ?? 0) : null;
 
   return (
     <Section
@@ -807,9 +776,7 @@ function ForwardedByUserSection({
               <span
                 className={cn(
                   "text-[10.5px] tabular-nums font-semibold",
-                  selectedStatus === "__all__"
-                    ? "text-primary-foreground/90"
-                    : "text-muted-foreground",
+                  selectedStatus === "__all__" ? "text-primary-foreground/90" : "text-muted-foreground",
                 )}
               >
                 {totalForwardedAll.toLocaleString()}
@@ -908,12 +875,12 @@ function ForwardedByUserSection({
                 {CS_LABELS[selectedStatus] ?? selectedStatus}:{" "}
                 <span className="font-bold text-primary tabular-nums">
                   {activeStatusCount?.toLocaleString()}
-                </span>{" "}
-                of{" "}
+                </span>
+                {" "}of{" "}
                 <span className="font-semibold text-foreground tabular-nums">
                   {totalForwardedAll.toLocaleString()}
-                </span>{" "}
-                total forwarded
+                </span>
+                {" "}total forwarded
               </span>
             ) : (
               <span>
@@ -932,9 +899,7 @@ function ForwardedByUserSection({
             <thead className="bg-muted/40 sticky top-0 z-10">
               <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-2.5 font-medium">User</th>
-                <th className="px-4 py-2.5 font-medium hidden md:table-cell">
-                  Lead Status Breakdown
-                </th>
+                <th className="px-4 py-2.5 font-medium hidden md:table-cell">Lead Status Breakdown</th>
                 <th className="px-4 py-2.5 font-medium text-right">Forwarded Leads</th>
               </tr>
             </thead>
@@ -1010,7 +975,7 @@ function UserForwardedRow({
           if (range.to) q = q.lt("assigned_at", range.to);
           const { count } = await q;
           if (count && count > 0) counts[st] = count;
-        }),
+        })
       );
       return counts;
     },
@@ -1019,7 +984,7 @@ function UserForwardedRow({
 
   const statusCounts = hasStatusCounts
     ? user.status_counts
-    : (onDemandQuery.data ?? user.status_counts);
+    : onDemandQuery.data ?? user.status_counts;
 
   const processedCount = statusCounts["converted"] ?? 0;
   const undeliverCount = statusCounts["undeliver"] ?? 0;
@@ -1126,36 +1091,31 @@ function UserForwardedRow({
               {processedCount > 0 && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Processed:{" "}
-                  <strong className="tabular-nums">{processedCount.toLocaleString()}</strong>
+                  Processed: <strong className="tabular-nums">{processedCount.toLocaleString()}</strong>
                 </span>
               )}
               {undeliverCount > 0 && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium">
                   <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                  Undeliver:{" "}
-                  <strong className="tabular-nums">{undeliverCount.toLocaleString()}</strong>
+                  Undeliver: <strong className="tabular-nums">{undeliverCount.toLocaleString()}</strong>
                 </span>
               )}
               {wrongNumberCount > 0 && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium">
                   <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                  Wrong #:{" "}
-                  <strong className="tabular-nums">{wrongNumberCount.toLocaleString()}</strong>
+                  Wrong #: <strong className="tabular-nums">{wrongNumberCount.toLocaleString()}</strong>
                 </span>
               )}
               {wrongLeadCount > 0 && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-medium">
                   <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                  Wrong Lead:{" "}
-                  <strong className="tabular-nums">{wrongLeadCount.toLocaleString()}</strong>
+                  Wrong Lead: <strong className="tabular-nums">{wrongLeadCount.toLocaleString()}</strong>
                 </span>
               )}
               {needFollowUpCount > 0 && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-400 font-medium">
                   <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-                  Follow-up:{" "}
-                  <strong className="tabular-nums">{needFollowUpCount.toLocaleString()}</strong>
+                  Follow-up: <strong className="tabular-nums">{needFollowUpCount.toLocaleString()}</strong>
                 </span>
               )}
             </div>
@@ -1262,21 +1222,17 @@ function UserForwardedRow({
                       >
                         <div className="flex items-center justify-between gap-1 mb-1">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <span
-                              className={cn("h-2 w-2 rounded-full shrink-0", statusDotTone(st))}
-                            />
+                            <span className={cn("h-2 w-2 rounded-full shrink-0", statusDotTone(st))} />
                             <span className="text-[11px] font-medium text-muted-foreground truncate">
                               {CS_LABELS[st] ?? st}
                             </span>
                           </div>
                         </div>
                         <div className="flex items-baseline justify-between mt-1">
-                          <span
-                            className={cn(
-                              "text-base font-bold tabular-nums",
-                              count > 0 ? "text-foreground" : "text-muted-foreground/60",
-                            )}
-                          >
+                          <span className={cn(
+                            "text-base font-bold tabular-nums",
+                            count > 0 ? "text-foreground" : "text-muted-foreground/60"
+                          )}>
                             {count.toLocaleString()}
                           </span>
                           <span className="text-[10.5px] tabular-nums text-muted-foreground font-medium">
@@ -1305,11 +1261,11 @@ function UserForwardedRow({
 // ─── Per-Person Leads by Service Report ───────────────────────────────────────
 
 const DEPT_COLORS: Record<string, string> = {
-  maturing: "var(--color-chart-1)",
-  sub_admin: "var(--color-chart-2)",
-  seo: "var(--color-chart-3)",
-  facebook: "var(--color-chart-4)",
-  scraping: "var(--color-chart-5)",
+  maturing:    "var(--color-chart-1)",
+  sub_admin:   "var(--color-chart-2)",
+  seo:         "var(--color-chart-3)",
+  facebook:    "var(--color-chart-4)",
+  scraping:    "var(--color-chart-5)",
   acc_handler: "var(--color-primary-glow)",
 };
 
@@ -1318,17 +1274,26 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
   const [search, setSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  // Load all active profiles once
+  // Load all active profiles once (excluding Customer Support CS users)
   const profiles = useQuery({
     queryKey: ["report-profiles-list"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email")
-        .eq("is_active", true)
-        .order("full_name");
-      if (error) throw error;
-      return (data ?? []) as Array<{ user_id: string; full_name: string; email: string }>;
+      const [profsRes, rolesRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("user_id, full_name, email")
+          .eq("is_active", true)
+          .order("full_name"),
+        supabase
+          .from("user_roles")
+          .select("user_id, role")
+          .in("role", ["cs", "cs_admin"]),
+      ]);
+
+      if (profsRes.error) throw profsRes.error;
+      const csIds = new Set((rolesRes.data ?? []).map((r) => r.user_id));
+      const list = (profsRes.data ?? []) as Array<{ user_id: string; full_name: string; email: string }>;
+      return list.filter((p) => !isCsUser(p, csIds));
     },
     staleTime: 10 * 60_000,
   });
@@ -1356,7 +1321,7 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
         .select("service, submitted_by_role")
         .eq("created_by", selectedUserId!);
       if (range.from) q = q.gte("created_at", range.from);
-      if (range.to) q = q.lt("created_at", range.to);
+      if (range.to)   q = q.lt("created_at", range.to);
       const { data, error } = await q;
       if (error) throw error;
 
@@ -1421,12 +1386,7 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
                     {selectedProfile ? selectedProfile.full_name : "Select a person…"}
                   </span>
                 </div>
-                <ChevronDown
-                  className={cn(
-                    "h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-150",
-                    dropdownOpen && "rotate-180",
-                  )}
-                />
+                <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-150", dropdownOpen && "rotate-180")} />
               </button>
             </PopoverTrigger>
 
@@ -1436,10 +1396,7 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
               className="w-80 p-0 rounded-xl border border-border shadow-2xl z-[9999] overflow-hidden"
               style={{ backgroundColor: "var(--color-card, #17171a)", opacity: 1 }}
             >
-              <div
-                className="p-2 border-b border-border"
-                style={{ backgroundColor: "var(--color-card, #17171a)" }}
-              >
+              <div className="p-2 border-b border-border" style={{ backgroundColor: "var(--color-card, #17171a)" }}>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <input
@@ -1461,19 +1418,14 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
                   )}
                 </div>
               </div>
-              <ul
-                className="max-h-64 overflow-y-auto py-1"
-                style={{ backgroundColor: "var(--color-card, #17171a)" }}
-              >
+              <ul className="max-h-64 overflow-y-auto py-1" style={{ backgroundColor: "var(--color-card, #17171a)" }}>
                 {profiles.isLoading && (
                   <li className="px-3 py-3 text-xs text-muted-foreground flex items-center justify-center gap-2">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> Loading users…
                   </li>
                 )}
                 {!profiles.isLoading && filteredProfiles.length === 0 && (
-                  <li className="px-3 py-3 text-xs text-muted-foreground text-center">
-                    No users found
-                  </li>
+                  <li className="px-3 py-3 text-xs text-muted-foreground text-center">No users found</li>
                 )}
                 {filteredProfiles.map((p) => (
                   <li
@@ -1500,12 +1452,11 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
           {result && (
             <>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground tabular-nums">{result.total}</span>{" "}
-                leads
+                <span className="font-semibold text-foreground tabular-nums">{result.total}</span>
+                {" "}leads
                 {result.dept && (
                   <>
-                    {" "}
-                    ·{" "}
+                    {" "}·{" "}
                     <span
                       className="font-semibold capitalize px-1.5 py-0.5 rounded-md"
                       style={{ background: `${barColor}20`, color: barColor }}
@@ -1513,8 +1464,8 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
                       {result.dept.replace(/_/g, " ")}
                     </span>
                   </>
-                )}{" "}
-                · {rows.length} service{rows.length !== 1 ? "s" : ""}
+                )}
+                {" "}· {rows.length} service{rows.length !== 1 ? "s" : ""}
               </div>
               <Button size="sm" variant="outline" className="h-8 ml-auto" onClick={exportPersonCsv}>
                 <Download className="h-3.5 w-3.5 mr-1.5" />
@@ -1529,9 +1480,7 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
           <div className="px-4 py-10 text-center text-sm text-muted-foreground">
             Select a person above to see their leads broken down by service.
             <br />
-            <span className="text-xs opacity-60 mt-1 block">
-              Uses the date range selected at the top of the page.
-            </span>
+            <span className="text-xs opacity-60 mt-1 block">Uses the date range selected at the top of the page.</span>
           </div>
         ) : leadsQuery.isLoading ? (
           <div className="px-4 py-10 text-center text-sm text-muted-foreground animate-pulse">
@@ -1559,9 +1508,7 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
                   const barW = (r.count / maxCount) * 100;
                   return (
                     <tr key={r.service} className="border-t hover:bg-muted/20">
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">
-                        {i + 1}
-                      </td>
+                      <td className="px-4 py-2.5 text-xs text-muted-foreground tabular-nums">{i + 1}</td>
                       <td className="px-4 py-2.5 text-sm font-medium">
                         <span className="block max-w-[280px] truncate">{r.service}</span>
                       </td>
@@ -1604,3 +1551,4 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
     </Section>
   );
 }
+
