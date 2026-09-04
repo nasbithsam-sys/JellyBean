@@ -598,7 +598,7 @@ function ForwardedByUserSection({
     queryFn: async (): Promise<ForwardedUserRow[]> => {
       // 1. Try report_leads_forwarded_by_user RPC with status_counts
       try {
-        const { data, error } = await supabase.rpc("report_leads_forwarded_by_user", {
+        const { data, error } = await (supabase.rpc as any)("report_leads_forwarded_by_user", {
           _from: range.from ?? undefined,
           _to: range.to ?? undefined,
         });
