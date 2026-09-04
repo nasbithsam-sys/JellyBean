@@ -15,12 +15,16 @@ function runtimeEnv(key: string): string | undefined {
 const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL?.trim() ||
   runtimeEnv("VITE_SUPABASE_URL") ||
-  runtimeEnv("SUPABASE_URL");
+  runtimeEnv("SUPABASE_URL") ||
+  "https://fjscqsatzsmfivpczaud.supabase.co";
+
 const SUPABASE_PUBLISHABLE_KEY =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() ||
   runtimeEnv("VITE_SUPABASE_PUBLISHABLE_KEY") ||
   runtimeEnv("SUPABASE_PUBLISHABLE_KEY") ||
-  runtimeEnv("VITE_SUPABASE_ANON_KEY");
+  runtimeEnv("VITE_SUPABASE_ANON_KEY") ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqc2Nxc2F0enNtZml2cGN6YXVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2MTkzOTUsImV4cCI6MjA5NTE5NTM5NX0.9i3t27pIB1ztOimJJhQIlPS9HiM3nCSPa2HoMVC5Bgg";
 
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   throw new Error(
