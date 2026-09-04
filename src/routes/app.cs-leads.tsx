@@ -150,7 +150,6 @@ export const Route = createFileRoute("/app/cs-leads")({
   pendingMs: 200,
   validateSearch: (search: Record<string, unknown>): { leadId?: string } =>
     typeof search.leadId === "string" ? { leadId: search.leadId } : {},
-
 });
 
 const UNASSIGNED_VALUE = "__unassigned__";
@@ -809,9 +808,7 @@ function Inner() {
   //   • no filters at all      → reuse the cached `cs_leads_status_counts` RPC
   //   • only a status selected → reuse the same cached RPC's per-status counts
   // A real count query only runs when a date/owner/search/garage filter is on.
-  const needsCountQuery = Boolean(
-    dbDateFrom || dbDateTo || dbOwner || dbSearch || garageDoorOnly,
-  );
+  const needsCountQuery = Boolean(dbDateFrom || dbDateTo || dbOwner || dbSearch || garageDoorOnly);
 
   const totalCount = useQuery({
     queryKey: [
@@ -821,12 +818,10 @@ function Inner() {
     ],
     enabled: needsCountQuery,
     queryFn: async () => {
-
       // This only runs when a narrow filter is active (see `needsCountQuery`),
       // so an exact count is affordable and accurate — indexed on assigned_at /
       // assigned_to. Unfiltered + status-only totals never reach this query.
       let q = supabase.from("qualified_leads").select("id", { count: "exact", head: true });
-
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
       if (dbDateTo) q = q.lt("assigned_at", dbDateTo);
@@ -895,7 +890,6 @@ function Inner() {
     ],
     enabled: garageDoorOnly,
     queryFn: async () => {
-
       let q = supabase.from("qualified_leads").select("id", { count: "exact", head: true });
 
       if (dbDateFrom) q = q.gte("assigned_at", dbDateFrom);
@@ -1343,7 +1337,6 @@ function Inner() {
                 ({garageDoorCount.isLoading ? "—" : (garageDoorCount.data ?? 0)})
               </span>
             )}
-
           </Button>
           {(isAdmin || isCs) && (
             <Popover>
@@ -2484,7 +2477,7 @@ function LeadCard({
                   e.stopPropagation();
                   copyToClipboard(lead.customer_name, "Name copied");
                 }}
-                className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100"
+                className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 aria-label="Copy name"
               >
                 <Copy className="h-3 w-3" />
@@ -2492,6 +2485,17 @@ function LeadCard({
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <StatusBadge status={status} />
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpen();
+                }}
+                className="inline-flex h-7 items-center rounded-lg border border-border px-2.5 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                aria-label={`Open lead details for ${lead.customer_name}`}
+              >
+                Open
+              </button>
             </div>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -2523,7 +2527,7 @@ function LeadCard({
               e.stopPropagation();
               copyToClipboard(lead.sub_area!, "Area copied");
             }}
-            className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100"
+            className="shrink-0 h-5 w-5 flex items-center justify-center rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Copy area"
           >
             <Copy className="h-3 w-3" />
@@ -2999,22 +3003,55 @@ function LeadDrawer({
   const auth = useAuth();
   const qc = useQueryClient();
   const [mounted, setMounted] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusDialog = window.requestAnimationFrame(() => dialogRef.current?.focus());
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.stopPropagation();
         void confirmDiscardUnsaved(isDirtyRef.current).then((ok) => {
           if (ok) onClose();
         });
+        return;
+      }
+      if (e.key === "Tab") {
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+        const focusable = Array.from(
+          dialog.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((element) => !element.hasAttribute("disabled") && element.offsetParent !== null);
+        if (focusable.length === 0) {
+          e.preventDefault();
+          dialog.focus();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(focusDialog);
+      window.removeEventListener("keydown", onKey);
+      previousFocusRef.current?.focus();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3178,6 +3215,8 @@ function LeadDrawer({
       aria-label="Lead details"
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="bg-card w-full max-w-5xl max-h-[90vh] md:h-[80vh] flex flex-col rounded-2xl border border-border p-6 shadow-2xl overflow-y-auto md:overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >

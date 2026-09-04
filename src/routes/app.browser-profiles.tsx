@@ -75,13 +75,7 @@ type Profile = {
 
 type SortDirection = "asc" | "desc";
 type ProfileSortKey =
-  | "profile_name"
-  | "profile_id"
-  | "group"
-  | "account_area"
-  | "geo"
-  | "added_date"
-  | "last_launched";
+  "profile_name" | "profile_id" | "group" | "account_area" | "geo" | "added_date" | "last_launched";
 type ProfileSort = { key: ProfileSortKey; direction: SortDirection };
 
 function compareText(a: string, b: string) {
@@ -308,7 +302,7 @@ function Inner() {
       const { data, error } = await supabase.storage
         .from("crm-downloads")
         .createSignedUrl("incogniton-bridge.zip", 60 * 10);
-      
+
       if (error || !data?.signedUrl) {
         toast.error("Failed to generate download link for Bridge.");
         return;
@@ -327,7 +321,7 @@ function Inner() {
       const { data, error } = await supabase.storage
         .from("crm-downloads")
         .createSignedUrl("scraping-extension.zip", 60 * 10);
-      
+
       if (error || !data?.signedUrl) {
         toast.error("Failed to generate download link for Extension.");
         return;
@@ -363,18 +357,25 @@ function Inner() {
   }
 
   function statusOf(p: Profile) {
-    if (!p.last_launched_at) return "Idle";
-    return Date.now() - new Date(p.last_launched_at).getTime() < 30 * 60 * 1000 ? "Active" : "Idle";
+    if (!p.last_launched_at) return "Not launched yet";
+    return Date.now() - new Date(p.last_launched_at).getTime() < 30 * 60 * 1000
+      ? "Launched recently"
+      : "Not launched recently";
   }
 
   async function toggleActive(p: Profile) {
     const nextState = !p.is_active;
     qc.setQueryData(["incog_profiles"], (old: Profile[] | undefined) => {
       if (!old) return old;
-      return old.map(profile => profile.id === p.id ? { ...profile, is_active: nextState } : profile);
+      return old.map((profile) =>
+        profile.id === p.id ? { ...profile, is_active: nextState } : profile,
+      );
     });
-    
-    const { error } = await supabase.from("incogniton_profiles").update({ is_active: nextState }).eq("id", p.id);
+
+    const { error } = await supabase
+      .from("incogniton_profiles")
+      .update({ is_active: nextState })
+      .eq("id", p.id);
     if (error) {
       toast.error(error.message);
       qc.invalidateQueries({ queryKey: ["incog_profiles"] });
@@ -452,10 +453,24 @@ function Inner() {
             </Button>
           )}
           <Button variant="outline" onClick={handleDownloadBridge} disabled={downloadingBridge}>
-            {downloadingBridge ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1.5" />} Bridge
+            {downloadingBridge ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+            )}{" "}
+            Bridge
           </Button>
-          <Button variant="outline" onClick={handleDownloadExtension} disabled={downloadingExtension}>
-            {downloadingExtension ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1.5" />} Extension
+          <Button
+            variant="outline"
+            onClick={handleDownloadExtension}
+            disabled={downloadingExtension}
+          >
+            {downloadingExtension ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+            )}{" "}
+            Extension
           </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="h-3.5 w-3.5 mr-1.5" /> Import
@@ -471,8 +486,8 @@ function Inner() {
         </div>
       </div>
 
-      <div className="bg-card border rounded-lg overflow-hidden">
-        <table className="crm-table">
+      <div className="bg-card border rounded-lg overflow-x-auto">
+        <table className="crm-table min-w-[1100px]">
           <thead>
             <tr>
               <th className="w-10">
@@ -602,7 +617,7 @@ function Inner() {
                         <span
                           className={cn(
                             "text-[10.5px] px-2 py-0.5 rounded-full border w-fit",
-                            status === "Active"
+                            status === "Launched recently"
                               ? "bg-success/10 text-success border-success/30"
                               : "bg-muted text-muted-foreground border-border",
                           )}
@@ -628,15 +643,37 @@ function Inner() {
                     )}
                   </td>
                   <td>
-                    <Button variant="outline" size="sm" onClick={() => toggleActive(p)} className={cn("text-[11px] h-7 px-2", p.is_active ? "text-success border-success/30" : "text-muted-foreground border-border")}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toggleActive(p)}
+                      className={cn(
+                        "text-[11px] h-7 px-2",
+                        p.is_active
+                          ? "text-success border-success/30"
+                          : "text-muted-foreground border-border",
+                      )}
+                    >
                       {p.is_active ? "Active" : "Inactive"}
                     </Button>
                   </td>
                   <td className="max-w-[120px]">
-                    <Button variant="ghost" size="sm" onClick={() => setNoteFor(p)} className="h-7 px-2 text-[11px]">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setNoteFor(p)}
+                      className="h-7 px-2 text-[11px]"
+                    >
                       {p.notes ? "Edit Note" : "Add Note"}
                     </Button>
-                    {p.notes && <div className="text-[10px] text-muted-foreground truncate mt-0.5" title={p.notes}>{p.notes}</div>}
+                    {p.notes && (
+                      <div
+                        className="text-[10px] text-muted-foreground truncate mt-0.5"
+                        title={p.notes}
+                      >
+                        {p.notes}
+                      </div>
+                    )}
                   </td>
                   <td className="text-right space-x-1.5 whitespace-nowrap">
                     <Button
@@ -697,22 +734,35 @@ function Inner() {
                 placeholder="Type your note here..."
               />
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setNoteFor(null)}>Cancel</Button>
-                <Button onClick={async () => {
-                  const val = (document.getElementById("note-input") as HTMLTextAreaElement).value.trim();
-                  qc.setQueryData(["incog_profiles"], (old: Profile[] | undefined) => {
-                    if (!old) return old;
-                    return old.map(profile => profile.id === noteFor.id ? { ...profile, notes: val } : profile);
-                  });
-                  setNoteFor(null);
-                  const { error } = await supabase.from("incogniton_profiles").update({ notes: val }).eq("id", noteFor.id);
-                  if (error) {
-                    toast.error(error.message);
-                    qc.invalidateQueries({ queryKey: ["incog_profiles"] });
-                  } else {
-                    toast.success("Note saved");
-                  }
-                }}>Save Note</Button>
+                <Button variant="outline" onClick={() => setNoteFor(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    const val = (
+                      document.getElementById("note-input") as HTMLTextAreaElement
+                    ).value.trim();
+                    qc.setQueryData(["incog_profiles"], (old: Profile[] | undefined) => {
+                      if (!old) return old;
+                      return old.map((profile) =>
+                        profile.id === noteFor.id ? { ...profile, notes: val } : profile,
+                      );
+                    });
+                    setNoteFor(null);
+                    const { error } = await supabase
+                      .from("incogniton_profiles")
+                      .update({ notes: val })
+                      .eq("id", noteFor.id);
+                    if (error) {
+                      toast.error(error.message);
+                      qc.invalidateQueries({ queryKey: ["incog_profiles"] });
+                    } else {
+                      toast.success("Note saved");
+                    }
+                  }}
+                >
+                  Save Note
+                </Button>
               </div>
             </div>
           </DialogContent>

@@ -88,22 +88,27 @@ const DuplicateLeadDialog = lazy(() =>
   import("@/components/duplicate-lead-dialog").then((m) => ({ default: m.DuplicateLeadDialog })),
 );
 const RawLeadDuplicateDialog = lazy(() =>
-  import("@/components/raw-lead-duplicate-dialog").then((m) => ({ default: m.RawLeadDuplicateDialog })),
+  import("@/components/raw-lead-duplicate-dialog").then((m) => ({
+    default: m.RawLeadDuplicateDialog,
+  })),
 );
 const DraftsDialog = lazy(() =>
   import("@/components/drafts-dialog").then((m) => ({ default: m.DraftsDialog })),
 );
 
-
 import { canonicalizeLeadLink, extractNextdoorPostId } from "@/lib/lead-link-canonicalizer";
 import { formatCsPipelineShortDate } from "@/lib/cs-pipeline-time";
 import { type RawLeadCursor } from "@/lib/raw-leads-keyset";
 
-export const Route = createFileRoute("/app/raw-leads")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
+export const Route = createFileRoute("/app/raw-leads")({
+  component: Page,
+  pendingComponent: () => <RouteSkeleton />,
+  pendingMs: 200,
+});
 
 const TABLE = "raw_lead_cache";
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 500] as const;
-const DEFAULT_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 100;
 type RawLeadCacheUpdate = Database["public"]["Tables"]["raw_lead_cache"]["Update"];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -231,8 +236,7 @@ function parseRelativeOrAbsolute(value?: string | null): number {
   const now = Date.now();
   const DAY_MS = 24 * 60 * 60 * 1000;
 
-  if (/^(just\s*now|moments?\s+ago|few\s+seconds?\s+ago|a\s+moment\s+ago)$/.test(lower))
-    return now;
+  if (/^(just\s*now|moments?\s+ago|few\s+seconds?\s+ago|a\s+moment\s+ago)$/.test(lower)) return now;
   if (lower === "yesterday") return now - DAY_MS;
   if (/\bday\s+before\s+yesterday\b/.test(lower)) return now - 2 * DAY_MS;
 
@@ -246,13 +250,38 @@ function parseRelativeOrAbsolute(value?: string | null): number {
     year: 365 * DAY_MS,
   };
   const unitAlias: Record<string, keyof typeof unitMs> = {
-    s: "second", sec: "second", secs: "second", second: "second", seconds: "second",
-    m: "minute", min: "minute", mins: "minute", minute: "minute", minutes: "minute",
-    h: "hour", hr: "hour", hrs: "hour", hour: "hour", hours: "hour",
-    d: "day", day: "day", days: "day",
-    w: "week", wk: "week", wks: "week", week: "week", weeks: "week",
-    mo: "month", mos: "month", month: "month", months: "month",
-    y: "year", yr: "year", yrs: "year", year: "year", years: "year",
+    s: "second",
+    sec: "second",
+    secs: "second",
+    second: "second",
+    seconds: "second",
+    m: "minute",
+    min: "minute",
+    mins: "minute",
+    minute: "minute",
+    minutes: "minute",
+    h: "hour",
+    hr: "hour",
+    hrs: "hour",
+    hour: "hour",
+    hours: "hour",
+    d: "day",
+    day: "day",
+    days: "day",
+    w: "week",
+    wk: "week",
+    wks: "week",
+    week: "week",
+    weeks: "week",
+    mo: "month",
+    mos: "month",
+    month: "month",
+    months: "month",
+    y: "year",
+    yr: "year",
+    yrs: "year",
+    year: "year",
+    years: "year",
   };
   const wordNum: Record<string, number> = { a: 1, an: 1 };
 
@@ -332,13 +361,38 @@ function isPostOlderThan24h(value?: string | null): boolean {
     year: 365 * DAY_MS,
   };
   const unitAlias: Record<string, keyof typeof unitMs> = {
-    s: "second", sec: "second", secs: "second", second: "second", seconds: "second",
-    m: "minute", min: "minute", mins: "minute", minute: "minute", minutes: "minute",
-    h: "hour", hr: "hour", hrs: "hour", hour: "hour", hours: "hour",
-    d: "day", day: "day", days: "day",
-    w: "week", wk: "week", wks: "week", week: "week", weeks: "week",
-    mo: "month", mos: "month", month: "month", months: "month",
-    y: "year", yr: "year", yrs: "year", year: "year", years: "year",
+    s: "second",
+    sec: "second",
+    secs: "second",
+    second: "second",
+    seconds: "second",
+    m: "minute",
+    min: "minute",
+    mins: "minute",
+    minute: "minute",
+    minutes: "minute",
+    h: "hour",
+    hr: "hour",
+    hrs: "hour",
+    hour: "hour",
+    hours: "hour",
+    d: "day",
+    day: "day",
+    days: "day",
+    w: "week",
+    wk: "week",
+    wks: "week",
+    week: "week",
+    weeks: "week",
+    mo: "month",
+    mos: "month",
+    month: "month",
+    months: "month",
+    y: "year",
+    yr: "year",
+    yrs: "year",
+    year: "year",
+    years: "year",
   };
   const wordNum: Record<string, number> = { a: 1, an: 1 };
 
@@ -486,7 +540,6 @@ function SortHeader({
   );
 }
 
-
 function leadValueFromRow(r: Row): "yes" | "no" | null {
   const raw = (r.Lead ?? "").trim().toLowerCase();
   if (raw === "yes" || raw === "y" || raw === "true") return "yes";
@@ -509,7 +562,6 @@ function effectiveLead(r: Row, a: Action | undefined): "yes" | "no" | "" {
 // A previous `loadCache()` helper here fetched the table twice (all rows + a
 // second query for uncategorised rows) and was unused — removed to prevent
 // accidental reintroduction of that double-scan pattern.
-
 
 async function patchEntry(row_key: string, patch: Partial<CacheEntry>) {
   const { error } = await supabase
@@ -686,7 +738,6 @@ function Inner() {
     retry: 1,
   });
 
-
   // Sync remote prompt into local state unless user has unsaved edits
   const remotePrompt = promptQuery.data;
   if (remotePrompt && !promptDirty && remotePrompt !== aiPrompt) {
@@ -791,9 +842,9 @@ function Inner() {
     [currentUserId, currentUserName],
   );
 
-
   // ── Persistent cache from Supabase ─────────────────────────────────────────
-  const isUnfiltered = query === "" && leadFilter === "all" && areaFilter === "all" && duplicateFilter === "all";
+  const isUnfiltered =
+    query === "" && leadFilter === "all" && areaFilter === "all" && duplicateFilter === "all";
 
   // Tab badge counts — served from a pre-aggregated materialized view via one
   // scalar RPC. These same numbers drive pagination, so we no longer fire a
@@ -817,16 +868,17 @@ function Inner() {
 
   const exactCountQuery = countsQuery;
   const exactCount = isUnfiltered ? countsQuery.data?.[tab] : undefined;
-  const totalPages = typeof exactCount === "number" ? calculateTotalPages(exactCount, pageSize) : undefined;
-  const lastPageSize = typeof exactCount === "number" ? calculateLastPageSize(exactCount, pageSize) : undefined;
-
+  const totalPages =
+    typeof exactCount === "number" ? calculateTotalPages(exactCount, pageSize) : undefined;
+  const lastPageSize =
+    typeof exactCount === "number" ? calculateLastPageSize(exactCount, pageSize) : undefined;
 
   const cacheKey = useMemo(
     () =>
       [
         "raw-lead-cache",
         tab,
-        currentCursor === "last" ? "last" : currentCursor?.id ?? "first",
+        currentCursor === "last" ? "last" : (currentCursor?.id ?? "first"),
         pageSize,
         query,
         leadFilter,
@@ -869,7 +921,7 @@ function Inner() {
         queryKey: [
           "raw-lead-cache",
           tab,
-          targetCursor === "last" ? "last" : targetCursor?.id ?? "first",
+          targetCursor === "last" ? "last" : (targetCursor?.id ?? "first"),
           pageSize,
           query,
           leadFilter,
@@ -904,9 +956,6 @@ function Inner() {
     setCurrentCursor(null);
     setCurrentPage(1);
   }, []);
-
-
-
 
   const draftCountQuery = useQuery({
     queryKey: ["lead-drafts-count", auth.user?.id, "raw_lead"],
@@ -981,6 +1030,62 @@ function Inner() {
     return m;
   }, [entries]);
 
+  async function handleBulkMove(destination: "wrong" | "duplicate") {
+    const targets = entries.filter((entry) =>
+      destination === "wrong"
+        ? entry.category === null && effectiveLead(entry.data, actions[entry.row_key]) === "no"
+        : entry.category === null && entry.duplicate_detected === true,
+    );
+    if (targets.length === 0) {
+      toast.info(
+        destination === "wrong" ? "No 'No' leads to move." : "No duplicate leads to move.",
+      );
+      return;
+    }
+
+    const destinationLabel = destination === "wrong" ? "Wrong posts" : "Duplicate";
+    const confirmed = await confirmDialog({
+      title: `Move ${targets.length} lead${targets.length === 1 ? "" : "s"}?`,
+      description:
+        destination === "wrong"
+          ? `This will move every visible uncategorized lead marked “No” to Wrong posts. You can recategorize individual leads afterward.`
+          : `This will move every visible uncategorized lead flagged as a duplicate to Duplicate. You can recategorize individual leads afterward.`,
+      confirmText: `Move to ${destinationLabel}`,
+      cancelText: "Cancel",
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+
+    const keys = targets.map((entry) => entry.row_key);
+    const keySet = new Set(keys);
+    updateCachedEntries((entry) =>
+      keySet.has(entry.row_key) ? { ...entry, category: destination } : entry,
+    );
+    try {
+      const CHUNK = 25;
+      for (let i = 0; i < keys.length; i += CHUNK) {
+        const slice = keys.slice(i, i + CHUNK);
+        const { error } = await supabase
+          .from(TABLE)
+          .update({
+            category: destination,
+            categorized_by: currentUserId,
+            categorized_at: new Date().toISOString(),
+          } as RawLeadCacheUpdate)
+          .in("row_key", slice);
+        if (error) throw error;
+      }
+      qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
+      qc.invalidateQueries({ queryKey: ["raw-lead-counts"] });
+      const message = `Moved ${targets.length} lead${targets.length === 1 ? "" : "s"} to ${destinationLabel}`;
+      toast.success(message);
+      broadcastBulkMove(message);
+    } catch (e) {
+      toast.error(friendlyError(e));
+      cacheQuery.refetch();
+    }
+  }
+
   const updateAction = useCallback(
     async (k: string, patch: Partial<Action>) => {
       // When a user changes the category, remember who/when so reports can show it.
@@ -1043,7 +1148,15 @@ function Inner() {
   const visible = useMemo(() => {
     const indexed = entries.map((entry, index) => ({ entry, index }));
     indexed.sort((a, b) =>
-      compareRawLeadEntries(a.entry, b.entry, rawLeadSort, actions, currentUserId, a.index, b.index),
+      compareRawLeadEntries(
+        a.entry,
+        b.entry,
+        rawLeadSort,
+        actions,
+        currentUserId,
+        a.index,
+        b.index,
+      ),
     );
     return indexed.map((item) => item.entry);
   }, [actions, currentUserId, entries, rawLeadSort]);
@@ -1197,9 +1310,7 @@ function Inner() {
         const lead = leadByKey.get(entry.row_key);
         return lead ? { ...entry, lead } : entry;
       });
-      toast.success(
-        `AI checked ${result.analyzed}: ${result.yes} Yes, ${result.no} No`,
-      );
+      toast.success(`AI checked ${result.analyzed}: ${result.yes} Yes, ${result.no} No`);
     } catch (e) {
       toast.error(friendlyError(e));
     } finally {
@@ -1215,7 +1326,8 @@ function Inner() {
 
   const autoContinueToggle = useAutoContinueToggle(currentUserId ?? undefined);
   const isAutoChecking = autoContinueToggle.enabled;
-  const setIsAutoChecking = (val: boolean) => autoContinueToggle.setEnabled(val).catch(console.error);
+  const setIsAutoChecking = (val: boolean) =>
+    autoContinueToggle.setEnabled(val).catch(console.error);
 
   const isAutoCheckingRef = useRef(isAutoChecking);
   isAutoCheckingRef.current = isAutoChecking;
@@ -1248,260 +1360,187 @@ function Inner() {
       <div className="crm-toolbar-panel">
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
-          {(
-            [
-              ["new", "New", tabCounts.new],
-              ["forwarded", "Forwarded", tabCounts.forwarded],
-              ["not_found", "Number not found", tabCounts.not_found],
-              ["duplicate", "Duplicate", tabCounts.duplicate],
-              ["wrong", "Wrong posts", tabCounts.wrong],
-              ["assigned_myself", "Assigned Myself", tabCounts.assigned_myself],
-            ] as const
-          ).map(([k, label, n]) => (
-            <button
-              key={k}
-              onClick={() => {
-                setTab(k);
-                resetPagination();
-              }}
-              className={cn(
-                "crm-motion px-3 h-8 text-[12px] font-medium rounded-md inline-flex items-center gap-1.5",
-                tab === k
-                  ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              aria-pressed={tab === k}
-            >
-              <span
+            {(
+              [
+                ["new", "New", tabCounts.new],
+                ["forwarded", "Forwarded", tabCounts.forwarded],
+                ["not_found", "Number not found", tabCounts.not_found],
+                ["duplicate", "Duplicate", tabCounts.duplicate],
+                ["wrong", "Wrong posts", tabCounts.wrong],
+                ["assigned_myself", "Assigned Myself", tabCounts.assigned_myself],
+              ] as const
+            ).map(([k, label, n]) => (
+              <button
+                key={k}
+                onClick={() => {
+                  setTab(k);
+                  resetPagination();
+                }}
                 className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  k === "forwarded" && "bg-success",
-                  k === "not_found" && "bg-warning",
-                  (k === "wrong" || k === "duplicate") && "bg-destructive",
-                  k === "assigned_myself" && "bg-primary",
-                  k === "new" && "bg-primary-glow",
+                  "crm-motion px-3 h-8 text-[12px] font-medium rounded-md inline-flex items-center gap-1.5",
+                  tab === k
+                    ? "bg-card text-foreground shadow-sm ring-1 ring-border-strong"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
-              />
-              {label}
-              <span className="ml-0.5 text-[10.5px] text-muted-foreground tabular-nums">{n}</span>
-            </button>
-          ))}
+                aria-pressed={tab === k}
+              >
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    k === "forwarded" && "bg-success",
+                    k === "not_found" && "bg-warning",
+                    (k === "wrong" || k === "duplicate") && "bg-destructive",
+                    k === "assigned_myself" && "bg-primary",
+                    k === "new" && "bg-primary-glow",
+                  )}
+                />
+                {label}
+                <span className="ml-0.5 text-[10.5px] text-muted-foreground tabular-nums">{n}</span>
+              </button>
+            ))}
           </div>
 
           <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            value={queryInput}
-            onChange={(e) => {
-              setQueryInput(e.target.value);
-              resetPagination();
-            }}
-            placeholder="Search…"
-            className="h-9 pl-9"
-          />
+            <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input
+              value={queryInput}
+              onChange={(e) => {
+                setQueryInput(e.target.value);
+                resetPagination();
+              }}
+              placeholder="Search…"
+              className="h-9 pl-9"
+            />
           </div>
 
           <Select
-          value={leadFilter}
-          onValueChange={(value) => {
-            setLeadFilter(value);
-            resetPagination();
-          }}
-        >
-          <SelectTrigger className="h-9 w-[118px] text-[12px]">
-            <SelectValue placeholder="Lead" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All leads</SelectItem>
-            <SelectItem value="yes">Lead yes</SelectItem>
-            <SelectItem value="no">Lead no</SelectItem>
-          </SelectContent>
-          </Select>
-
-          <Select
-          value={areaFilter}
-          onValueChange={(value) => {
-            setAreaFilter(value);
-            resetPagination();
-          }}
-        >
-          <SelectTrigger className="h-9 w-[150px] text-[12px]">
-            <SelectValue placeholder="Area" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All areas</SelectItem>
-            {areaOptions.map((area) => (
-              <SelectItem key={area} value={area}>
-                {area}
-              </SelectItem>
-            ))}
-          </SelectContent>
-          </Select>
-
-          <Select
-          value={duplicateFilter}
-          onValueChange={(value) => {
-            setDuplicateFilter(value as "all" | "duplicates" | "unique");
-            resetPagination();
-          }}
-        >
-          <SelectTrigger className="h-9 w-[140px] text-[12px]">
-            <SelectValue placeholder="Duplicates" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All posts</SelectItem>
-            <SelectItem value="duplicates">Duplicates only</SelectItem>
-            <SelectItem value="unique">Unique only</SelectItem>
-          </SelectContent>
-          </Select>
-
-
-          {tab === "new" && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-9"
-            onClick={async () => {
-              const targets = entries.filter(
-                (e: CacheEntry) =>
-                  e.category === null && effectiveLead(e.data, actions[e.row_key]) === "no",
-              );
-              if (targets.length === 0) {
-                toast.info("No 'No' leads to move.");
-                return;
-              }
-              const keys = targets.map((e) => e.row_key);
-              const keySet = new Set(keys);
-              updateCachedEntries((e) => (keySet.has(e.row_key) ? { ...e, category: "wrong" } : e));
-              try {
-                // row_keys are full Nextdoor URLs — batch to avoid
-                // exceeding the request URL length limit (which surfaces
-                // as a browser-level "TypeError: Failed to fetch").
-                const CHUNK = 25;
-                for (let i = 0; i < keys.length; i += CHUNK) {
-                  const slice = keys.slice(i, i + CHUNK);
-                  const { error } = await supabase
-                    .from(TABLE)
-                    .update({
-                      category: "wrong",
-                      categorized_by: currentUserId,
-                      categorized_at: new Date().toISOString(),
-                    } as RawLeadCacheUpdate)
-                    .in("row_key", slice);
-                  if (error) throw error;
-                }
-                qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
-                const msg = `Moved ${targets.length} "No" lead${targets.length === 1 ? "" : "s"} to Wrong posts`;
-                toast.success(msg);
-                broadcastBulkMove(msg);
-
-              } catch (e) {
-                toast.error(friendlyError(e));
-                cacheQuery.refetch();
-              }
+            value={leadFilter}
+            onValueChange={(value) => {
+              setLeadFilter(value);
+              resetPagination();
             }}
           >
-            <PhoneOff className="h-3.5 w-3.5 mr-1.5" />
-            Move "No" → Wrong posts
-          </Button>
+            <SelectTrigger className="h-9 w-[118px] text-[12px]">
+              <SelectValue placeholder="Lead" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All leads</SelectItem>
+              <SelectItem value="yes">Lead yes</SelectItem>
+              <SelectItem value="no">Lead no</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={areaFilter}
+            onValueChange={(value) => {
+              setAreaFilter(value);
+              resetPagination();
+            }}
+          >
+            <SelectTrigger className="h-9 w-[150px] text-[12px]">
+              <SelectValue placeholder="Area" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All areas</SelectItem>
+              {areaOptions.map((area) => (
+                <SelectItem key={area} value={area}>
+                  {area}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={duplicateFilter}
+            onValueChange={(value) => {
+              setDuplicateFilter(value as "all" | "duplicates" | "unique");
+              resetPagination();
+            }}
+          >
+            <SelectTrigger className="h-9 w-[140px] text-[12px]">
+              <SelectValue placeholder="Duplicates" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All posts</SelectItem>
+              <SelectItem value="duplicates">Duplicates only</SelectItem>
+              <SelectItem value="unique">Unique only</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {tab === "new" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9"
+              onClick={() => void handleBulkMove("wrong")}
+            >
+              <PhoneOff className="h-3.5 w-3.5 mr-1.5" />
+              Move "No" → Wrong posts
+            </Button>
           )}
 
           {tab === "new" && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-9"
-            onClick={async () => {
-              const targets = entries.filter(
-                (e: CacheEntry) => e.category === null && e.duplicate_detected === true,
-              );
-              if (targets.length === 0) {
-                toast.info("No duplicate leads to move.");
-                return;
-              }
-              const keys = targets.map((e) => e.row_key);
-              const keySet = new Set(keys);
-              updateCachedEntries((e) => (keySet.has(e.row_key) ? { ...e, category: "duplicate" } : e));
-              try {
-                const CHUNK = 25;
-                for (let i = 0; i < keys.length; i += CHUNK) {
-                  const slice = keys.slice(i, i + CHUNK);
-                  const { error } = await supabase
-                    .from(TABLE)
-                    .update({
-                      category: "duplicate",
-                      categorized_by: currentUserId,
-                      categorized_at: new Date().toISOString(),
-                    } as RawLeadCacheUpdate)
-                    .in("row_key", slice);
-                  if (error) throw error;
-                }
-                qc.invalidateQueries({ queryKey: ["raw-lead-cache"] });
-                const msg = `Moved ${targets.length} duplicate lead${targets.length === 1 ? "" : "s"} to Duplicate`;
-                toast.success(msg);
-                broadcastBulkMove(msg);
-
-              } catch (e) {
-                toast.error(friendlyError(e));
-                cacheQuery.refetch();
-              }
-            }}
-          >
-            <Layers className="h-3.5 w-3.5 mr-1.5" />
-            Move duplicates → Duplicate
-          </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9"
+              onClick={() => void handleBulkMove("duplicate")}
+            >
+              <Layers className="h-3.5 w-3.5 mr-1.5" />
+              Move duplicates → Duplicate
+            </Button>
           )}
 
           <div className="ml-auto flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-9"
-            onClick={() => setSettingsOpen(true)}
-            title="Web App URL"
-          >
-            <Gear className="h-3.5 w-3.5 mr-1.5" /> Source
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-9"
-            onClick={handleRefresh}
-            disabled={isFetching}
-          >
-            {isFetching ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-            )}
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="relative h-9"
-            onClick={() => setDraftsOpen(true)}
-            title={hasDraftLeads ? "Draft contains leads" : "View saved drafts"}
-          >
-            <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
-            Drafts
-            {hasDraftLeads && (
-              <span
-                className="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white ring-2 ring-background"
-                aria-label={`${draftCountQuery.data} draft leads`}
-                title={`${draftCountQuery.data} draft leads`}
-              >
-                {draftCountQuery.data}
-              </span>
-            )}
-          </Button>
-
-          {auth.primaryRole === "admin" && (
-            <Button size="sm" variant="outline" className="h-9" onClick={exportRows}>
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Export
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9"
+              onClick={() => setSettingsOpen(true)}
+              title="Web App URL"
+            >
+              <Gear className="h-3.5 w-3.5 mr-1.5" /> Source
             </Button>
-          )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9"
+              onClick={handleRefresh}
+              disabled={isFetching}
+            >
+              {isFetching ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="relative h-9"
+              onClick={() => setDraftsOpen(true)}
+              title={hasDraftLeads ? "Draft contains leads" : "View saved drafts"}
+            >
+              <FolderOpen className="h-3.5 w-3.5 mr-1.5" />
+              Drafts
+              {hasDraftLeads && (
+                <span
+                  className="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white ring-2 ring-background"
+                  aria-label={`${draftCountQuery.data} draft leads`}
+                  title={`${draftCountQuery.data} draft leads`}
+                >
+                  {draftCountQuery.data}
+                </span>
+              )}
+            </Button>
+
+            {auth.primaryRole === "admin" && (
+              <Button size="sm" variant="outline" className="h-9" onClick={exportRows}>
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Export
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1528,7 +1567,9 @@ function Inner() {
       <AlertDialog open={confirmDelete} onOpenChange={(o) => !deleting && setConfirmDelete(o)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {selected.size} lead{selected.size === 1 ? "" : "s"}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete {selected.size} lead{selected.size === 1 ? "" : "s"}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               This permanently removes the selected raw leads. This action cannot be undone.
             </AlertDialogDescription>
@@ -1536,7 +1577,10 @@ function Inner() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => { e.preventDefault(); deleteSelected(); }}
+              onClick={(e) => {
+                e.preventDefault();
+                deleteSelected();
+              }}
               disabled={deleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
@@ -1595,7 +1639,11 @@ function Inner() {
                     runAiLeadCheck();
                   }
                 }}
-                disabled={(aiRunning && !isAutoChecking) || aiLockedByOther || (aiTargets.length === 0 && !aiRunning)}
+                disabled={
+                  (aiRunning && !isAutoChecking) ||
+                  aiLockedByOther ||
+                  (aiTargets.length === 0 && !aiRunning)
+                }
                 title={
                   aiLockedByOther
                     ? `AI is busy — ${aiLock?.user_name ?? "another user"} is processing leads`
@@ -1609,7 +1657,7 @@ function Inner() {
                 )}
                 {aiLockedByOther
                   ? "AI busy…"
-                  : (aiRunning && isAutoChecking)
+                  : aiRunning && isAutoChecking
                     ? "Stop Auto-check"
                     : isAutoChecking
                       ? `Start Auto-check (${aiTargets.length || 50})`
@@ -1654,290 +1702,288 @@ function Inner() {
       <div className="crm-section-panel">
         <div className="glass-card overflow-hidden">
           <div className="max-h-[calc(100vh-340px)] overflow-auto">
-          <table
-            className="text-[12px] border-separate border-spacing-0 table-fixed w-full"
-            style={{ minWidth: 1240 }}
-          >
-            <colgroup>
-              <col style={{ width: 36 }} />
-              <col style={{ width: 60 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 125 }} />
-              <col style={{ width: 125 }} />
-              <col style={{ width: 230 }} />
-              <col style={{ width: 72 }} />
-              <col style={{ width: 86 }} />
-              <col style={{ width: 120 }} />
-              <col style={{ width: 96 }} />
-              <col style={{ width: 120 }} />
-              <col style={{ width: 120 }} />
-              <col style={{ width: 130 }} />
-              <col style={{ width: 60 }} />
-            </colgroup>
-            <thead className="sticky top-0 z-10 bg-surface">
-              <tr>
-                <th className="border-b border-border px-2 py-2">
-                  <Checkbox
-                    checked={
-                      shownRows.length > 0 && shownRows.every((row) => selected.has(row.row_key))
-                    }
-                    onCheckedChange={(checked) => {
-                      setSelected((prev) => {
-                        const next = new Set(prev);
-                        if (checked) {
-                          for (const row of shownRows) next.add(row.row_key);
-                        } else {
-                          for (const row of shownRows) next.delete(row.row_key);
-                        }
-                        return next;
-                      });
-                    }}
-                    aria-label="Select all visible"
-                  />
-                </th>
-                <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
-                  <SortHeader
-                    label="Row #"
-                    active={rawLeadSort.key === "row"}
-                    direction={rawLeadSort.direction}
-                    onClick={() => toggleRawLeadSort("row")}
-                  />
-                </th>
-                {RAW_LEAD_COLUMNS.map((h) => (
-                  <th
-                    key={h}
-                    className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight"
-                  >
-                    <SortHeader
-                      label={h}
-                      active={rawLeadSort.key === RAW_LEAD_SORT_BY_COLUMN[h]}
-                      direction={rawLeadSort.direction}
-                      onClick={() => toggleRawLeadSort(RAW_LEAD_SORT_BY_COLUMN[h])}
+            <table
+              className="text-[12px] border-separate border-spacing-0 table-fixed w-full"
+              style={{ minWidth: 1240 }}
+            >
+              <colgroup>
+                <col style={{ width: 36 }} />
+                <col style={{ width: 60 }} />
+                <col style={{ width: 140 }} />
+                <col style={{ width: 125 }} />
+                <col style={{ width: 125 }} />
+                <col style={{ width: 230 }} />
+                <col style={{ width: 72 }} />
+                <col style={{ width: 86 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 96 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 130 }} />
+                <col style={{ width: 60 }} />
+              </colgroup>
+              <thead className="sticky top-0 z-10 bg-surface">
+                <tr>
+                  <th className="border-b border-border px-2 py-2">
+                    <Checkbox
+                      checked={
+                        shownRows.length > 0 && shownRows.every((row) => selected.has(row.row_key))
+                      }
+                      onCheckedChange={(checked) => {
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (checked) {
+                            for (const row of shownRows) next.add(row.row_key);
+                          } else {
+                            for (const row of shownRows) next.delete(row.row_key);
+                          }
+                          return next;
+                        });
+                      }}
+                      aria-label="Select all visible"
                     />
                   </th>
-                ))}
-                <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
-                  <SortHeader
-                    label="Assignment"
-                    active={rawLeadSort.key === "assignment"}
-                    direction={rawLeadSort.direction}
-                    onClick={() => toggleRawLeadSort("assignment")}
-                  />
-                </th>
-                <th className="border-b border-border px-2 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {!cacheQuery.isLoading && visible.length === 0 && !error && (
-                <tr>
-                  <td colSpan={14} className="text-center py-12 text-muted-foreground">
-                    <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
-                    No leads in this category. Try a different tab or refresh.
-                  </td>
-                </tr>
-              )}
-              {shownRows.map((e) => {
-                const r = e.data;
-                const k = e.row_key;
-                const a = actions[k] || {};
-                const lv = effectiveLead(r, a);
-                const mine = !!currentUserId && e.assigned_to === currentUserId;
-                const claimedByOther = !!e.assigned_to && e.assigned_to !== currentUserId;
-                const isSelected = selected.has(k);
-                return (
-                  <tr
-                    key={k}
-                    className={cn(
-                      "crm-data-row crm-motion align-top cursor-pointer",
-                      isSelected
-                        ? "crm-data-row-active"
-                        : mine
-                          ? "crm-data-row-active"
-                          : claimedByOther
-                            ? "crm-data-row-muted"
-                            : "",
-                    )}
-                    onClick={() => setDetailFor(e)}
-                  >
-                    <td
-                      className="border-b border-border px-2 py-2"
-                      onClick={(ev) => ev.stopPropagation()}
+                  <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
+                    <SortHeader
+                      label="Row #"
+                      active={rawLeadSort.key === "row"}
+                      direction={rawLeadSort.direction}
+                      onClick={() => toggleRawLeadSort("row")}
+                    />
+                  </th>
+                  {RAW_LEAD_COLUMNS.map((h) => (
+                    <th
+                      key={h}
+                      className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight"
                     >
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggleSelect(k)}
-                        aria-label="Select row"
+                      <SortHeader
+                        label={h}
+                        active={rawLeadSort.key === RAW_LEAD_SORT_BY_COLUMN[h]}
+                        direction={rawLeadSort.direction}
+                        onClick={() => toggleRawLeadSort(RAW_LEAD_SORT_BY_COLUMN[h])}
                       />
-                    </td>
-                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] font-mono text-muted-foreground tabular-nums">
-                      {e.sheet_row ?? "—"}
-                    </td>
-
-                    <td className="border-b border-border px-2.5 py-2">
-                      <div className="flex flex-col gap-1 items-start min-w-0">
-                        <div className="font-medium truncate w-full" title={r["Account Name"]}>
-                          {r["Account Name"] || "—"}
-                        </div>
-                        {e.duplicate_detected && (
-                          <button
-                            type="button"
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              setDuplicateDetailsFor(e);
-                            }}
-                            className="inline-flex items-center rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[9px] font-medium text-destructive whitespace-nowrap hover:bg-destructive/20 transition-colors"
-                            title="Click to review duplicate match"
-                          >
-                            Duplicate Lead
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td
-                      className="border-b border-border px-2.5 py-2 truncate"
-                      title={r["Sub Area / Neighborhood"]}
-                    >
-                      {r["Sub Area / Neighborhood"] || (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td
-                      className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground truncate"
-                      title={r["Posted Date & Time"]}
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="truncate">{r["Posted Date & Time"] || "—"}</span>
-                        {isPostOlderThan24h(r["Posted Date & Time"]) && (
-                          <span
-                            aria-label="Old Post"
-                            title="Posted more than 24 hours ago"
-                            className="shrink-0 select-none pointer-events-none inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
-                          >
-                            Old Post
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="border-b border-border px-2.5 py-2">
-                      <div className="line-clamp-3 whitespace-pre-wrap" title={r["Post Text"]}>
-                        {r["Post Text"] || "—"}
-                      </div>
-                    </td>
-                    <td
-                      className="border-b border-border px-2.5 py-2"
-                      onClick={(ev) => ev.stopPropagation()}
-                    >
-                      <Select
-                        value={lv || ""}
-                        onValueChange={(v) =>
-                          updateAction(k, { lead: v as "yes" | "no" })
-                        }
-                      >
-                        <SelectTrigger
-                          className={cn(
-                            "h-7 text-[11px]",
-                            lv === "yes" && "bg-success/15 text-success border-success/30",
-                            lv === "no" &&
-                              "bg-destructive/15 text-destructive border-destructive/30",
-                          )}
-                        >
-                          <SelectValue placeholder="—" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="yes">Yes</SelectItem>
-                          <SelectItem value="no">No</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td
-                      className="border-b border-border px-2.5 py-2"
-                      onClick={(ev) => ev.stopPropagation()}
-                    >
-                      {r["Lead Link"] ? (
-                        <a
-                          href={r["Lead Link"]}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-primary hover:underline text-[11px]"
-                        >
-                          <ExternalLink className="h-3 w-3" /> Open
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
-                      {r["Captured Date (UTC)"] || "—"}
-                    </td>
-                    <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
-                      {r["Captured Time (UTC)"] || "—"}
-                    </td>
-                    <td
-                      className="border-b border-border px-2.5 py-2 text-[11.5px] truncate"
-                      title={r["Account Area"]}
-                    >
-                      {r["Account Area"] || <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td
-                      className="border-b border-border px-2.5 py-2 text-[11.5px] truncate"
-                      title={r["Incog Account"]}
-                    >
-                      {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td
-                      className="border-b border-border px-2.5 py-2"
-                      onClick={(ev) => ev.stopPropagation()}
-                    >
-                      {mine ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/15 text-primary text-[10.5px] font-medium border border-primary/30">
-                            Assigned to you
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                            onClick={() => unassignFromSelf(e)}
-                          >
-                            <UserMinus className="mr-1 h-3.5 w-3.5" />
-                            Unassign
-                          </Button>
-                        </div>
-                      ) : claimedByOther ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-muted-foreground text-[10.5px] font-medium border border-border">
-                          Claimed
-                        </span>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[11px]"
-                          onClick={() => assignToSelf(e)}
-                          disabled={!currentUserId}
-                        >
-                          Assign to myself
-                        </Button>
-                      )}
-                    </td>
-                    <td
-                      className="border-b border-border px-2 py-2 text-center"
-                      onClick={(ev) => ev.stopPropagation()}
-                    >
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
-                        onClick={() => setDetailFor(e)}
-                        title="Open lead"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
+                    </th>
+                  ))}
+                  <th className="border-b border-border px-2 py-2 text-left font-medium text-[10.5px] uppercase tracking-wide text-muted-foreground whitespace-normal leading-tight">
+                    <SortHeader
+                      label="Assignment"
+                      active={rawLeadSort.key === "assignment"}
+                      direction={rawLeadSort.direction}
+                      onClick={() => toggleRawLeadSort("assignment")}
+                    />
+                  </th>
+                  <th className="border-b border-border px-2 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {!cacheQuery.isLoading && visible.length === 0 && !error && (
+                  <tr>
+                    <td colSpan={14} className="text-center py-12 text-muted-foreground">
+                      <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
+                      No leads in this category. Try a different tab or refresh.
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                )}
+                {shownRows.map((e) => {
+                  const r = e.data;
+                  const k = e.row_key;
+                  const a = actions[k] || {};
+                  const lv = effectiveLead(r, a);
+                  const mine = !!currentUserId && e.assigned_to === currentUserId;
+                  const claimedByOther = !!e.assigned_to && e.assigned_to !== currentUserId;
+                  const isSelected = selected.has(k);
+                  return (
+                    <tr
+                      key={k}
+                      className={cn(
+                        "crm-data-row crm-motion align-top cursor-pointer",
+                        isSelected
+                          ? "crm-data-row-active"
+                          : mine
+                            ? "crm-data-row-active"
+                            : claimedByOther
+                              ? "crm-data-row-muted"
+                              : "",
+                      )}
+                      onClick={() => setDetailFor(e)}
+                    >
+                      <td
+                        className="border-b border-border px-2 py-2"
+                        onClick={(ev) => ev.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelect(k)}
+                          aria-label="Select row"
+                        />
+                      </td>
+                      <td className="border-b border-border px-2.5 py-2 text-[11.5px] font-mono text-muted-foreground tabular-nums">
+                        {e.sheet_row ?? "—"}
+                      </td>
+
+                      <td className="border-b border-border px-2.5 py-2">
+                        <div className="flex flex-col gap-1 items-start min-w-0">
+                          <div className="font-medium truncate w-full" title={r["Account Name"]}>
+                            {r["Account Name"] || "—"}
+                          </div>
+                          {e.duplicate_detected && (
+                            <button
+                              type="button"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                setDuplicateDetailsFor(e);
+                              }}
+                              className="inline-flex items-center rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[9px] font-medium text-destructive whitespace-nowrap hover:bg-destructive/20 transition-colors"
+                              title="Click to review duplicate match"
+                            >
+                              Duplicate Lead
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td
+                        className="border-b border-border px-2.5 py-2 truncate"
+                        title={r["Sub Area / Neighborhood"]}
+                      >
+                        {r["Sub Area / Neighborhood"] || (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td
+                        className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground truncate"
+                        title={r["Posted Date & Time"]}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">{r["Posted Date & Time"] || "—"}</span>
+                          {isPostOlderThan24h(r["Posted Date & Time"]) && (
+                            <span
+                              aria-label="Old Post"
+                              title="Posted more than 24 hours ago"
+                              className="shrink-0 select-none pointer-events-none inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                            >
+                              Old Post
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="border-b border-border px-2.5 py-2">
+                        <div className="line-clamp-3 whitespace-pre-wrap" title={r["Post Text"]}>
+                          {r["Post Text"] || "—"}
+                        </div>
+                      </td>
+                      <td
+                        className="border-b border-border px-2.5 py-2"
+                        onClick={(ev) => ev.stopPropagation()}
+                      >
+                        <Select
+                          value={lv || ""}
+                          onValueChange={(v) => updateAction(k, { lead: v as "yes" | "no" })}
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              "h-7 text-[11px]",
+                              lv === "yes" && "bg-success/15 text-success border-success/30",
+                              lv === "no" &&
+                                "bg-destructive/15 text-destructive border-destructive/30",
+                            )}
+                          >
+                            <SelectValue placeholder="—" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="yes">Yes</SelectItem>
+                            <SelectItem value="no">No</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td
+                        className="border-b border-border px-2.5 py-2"
+                        onClick={(ev) => ev.stopPropagation()}
+                      >
+                        {r["Lead Link"] ? (
+                          <a
+                            href={r["Lead Link"]}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline text-[11px]"
+                          >
+                            <ExternalLink className="h-3 w-3" /> Open
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
+                        {r["Captured Date (UTC)"] || "—"}
+                      </td>
+                      <td className="border-b border-border px-2.5 py-2 text-[11.5px] text-muted-foreground whitespace-nowrap">
+                        {r["Captured Time (UTC)"] || "—"}
+                      </td>
+                      <td
+                        className="border-b border-border px-2.5 py-2 text-[11.5px] truncate"
+                        title={r["Account Area"]}
+                      >
+                        {r["Account Area"] || <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td
+                        className="border-b border-border px-2.5 py-2 text-[11.5px] truncate"
+                        title={r["Incog Account"]}
+                      >
+                        {r["Incog Account"] || <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td
+                        className="border-b border-border px-2.5 py-2"
+                        onClick={(ev) => ev.stopPropagation()}
+                      >
+                        {mine ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-primary/15 text-primary text-[10.5px] font-medium border border-primary/30">
+                              Assigned to you
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                              onClick={() => unassignFromSelf(e)}
+                            >
+                              <UserMinus className="mr-1 h-3.5 w-3.5" />
+                              Unassign
+                            </Button>
+                          </div>
+                        ) : claimedByOther ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-muted-foreground text-[10.5px] font-medium border border-border">
+                            Claimed
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[11px]"
+                            onClick={() => assignToSelf(e)}
+                            disabled={!currentUserId}
+                          >
+                            Assign to myself
+                          </Button>
+                        )}
+                      </td>
+                      <td
+                        className="border-b border-border px-2 py-2 text-center"
+                        onClick={(ev) => ev.stopPropagation()}
+                      >
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          onClick={() => setDetailFor(e)}
+                          title="Open lead"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -2014,7 +2060,11 @@ function Inner() {
               const nextCursor = { captured_at: lastEntry.captured_at, id: lastEntry.id };
               navigateTo("next", nextCursor, currentPage + 1);
             }}
-            disabled={(!cacheQuery.data?.hasMore && currentPage >= (totalPages ?? Infinity)) || navigating || cacheQuery.isFetching}
+            disabled={
+              (!cacheQuery.data?.hasMore && currentPage >= (totalPages ?? Infinity)) ||
+              navigating ||
+              cacheQuery.isFetching
+            }
           >
             Next
           </Button>
@@ -2027,11 +2077,11 @@ function Inner() {
               navigateTo("last", "last", totalPages);
             }}
             disabled={
-              !isUnfiltered || 
-              !totalPages || 
-              exactCountQuery.isFetching || 
-              currentPage >= totalPages || 
-              navigating || 
+              !isUnfiltered ||
+              !totalPages ||
+              exactCountQuery.isFetching ||
+              currentPage >= totalPages ||
+              navigating ||
               cacheQuery.isFetching
             }
           >
@@ -2190,7 +2240,6 @@ function Inner() {
           />
         </Suspense>
       )}
-
     </div>
   );
 }
@@ -2291,7 +2340,6 @@ function LeadDetailDialog({
     }
   }
 
-
   const isDirty = phone.trim() !== "" || secondPhone.trim() !== "";
 
   async function continueDespiteDuplicate() {
@@ -2306,12 +2354,21 @@ function LeadDetailDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(o) => {
-      if (!o && !busy) {
-        void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
-      }
-    }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o && !busy) {
+          void confirmDiscardUnsaved(isDirty).then((ok) => {
+            if (ok) onClose();
+          });
+        }
+      }}
+    >
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        aria-describedby={undefined}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Lead Details</DialogTitle>
         </DialogHeader>
@@ -2382,8 +2439,13 @@ function LeadDetailDialog({
               <Label className="block mb-1 text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
                 Captured (UTC)
               </Label>
-              <div className="text-foreground truncate" title={`${r["Captured Date (UTC)"] ?? ""} ${r["Captured Time (UTC)"] ?? ""}`.trim()}>
-                {`${r["Captured Date (UTC)"] ?? ""} ${r["Captured Time (UTC)"] ?? ""}`.trim() || <span className="text-muted-foreground">—</span>}
+              <div
+                className="text-foreground truncate"
+                title={`${r["Captured Date (UTC)"] ?? ""} ${r["Captured Time (UTC)"] ?? ""}`.trim()}
+              >
+                {`${r["Captured Date (UTC)"] ?? ""} ${r["Captured Time (UTC)"] ?? ""}`.trim() || (
+                  <span className="text-muted-foreground">—</span>
+                )}
               </div>
             </div>
           </div>
@@ -2517,9 +2579,15 @@ function LeadDetailDialog({
             </Button>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => {
-              void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
-            }} disabled={busy}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                void confirmDiscardUnsaved(isDirty).then((ok) => {
+                  if (ok) onClose();
+                });
+              }}
+              disabled={busy}
+            >
               Close
             </Button>
             <Button onClick={handleForward} disabled={busy}>
@@ -2549,7 +2617,6 @@ function LeadDetailDialog({
     </Dialog>
   );
 }
-
 
 // ── Forward to CS dialog ──────────────────────────────────────────────────────
 function QualifyDialog({
@@ -2714,20 +2781,34 @@ function QualifyDialog({
     }
   }
 
-
   const draftData = draft?.form_data ?? null;
 
   return (
-    <Dialog open onOpenChange={(o) => {
-      if (!o) {
-        void confirmDiscardUnsaved(isDirty).then((ok) => { if (ok) onClose(); });
-      }
-    }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) {
+          void confirmDiscardUnsaved(isDirty).then((ok) => {
+            if (ok) onClose();
+          });
+        }
+      }}
+    >
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        aria-describedby={undefined}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{draft ? "Forward to CS (Draft)" : "Forward to CS"}</DialogTitle>
         </DialogHeader>
-        <Suspense fallback={<div className="flex items-center justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          }
+        >
           <LeadForm
             title="Raw lead to CS"
             submitLabel="Send"
@@ -2738,9 +2819,11 @@ function QualifyDialog({
             submitting={busy}
             onDirtyChange={setIsDirty}
             initialValues={{
-              customerName: (draftData?.customerName as string | undefined) ?? row["Account Name"] ?? "",
+              customerName:
+                (draftData?.customerName as string | undefined) ?? row["Account Name"] ?? "",
               customerNumber:
-                (draftData?.customerNumber as string | undefined) ?? formatPhoneInput(entry.phone ?? ""),
+                (draftData?.customerNumber as string | undefined) ??
+                formatPhoneInput(entry.phone ?? ""),
               extraNumbers:
                 (draftData?.extraNumbers as string[] | undefined) ??
                 (initialSecondPhone ? [formatPhoneInput(initialSecondPhone)] : []),
@@ -2753,7 +2836,7 @@ function QualifyDialog({
               context: (draftData?.context as string | undefined) ?? "",
               exactCustomerText:
                 (draftData?.exactCustomerText as string | undefined) ?? row["Post Text"] ?? "",
-              reference: (draftData?.reference as string | undefined),
+              reference: draftData?.reference as string | undefined,
               isImportant: (draftData?.isImportant as boolean | undefined) ?? false,
             }}
             onCancel={onClose}
@@ -2772,7 +2855,6 @@ function QualifyDialog({
             }}
           />
         </Suspense>
-
       </DialogContent>
     </Dialog>
   );

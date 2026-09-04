@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { startOfDay } from "date-fns";
@@ -15,7 +15,8 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody } from "@/components/page";
 import { supabase } from "@/integrations/supabase/client";
-
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/app/")({
   component: DashboardHome,
@@ -116,42 +117,48 @@ function AdminDashboard() {
     },
   });
 
-
   const tiles = [
     {
       label: "New raw leads",
       value: stats.data?.rawCounts.new ?? 0,
       icon: Inbox,
+      to: "/app/raw-leads",
     },
     {
       label: "Forwarded to CS",
       value: stats.data?.rawCounts.forwarded ?? 0,
       icon: Send,
+      to: "/app/raw-leads",
     },
     {
       label: "Number not found",
       value: stats.data?.rawCounts.notFound ?? 0,
       icon: AlertCircle,
+      to: "/app/raw-leads",
     },
     {
       label: "Wrong posts",
       value: stats.data?.rawCounts.wrong ?? 0,
       icon: AlertCircle,
+      to: "/app/raw-leads",
     },
     {
       label: "Processed",
       value: stats.data?.csCounts.converted ?? 0,
       icon: Trophy,
+      to: "/app/cs-leads",
     },
     {
       label: "Follow-ups",
       value: stats.data?.csCounts.need_follow_up ?? 0,
       icon: Clock,
+      to: "/app/cs-leads",
     },
     {
       label: "New to contact",
       value: stats.data?.csCounts.new ?? 0,
       icon: CheckCircle2,
+      to: "/app/cs-leads",
     },
   ];
 
@@ -159,26 +166,59 @@ function AdminDashboard() {
     <div>
       <PageHeader
         title={`${greeting}${firstName ? `, ${firstName}` : ""}`}
-        description="Overview of lead operations across scraping, maturing, and CS."
+        description={`Live operational overview for ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}.`}
       />
       <PageBody className="space-y-6">
         <div className="crm-section-panel">
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7 gap-4">
-            {tiles.map((t) => (
-              <div key={t.label} className="bg-card border border-border shadow-sm rounded-2xl p-5 hover:shadow-md hover:border-border-strong transition-all relative overflow-hidden">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="h-11 w-11 rounded-2xl grid place-items-center border border-border/50 bg-surface shadow-sm">
-                    <t.icon className="h-4.5 w-4.5 text-primary" />
-                  </div>
-                  <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+          {stats.isError ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/35 bg-destructive/5 p-4 text-sm">
+              <div>
+                <div className="font-semibold text-destructive">
+                  Dashboard data could not be loaded
                 </div>
-                <div className="crm-card-value mt-7 tabular-nums">
-                  {t.value}
-                </div>
-                <div className="crm-card-label mt-2">{t.label}</div>
+                <p className="mt-1 text-muted-foreground">
+                  Your lead counts have not been updated. Try again before acting on them.
+                </p>
               </div>
-            ))}
-          </div>
+              <Button variant="outline" onClick={() => stats.refetch()} disabled={stats.isFetching}>
+                {stats.isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Retry
+              </Button>
+            </div>
+          ) : stats.isLoading ? (
+            <div
+              className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-7"
+              aria-busy="true"
+              aria-label="Loading dashboard metrics"
+            >
+              {Array.from({ length: 7 }).map((_, index) => (
+                <div key={index} className="rounded-2xl border border-border bg-card p-5">
+                  <Skeleton className="h-11 w-11 rounded-2xl" />
+                  <Skeleton className="mt-7 h-8 w-16" />
+                  <Skeleton className="mt-3 h-4 w-28" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-7 gap-4">
+              {tiles.map((t) => (
+                <Link
+                  key={t.label}
+                  to={t.to}
+                  className="bg-card border border-border shadow-sm rounded-2xl p-5 hover:shadow-md hover:border-primary/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all relative overflow-hidden"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="h-11 w-11 rounded-2xl grid place-items-center border border-border/50 bg-surface shadow-sm">
+                      <t.icon className="h-4.5 w-4.5 text-primary" />
+                    </div>
+                    <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="crm-card-value mt-7 tabular-nums">{t.value}</div>
+                  <div className="crm-card-label mt-2">{t.label}</div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="crm-section-panel">
@@ -188,13 +228,21 @@ function AdminDashboard() {
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/78 px-4 py-3 shadow-sm">
                   <span>New raw leads captured</span>
                   <span className="text-base font-semibold text-foreground tabular-nums">
-                    {stats.data?.todayRaw ?? 0}
+                    {stats.isLoading ? (
+                      <Skeleton className="h-5 w-10" />
+                    ) : (
+                      (stats.data?.todayRaw ?? "—")
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/78 px-4 py-3 shadow-sm">
                   <span>Leads forwarded to CS</span>
                   <span className="text-base font-semibold text-foreground tabular-nums">
-                    {stats.data?.todayForwarded ?? 0}
+                    {stats.isLoading ? (
+                      <Skeleton className="h-5 w-10" />
+                    ) : (
+                      (stats.data?.todayForwarded ?? "—")
+                    )}
                   </span>
                 </div>
               </div>
@@ -204,16 +252,29 @@ function AdminDashboard() {
             <div className="crm-surface-card crm-accent-navy p-6">
               <h3 className="crm-section-title mb-4">CS pipeline mix</h3>
               <div className="text-[13px] crm-muted-text space-y-2">
-                {Object.entries(stats.data?.csCounts ?? {})
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 6)
-                  .map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-sm">
-                      <span>{CS_LABELS[k] ?? k.replace(/_/g, " ")}</span>
-                      <span className="font-semibold text-foreground tabular-nums">{v}</span>
-                    </div>
-                  ))}
-                {Object.keys(stats.data?.csCounts ?? {}).length === 0 && <div>No leads yet.</div>}
+                {stats.isLoading ? (
+                  <div className="space-y-2" aria-busy="true">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <Skeleton key={index} className="h-11 w-full rounded-2xl" />
+                    ))}
+                  </div>
+                ) : (
+                  Object.entries(stats.data?.csCounts ?? {})
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 6)
+                    .map(([k, v]) => (
+                      <div
+                        key={k}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/80 px-4 py-3 shadow-sm"
+                      >
+                        <span>{CS_LABELS[k] ?? k.replace(/_/g, " ")}</span>
+                        <span className="font-semibold text-foreground tabular-nums">{v}</span>
+                      </div>
+                    ))
+                )}
+                {stats.isSuccess && Object.keys(stats.data?.csCounts ?? {}).length === 0 && (
+                  <div>No leads yet.</div>
+                )}
               </div>
             </div>
           </div>

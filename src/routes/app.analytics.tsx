@@ -37,11 +37,16 @@ import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/app/analytics")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
+export const Route = createFileRoute("/app/analytics")({
+  component: Page,
+  pendingComponent: () => <RouteSkeleton />,
+  pendingMs: 200,
+});
 
 type CsStatus = Database["public"]["Enums"]["cs_status"];
 
@@ -94,7 +99,10 @@ function Page() {
   const auth = useAuth();
   return (
     <div>
-      <PageHeader title="Analytics" description="Pipeline health, throughput, and top performers." />
+      <PageHeader
+        title="Analytics"
+        description="Pipeline health, throughput, and top performers."
+      />
       <PageBody>
         <RoleGate allow={["admin", "sub_admin"]} current={auth.primaryRole}>
           <Inner isAdmin={auth.primaryRole === "admin" || auth.primaryRole === "sub_admin"} />
@@ -173,31 +181,31 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
       prevUntil: start.toISOString(),
     };
   }, [fromDate, toDate]);
+  const rangeTooLarge = range.days > 180;
 
   const analytics = useQuery({
     queryKey: ["analytics-v2", range.since, range.until],
     queryFn: async () => {
-      const [series, prevSeries, csResults, forwardersRes] =
-        await Promise.all([
-          fetchDailySeries(range.since, range.until, range.start, range.end),
-          fetchDailySeries(range.prevSince, range.prevUntil, range.prevStart, range.start),
-          Promise.all(
-            CS_STATUSES.map((status) =>
-              supabase
-                .from("qualified_leads")
-                .select("id", { count: "exact", head: true })
-                .eq("cs_status", status)
-                .gte("assigned_at", range.since)
-                .lt("assigned_at", range.until),
-            ),
+      const [series, prevSeries, csResults, forwardersRes] = await Promise.all([
+        fetchDailySeries(range.since, range.until, range.start, range.end),
+        fetchDailySeries(range.prevSince, range.prevUntil, range.prevStart, range.start),
+        Promise.all(
+          CS_STATUSES.map((status) =>
+            supabase
+              .from("qualified_leads")
+              .select("id", { count: "exact", head: true })
+              .eq("cs_status", status)
+              .gte("assigned_at", range.since)
+              .lt("assigned_at", range.until),
           ),
-          isAdmin
-            ? supabase.rpc("report_leads_forwarded_by_maturing", {
+        ),
+        isAdmin
+          ? supabase.rpc("report_leads_forwarded_by_maturing", {
               _from: range.since,
               _to: range.until,
             })
-            : Promise.resolve({ data: [], error: null }),
-        ]);
+          : Promise.resolve({ data: [], error: null }),
+      ]);
 
       const csBuckets = csResults
         .map((result, index) => {
@@ -216,6 +224,7 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
 
       return { series, prevSeries, csBuckets, forwarders };
     },
+    enabled: !rangeTooLarge,
     staleTime: 5 * 60_000,
     placeholderData: keepPreviousData,
   });
@@ -294,29 +303,99 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
     ];
   }, [totals, converted]);
 
+  if (rangeTooLarge) {
+    return (
+      <div className="rounded-xl border border-warning/40 bg-warning/10 p-5 text-sm">
+        <div className="font-semibold text-warning-foreground">
+          Choose a range of 180 days or less
+        </div>
+        <p className="mt-1 text-muted-foreground">
+          Analytics compares the selected range with the period immediately before it, so longer
+          ranges are not supported yet.
+        </p>
+      </div>
+    );
+  }
+
+  if (analytics.isLoading && !analytics.data) {
+    return (
+      <div className="space-y-5" aria-busy="true" aria-label="Loading analytics">
+        <div className="crm-toolbar-panel">
+          <Skeleton className="h-9 w-full max-w-xl" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Skeleton key={index} className="h-28 rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="h-80 w-full rounded-xl" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="crm-toolbar-panel">
         <div className="flex flex-wrap items-center gap-2">
           <Input
             type="date"
+            aria-label="Start date"
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value || defaultFrom)}
             className="h-9 w-[150px]"
           />
           <Input
             type="date"
+            aria-label="End date"
             value={toDate}
             onChange={(e) => setToDate(e.target.value || today)}
             className="h-9 w-[150px]"
           />
-          <Button size="sm" variant="outline" className="h-9" onClick={() => { setFromDate(today); setToDate(today); }}>Today</Button>
-          <Button size="sm" variant="outline" className="h-9" onClick={() => { setFromDate(format(subDays(new Date(), 6), "yyyy-MM-dd")); setToDate(today); }}>7d</Button>
-          <Button size="sm" variant="outline" className="h-9" onClick={() => { setFromDate(defaultFrom); setToDate(today); }}>30d</Button>
-          <Button size="sm" variant="outline" className="h-9" onClick={() => { setFromDate(format(subDays(new Date(), 89), "yyyy-MM-dd")); setToDate(today); }}>90d</Button>
-          <div className="ml-auto text-[11px] text-muted-foreground">
-            vs previous {range.days}d
-          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={() => {
+              setFromDate(today);
+              setToDate(today);
+            }}
+          >
+            Today
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={() => {
+              setFromDate(format(subDays(new Date(), 6), "yyyy-MM-dd"));
+              setToDate(today);
+            }}
+          >
+            Last 7 days
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={() => {
+              setFromDate(defaultFrom);
+              setToDate(today);
+            }}
+          >
+            Last 30 days
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9"
+            onClick={() => {
+              setFromDate(format(subDays(new Date(), 89), "yyyy-MM-dd"));
+              setToDate(today);
+            }}
+          >
+            Last 90 days
+          </Button>
+          <div className="ml-auto text-[11px] text-muted-foreground">vs previous {range.days}d</div>
         </div>
       </div>
 
@@ -327,7 +406,8 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
             <div>
               <div className="font-semibold text-destructive">Failed to load analytics data</div>
               <div className="text-muted-foreground text-xs mt-1 break-words">
-                {(analytics.error as Error)?.message ?? "An error occurred while fetching analytics from the server."}
+                {(analytics.error as Error)?.message ??
+                  "An error occurred while fetching analytics from the server."}
               </div>
             </div>
           </div>
@@ -346,10 +426,26 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         <KpiCard label="Captured" value={totals.captured} prev={prevTotals.captured} />
-        <KpiCard label="Forwarded" value={totals.forwarded} prev={prevTotals.forwarded} sub={`${totals.captured ? Math.round((totals.forwarded / totals.captured) * 100) : 0}% of captured`} />
+        <KpiCard
+          label="Forwarded"
+          value={totals.forwarded}
+          prev={prevTotals.forwarded}
+          sub={`${totals.captured ? Math.round((totals.forwarded / totals.captured) * 100) : 0}% of captured`}
+        />
         <KpiCard label="Sent to CS" value={totals.sentToCS} prev={prevTotals.sentToCS} />
-        <KpiCard label="Converted" value={converted} sub={`${conversionRate.toFixed(1)}% of forwarded`} accent="success" />
-        <KpiCard label="Wrong posts" value={totals.wrong} prev={prevTotals.wrong} accent="destructive" invertDelta />
+        <KpiCard
+          label="Converted"
+          value={converted}
+          sub={`${conversionRate.toFixed(1)}% of forwarded`}
+          accent="success"
+        />
+        <KpiCard
+          label="Wrong posts"
+          value={totals.wrong}
+          prev={prevTotals.wrong}
+          accent="destructive"
+          invertDelta
+        />
         <KpiCard
           label="Avg / day"
           value={Math.round(totals.captured / Math.max(1, range.days))}
@@ -361,7 +457,10 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
       <Card title="Lead flow" subtitle="Daily captured, forwarded, sent to CS + cumulative capture">
         <div className="h-80">
           <ResponsiveContainer>
-            <ComposedChart data={cumulativeSeries} margin={{ top: 10, right: 12, left: -10, bottom: 0 }}>
+            <ComposedChart
+              data={cumulativeSeries}
+              margin={{ top: 10, right: 12, left: -10, bottom: 0 }}
+            >
               <defs>
                 <linearGradient id="gradCap" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.42} />
@@ -373,15 +472,68 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} interval={Math.max(0, Math.floor(cumulativeSeries.length / 10))} />
-              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "var(--color-muted-foreground)" }} />
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+                interval={Math.max(0, Math.floor(cumulativeSeries.length / 10))}
+              />
+              <YAxis
+                yAxisId="left"
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelStyle={{ color: "var(--color-muted-foreground)" }}
+              />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Area yAxisId="left" type="monotone" name="Captured" dataKey="captured" stroke="var(--color-primary)" strokeWidth={2} fill="url(#gradCap)" />
-              <Area yAxisId="left" type="monotone" name="Forwarded" dataKey="forwarded" stroke="var(--color-success)" strokeWidth={2} fill="url(#gradFwd)" />
-              <Bar yAxisId="left" name="Sent to CS" dataKey="sentToCS" fill="var(--color-chart-3)" radius={[3, 3, 0, 0]} barSize={10} />
-              <Line yAxisId="right" type="monotone" name="Cumulative captured" dataKey="cumulativeCaptured" stroke="var(--color-primary-glow)" strokeWidth={2} dot={false} />
+              <Area
+                yAxisId="left"
+                type="monotone"
+                name="Captured"
+                dataKey="captured"
+                stroke="var(--color-primary)"
+                strokeWidth={2}
+                fill="url(#gradCap)"
+              />
+              <Area
+                yAxisId="left"
+                type="monotone"
+                name="Forwarded"
+                dataKey="forwarded"
+                stroke="var(--color-success)"
+                strokeWidth={2}
+                fill="url(#gradFwd)"
+              />
+              <Bar
+                yAxisId="left"
+                name="Sent to CS"
+                dataKey="sentToCS"
+                fill="var(--color-chart-3)"
+                radius={[3, 3, 0, 0]}
+                barSize={10}
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                name="Cumulative captured"
+                dataKey="cumulativeCaptured"
+                stroke="var(--color-primary-glow)"
+                strokeWidth={2}
+                dot={false}
+              />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -389,14 +541,19 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
 
       {/* Funnel + CS donut */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <Card title="Conversion funnel" subtitle="Drop-off from capture to converted" className="lg:col-span-2">
+        <Card
+          title="Conversion funnel"
+          subtitle="Drop-off from capture to converted"
+          className="lg:col-span-2"
+        >
           <div className="space-y-3 py-2">
             {funnel.map((f, i) => (
               <div key={f.stage} className="space-y-1">
                 <div className="flex items-baseline justify-between text-[12px]">
                   <span className="font-semibold tracking-tight">{f.stage}</span>
                   <span className="tabular-nums text-muted-foreground">
-                    {f.value.toLocaleString()} <span className="opacity-60">· {f.pct.toFixed(1)}%</span>
+                    {f.value.toLocaleString()}{" "}
+                    <span className="opacity-60">· {f.pct.toFixed(1)}%</span>
                   </span>
                 </div>
                 <div className="h-3 rounded-full bg-muted/40 overflow-hidden">
@@ -438,7 +595,10 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
           <ul className="mt-2 space-y-1 text-[11.5px]">
             {csBuckets.slice(0, 6).map((b, i) => (
               <li key={b.key} className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+                />
                 <span className="flex-1 truncate">{b.status}</span>
                 <span className="tabular-nums text-muted-foreground">{b.count}</span>
               </li>
@@ -517,7 +677,13 @@ function KpiCard({
               bad && "bg-destructive/15 text-destructive",
             )}
           >
-            {isUp ? <ArrowUpRight className="h-3 w-3" /> : isDown ? <ArrowDownRight className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+            {isUp ? (
+              <ArrowUpRight className="h-3 w-3" />
+            ) : isDown ? (
+              <ArrowDownRight className="h-3 w-3" />
+            ) : (
+              <Minus className="h-3 w-3" />
+            )}
             {pct !== undefined ? `${Math.abs(pct).toFixed(0)}%` : Math.abs(delta)}
           </span>
         )}
@@ -552,12 +718,17 @@ function Leaderboard({
             <div className="flex items-baseline gap-2 min-w-0">
               <span className="w-4 text-muted-foreground tabular-nums text-[11px]">{i + 1}</span>
               <span className="font-medium tracking-tight truncate">{r.label}</span>
-              {r.sub && <span className="text-[10.5px] text-muted-foreground truncate">{r.sub}</span>}
+              {r.sub && (
+                <span className="text-[10.5px] text-muted-foreground truncate">{r.sub}</span>
+              )}
             </div>
             <span className="tabular-nums font-semibold">{r.value}</span>
           </div>
           <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${(r.value / max) * 100}%`, background: accent }} />
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${(r.value / max) * 100}%`, background: accent }}
+            />
           </div>
         </li>
       ))}
@@ -622,7 +793,10 @@ function SentToCsSection({
         console.warn("Could not fetch sent-to-cs dept breakdown:", error);
         return [];
       }
-      return (data ?? []) as Array<{ assigned_at: string | null; submitted_by_role: string | null }>;
+      return (data ?? []) as Array<{
+        assigned_at: string | null;
+        submitted_by_role: string | null;
+      }>;
     },
     staleTime: 5 * 60_000,
     placeholderData: keepPreviousData,
@@ -755,7 +929,7 @@ function SentToCsSection({
   const activeColor =
     selectedDept === "all"
       ? "var(--color-primary)"
-      : DEPARTMENTS.find((d) => d.key === selectedDept)?.color ?? "var(--color-primary)";
+      : (DEPARTMENTS.find((d) => d.key === selectedDept)?.color ?? "var(--color-primary)");
 
   return (
     <Card
@@ -777,7 +951,8 @@ function SentToCsSection({
                 </span>
               ) : (
                 <span className="text-destructive font-medium flex items-center">
-                  <ArrowDownRight className="h-3 w-3" />{pctChange}%
+                  <ArrowDownRight className="h-3 w-3" />
+                  {pctChange}%
                 </span>
               )}
               <span className="text-muted-foreground text-[10px]">vs prev</span>
@@ -803,9 +978,7 @@ function SentToCsSection({
 
         <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
           <div className="text-[11px] font-medium text-muted-foreground">Active Days</div>
-          <div className="mt-1 text-xl font-bold tabular-nums text-foreground">
-            {daysCount}
-          </div>
+          <div className="mt-1 text-xl font-bold tabular-nums text-foreground">{daysCount}</div>
           <div className="mt-0.5 text-[10.5px] text-muted-foreground">in selected range</div>
         </div>
       </div>
@@ -829,9 +1002,7 @@ function SentToCsSection({
           >
             All Sources
             {deptCounts.all > 0 && (
-              <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">
-                ({deptCounts.all})
-              </span>
+              <span className="ml-1.5 opacity-80 text-[10px] tabular-nums">({deptCounts.all})</span>
             )}
           </button>
           {DEPARTMENTS.map((dept) => {
@@ -857,7 +1028,10 @@ function SentToCsSection({
                     : undefined
                 }
               >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: dept.color }} />
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: dept.color }}
+                />
                 <span>{dept.label}</span>
                 {count > 0 && (
                   <span className="opacity-80 text-[10px] tabular-nums">({count})</span>
@@ -943,7 +1117,9 @@ function SentToCsSection({
                 tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                 axisLine={false}
                 tickLine={false}
-                interval={granularity === "day_of_week" ? 0 : Math.max(0, Math.floor(chartData.length / 8))}
+                interval={
+                  granularity === "day_of_week" ? 0 : Math.max(0, Math.floor(chartData.length / 8))
+                }
               />
               <YAxis
                 tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
@@ -992,7 +1168,9 @@ function SentToCsSection({
                 tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                 axisLine={false}
                 tickLine={false}
-                interval={granularity === "day_of_week" ? 0 : Math.max(0, Math.floor(chartData.length / 8))}
+                interval={
+                  granularity === "day_of_week" ? 0 : Math.max(0, Math.floor(chartData.length / 8))
+                }
               />
               <YAxis
                 tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
@@ -1036,7 +1214,10 @@ function SentToCsSection({
 
 type BreakdownMode = "service" | "state";
 
-function formatStateLabel(stateCode: string | null | undefined, mainArea: string | null | undefined): string {
+function formatStateLabel(
+  stateCode: string | null | undefined,
+  mainArea: string | null | undefined,
+): string {
   if (stateCode && stateCode.trim()) {
     const code = stateCode.trim().toUpperCase();
     return US_STATE_NAME[code] ? `${US_STATE_NAME[code]} (${code})` : code;
@@ -1125,7 +1306,7 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
     for (const r of filteredRows) {
       const key =
         breakdownMode === "service"
-          ? (r.service?.trim() || "(no service)")
+          ? r.service?.trim() || "(no service)"
           : formatStateLabel(r.state_code, r.main_area);
       counts[key] = (counts[key] ?? 0) + 1;
     }
@@ -1142,7 +1323,9 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
 
   return (
     <Card
-      title={breakdownMode === "service" ? "Department leads by service" : "Department leads by state"}
+      title={
+        breakdownMode === "service" ? "Department leads by service" : "Department leads by state"
+      }
       subtitle={`Showing ${breakdownMode === "service" ? "services" : "states"} for ${activeLabel} (${currentTotal.toLocaleString()} lead${currentTotal === 1 ? "" : "s"} across ${breakdownData.length} ${breakdownMode === "service" ? "service" : "state"}${breakdownData.length === 1 ? "" : "s"})`}
     >
       {/* ─── Control Bar: Mode Toggle (By Service / By State) & Department Pills ─── */}
@@ -1252,7 +1435,9 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
       {deptQuery.isLoading ? (
         <div className="h-64 flex items-center justify-center text-muted-foreground text-xs gap-2">
           <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          <span>Loading department {breakdownMode === "service" ? "service" : "state"} data...</span>
+          <span>
+            Loading department {breakdownMode === "service" ? "service" : "state"} data...
+          </span>
         </div>
       ) : breakdownData.length === 0 ? (
         <EmptyState
@@ -1260,17 +1445,18 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
         />
       ) : (
         /* HORIZONTAL BAR CHART - Full names on the left, data labels on the right */
-        <div
-          className="w-full"
-          style={{ height: Math.max(280, breakdownData.length * 42 + 40) }}
-        >
+        <div className="w-full" style={{ height: Math.max(280, breakdownData.length * 42 + 40) }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               layout="vertical"
               data={breakdownData}
               margin={{ top: 10, right: 85, left: 10, bottom: 10 }}
             >
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" horizontal={false} />
+              <CartesianGrid
+                stroke="var(--color-border)"
+                strokeDasharray="3 3"
+                horizontal={false}
+              />
               <XAxis
                 type="number"
                 tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
