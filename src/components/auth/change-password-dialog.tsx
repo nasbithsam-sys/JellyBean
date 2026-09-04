@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
-import { supabase, supabaseKey, supabaseUrl } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -43,7 +43,7 @@ export function ChangePasswordDialog({ open, onOpenChange, userEmail }: Props) {
 
   const verifyClient = useMemo(
     () =>
-      createClient<Database>(supabaseUrl, supabaseKey, {
+      createClient<Database>(supabase.supabaseUrl, supabase.supabaseKey, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
