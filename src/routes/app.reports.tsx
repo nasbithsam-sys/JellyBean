@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { downloadCsv } from "@/lib/crm-lite";
+import { isCsUser } from "@/lib/cs-filter";
 import { cn } from "@/lib/utils";
 
 type DatePreset = "all" | "today" | "yesterday" | "7d" | "30d" | "custom";
@@ -615,7 +616,8 @@ function ForwardedByUserSection({
             .filter((u) => {
               if (!u.user_id) return false;
               const name = u.user_name.trim().toLowerCase();
-              return name && name !== "(unknown)" && name !== "unknown" && !name.startsWith("unknown user");
+              if (!name || name === "(unknown)" || name === "unknown" || name.startsWith("unknown user")) return false;
+              return !isCsUser({ user_id: u.user_id, full_name: u.user_name, email: u.user_email });
             });
         }
       } catch {
@@ -640,7 +642,8 @@ function ForwardedByUserSection({
         .filter((u) => {
           if (!u.user_id) return false;
           const name = u.user_name.trim().toLowerCase();
-          return name && name !== "(unknown)" && name !== "unknown" && !name.startsWith("unknown user");
+          if (!name || name === "(unknown)" || name === "unknown" || name.startsWith("unknown user")) return false;
+          return !isCsUser({ user_id: u.user_id, full_name: u.user_name, email: u.user_email });
         });
     },
   });
@@ -1271,17 +1274,26 @@ function PersonServiceReport({ range }: { range: RangeResult }) {
   const [search, setSearch] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  // Load all active profiles once
+  // Load all active profiles once (excluding Customer Support CS users)
   const profiles = useQuery({
     queryKey: ["report-profiles-list"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, email")
-        .eq("is_active", true)
-        .order("full_name");
-      if (error) throw error;
-      return (data ?? []) as Array<{ user_id: string; full_name: string; email: string }>;
+      const [profsRes, rolesRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("user_id, full_name, email")
+          .eq("is_active", true)
+          .order("full_name"),
+        supabase
+          .from("user_roles")
+          .select("user_id, role")
+          .in("role", ["cs", "cs_admin"]),
+      ]);
+
+      if (profsRes.error) throw profsRes.error;
+      const csIds = new Set((rolesRes.data ?? []).map((r) => r.user_id));
+      const list = (profsRes.data ?? []) as Array<{ user_id: string; full_name: string; email: string }>;
+      return list.filter((p) => !isCsUser(p, csIds));
     },
     staleTime: 10 * 60_000,
   });

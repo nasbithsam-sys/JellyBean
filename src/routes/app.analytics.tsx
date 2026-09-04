@@ -31,6 +31,8 @@ import {
   Loader2,
   MapPin,
   Minus,
+  Search,
+  X,
 } from "lucide-react";
 import { US_STATE_NAME } from "@/lib/us-states";
 import { useAuth } from "@/hooks/use-auth";
@@ -39,6 +41,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { isCsUser } from "@/lib/cs-filter";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/analytics")({ component: Page, pendingComponent: () => <RouteSkeleton />, pendingMs: 200 });
@@ -212,7 +215,16 @@ function Inner({ isAdmin }: { isAdmin: boolean }) {
         .sort((a, b) => b.count - a.count);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const forwarders = (forwardersRes.data ?? []) as any[];
+      const rawForwarders = (forwardersRes.data ?? []) as any[];
+      const forwarders = rawForwarders.filter((f) => {
+        const name = (f.user_name || f.maturing_name || "").toLowerCase().trim();
+        if (!name || name === "(unknown)" || name === "unknown" || name.startsWith("unknown user")) return false;
+        return !isCsUser({
+          user_id: f.user_id || f.maturing_id,
+          full_name: f.user_name || f.maturing_name,
+          email: f.user_email || f.maturing_email,
+        });
+      });
 
       return { series, prevSeries, csBuckets, forwarders };
     },
@@ -1034,7 +1046,7 @@ function SentToCsSection({
   );
 }
 
-type BreakdownMode = "service" | "state";
+type BreakdownMode = "service" | "state" | "service_by_state";
 
 function formatStateLabel(stateCode: string | null | undefined, mainArea: string | null | undefined): string {
   if (stateCode && stateCode.trim()) {
@@ -1060,6 +1072,9 @@ function formatStateLabel(stateCode: string | null | undefined, mainArea: string
 function DeptLeadsChart({ since, until }: { since: string; until: string }) {
   const [breakdownMode, setBreakdownMode] = useState<BreakdownMode>("service");
   const [selectedDept, setSelectedDept] = useState<DeptKey | "all">("all");
+  const [selectedState, setSelectedState] = useState<string>("all");
+  const [selectedService, setSelectedService] = useState<string>("all");
+  const [stateSearch, setStateSearch] = useState<string>("");
 
   const deptQuery = useQuery({
     queryKey: ["analytics-dept-leads-raw", since, until],
@@ -1111,18 +1126,53 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
   const activeLabel = activeDeptConfig?.label ?? "All Departments";
 
   // Filter rows based on selected department
-  const filteredRows = useMemo(() => {
+  const deptFilteredRows = useMemo(() => {
     if (selectedDept === "all") return rawRows;
     return rawRows.filter((r) => r.submitted_by_role === selectedDept);
   }, [rawRows, selectedDept]);
 
-  const currentTotal = filteredRows.length;
+  // List of all states in this department (for state filter)
+  const availableStates = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of deptFilteredRows) {
+      const state = formatStateLabel(r.state_code, r.main_area);
+      counts[state] = (counts[state] ?? 0) + 1;
+    }
+    return Object.entries(counts)
+      .map(([state, count]) => ({ state, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [deptFilteredRows]);
 
-  // Compute breakdown data (by service OR by state)
+  // List of all services in this department (for service filter)
+  const availableServices = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of deptFilteredRows) {
+      const s = r.service?.trim() || "(no service)";
+      counts[s] = (counts[s] ?? 0) + 1;
+    }
+    return Object.entries(counts)
+      .map(([service, count]) => ({ service, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [deptFilteredRows]);
+
+  // Filter rows based on active State / Service filter
+  const activeFilteredRows = useMemo(() => {
+    let rows = deptFilteredRows;
+    if ((breakdownMode === "service" || breakdownMode === "service_by_state") && selectedState !== "all") {
+      rows = rows.filter((r) => formatStateLabel(r.state_code, r.main_area) === selectedState);
+    } else if (breakdownMode === "state" && selectedService !== "all") {
+      rows = rows.filter((r) => (r.service?.trim() || "(no service)") === selectedService);
+    }
+    return rows;
+  }, [deptFilteredRows, breakdownMode, selectedState, selectedService]);
+
+  const currentTotal = activeFilteredRows.length;
+
+  // Compute breakdown data for the horizontal bar chart
   const breakdownData = useMemo(() => {
     const counts: Record<string, number> = {};
 
-    for (const r of filteredRows) {
+    for (const r of activeFilteredRows) {
       const key =
         breakdownMode === "service"
           ? (r.service?.trim() || "(no service)")
@@ -1138,122 +1188,420 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
       }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 18);
-  }, [filteredRows, breakdownMode, currentTotal]);
+  }, [activeFilteredRows, breakdownMode, currentTotal]);
+
+  // Compute full "Service by State" matrix (In each state, how much each service has leads)
+  const stateServiceMatrix = useMemo(() => {
+    const map = new Map<string, { total: number; services: Record<string, number> }>();
+    for (const r of deptFilteredRows) {
+      const state = formatStateLabel(r.state_code, r.main_area);
+      const service = r.service?.trim() || "(no service)";
+      let entry = map.get(state);
+      if (!entry) {
+        entry = { total: 0, services: {} };
+        map.set(state, entry);
+      }
+      entry.total += 1;
+      entry.services[service] = (entry.services[service] ?? 0) + 1;
+    }
+
+    return Array.from(map.entries())
+      .map(([state, data]) => {
+        const sortedServices = Object.entries(data.services)
+          .map(([service, count]) => ({
+            service,
+            count,
+            pct: data.total > 0 ? (count / data.total) * 100 : 0,
+          }))
+          .sort((a, b) => b.count - a.count);
+        return {
+          state,
+          total: data.total,
+          pctOfDept: deptFilteredRows.length > 0 ? (data.total / deptFilteredRows.length) * 100 : 0,
+          services: sortedServices,
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+  }, [deptFilteredRows]);
+
+  // Filtered matrix based on stateSearch and selectedState
+  const filteredMatrix = useMemo(() => {
+    let list = stateServiceMatrix;
+    if (selectedState !== "all") {
+      list = list.filter((s) => s.state === selectedState);
+    }
+    if (stateSearch.trim()) {
+      const q = stateSearch.toLowerCase().trim();
+      list = list.filter((s) => s.state.toLowerCase().includes(q));
+    }
+    return list;
+  }, [stateServiceMatrix, selectedState, stateSearch]);
+
+  // Compute title & subtitle
+  const chartTitle = useMemo(() => {
+    if (breakdownMode === "service_by_state") {
+      return "Department leads: Services by state";
+    }
+    if (breakdownMode === "service") {
+      return selectedState !== "all"
+        ? `Department leads by service — ${selectedState}`
+        : "Department leads by service";
+    }
+    return selectedService !== "all"
+      ? `Department leads by state — ${selectedService}`
+      : "Department leads by state";
+  }, [breakdownMode, selectedState, selectedService]);
+
+  const chartSubtitle = useMemo(() => {
+    if (breakdownMode === "service_by_state") {
+      return `Showing lead counts for each service across all states for ${activeLabel} (${deptFilteredRows.length.toLocaleString()} leads across ${stateServiceMatrix.length} states)`;
+    }
+    if (breakdownMode === "service") {
+      if (selectedState !== "all") {
+        return `Showing services in ${selectedState} for ${activeLabel} (${currentTotal.toLocaleString()} lead${currentTotal === 1 ? "" : "s"} across ${breakdownData.length} service${breakdownData.length === 1 ? "" : "s"})`;
+      }
+      return `Showing services for ${activeLabel} (${currentTotal.toLocaleString()} lead${currentTotal === 1 ? "" : "s"} across ${breakdownData.length} service${breakdownData.length === 1 ? "" : "s"})`;
+    }
+    if (selectedService !== "all") {
+      return `Showing states with ${selectedService} leads for ${activeLabel} (${currentTotal.toLocaleString()} lead${currentTotal === 1 ? "" : "s"} across ${breakdownData.length} state${breakdownData.length === 1 ? "" : "s"})`;
+    }
+    return `Showing states for ${activeLabel} (${currentTotal.toLocaleString()} lead${currentTotal === 1 ? "" : "s"} across ${breakdownData.length} state${breakdownData.length === 1 ? "" : "s"})`;
+  }, [breakdownMode, selectedState, selectedService, activeLabel, currentTotal, breakdownData.length, deptFilteredRows.length, stateServiceMatrix.length]);
 
   return (
-    <Card
-      title={breakdownMode === "service" ? "Department leads by service" : "Department leads by state"}
-      subtitle={`Showing ${breakdownMode === "service" ? "services" : "states"} for ${activeLabel} (${currentTotal.toLocaleString()} lead${currentTotal === 1 ? "" : "s"} across ${breakdownData.length} ${breakdownMode === "service" ? "service" : "state"}${breakdownData.length === 1 ? "" : "s"})`}
-    >
-      {/* ─── Control Bar: Mode Toggle (By Service / By State) & Department Pills ─── */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
-        {/* Department Filter Buttons */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setSelectedDept("all")}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
-              selectedDept === "all"
-                ? "bg-primary text-primary-foreground shadow-xs font-semibold ring-2 ring-primary/30"
-                : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <span>All Departments</span>
-            <span
+    <Card title={chartTitle} subtitle={chartSubtitle}>
+      {/* ─── Control Bar: Department Pills + Mode Switcher ─── */}
+      <div className="mb-4 space-y-3 border-b border-border/50 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Department Filter Buttons */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDept("all");
+              }}
               className={cn(
-                "px-1.5 py-0.2 rounded-full text-[10px] tabular-nums",
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
                 selectedDept === "all"
-                  ? "bg-primary-foreground/20 text-primary-foreground font-bold"
-                  : "bg-background/80 text-muted-foreground",
+                  ? "bg-primary text-primary-foreground shadow-xs font-semibold ring-2 ring-primary/30"
+                  : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground",
               )}
             >
-              {deptTotals.all}
-            </span>
-          </button>
-
-          {DEPARTMENTS.map((dept) => {
-            const count = deptTotals[dept.key] ?? 0;
-            const isSelected = selectedDept === dept.key;
-            return (
-              <button
-                key={dept.key}
-                type="button"
-                onClick={() => setSelectedDept(dept.key)}
+              <span>All Departments</span>
+              <span
                 className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
-                  isSelected
-                    ? "shadow-xs font-semibold ring-2 text-foreground"
-                    : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground",
+                  "px-1.5 py-0.2 rounded-full text-[10px] tabular-nums",
+                  selectedDept === "all"
+                    ? "bg-primary-foreground/20 text-primary-foreground font-bold"
+                    : "bg-background/80 text-muted-foreground",
                 )}
-                style={
-                  isSelected
-                    ? {
-                        backgroundColor: `${dept.color}25`,
-                        borderColor: dept.color,
-                        borderWidth: 1,
-                        borderStyle: "solid",
-                      }
-                    : undefined
-                }
               >
-                <span
-                  className="h-2 w-2 rounded-full shrink-0"
-                  style={{ backgroundColor: dept.color }}
-                />
-                <span>{dept.label}</span>
-                <span
+                {deptTotals.all}
+              </span>
+            </button>
+
+            {DEPARTMENTS.map((dept) => {
+              const count = deptTotals[dept.key] ?? 0;
+              const isSelected = selectedDept === dept.key;
+              return (
+                <button
+                  key={dept.key}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDept(dept.key);
+                  }}
                   className={cn(
-                    "px-1.5 py-0.5 rounded-full text-[10px] tabular-nums",
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer",
                     isSelected
-                      ? "font-bold text-foreground"
-                      : "bg-background/80 text-muted-foreground",
+                      ? "shadow-xs font-semibold ring-2 text-foreground"
+                      : "bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground",
                   )}
-                  style={isSelected ? { backgroundColor: `${dept.color}35` } : undefined}
+                  style={
+                    isSelected
+                      ? {
+                          backgroundColor: `${dept.color}25`,
+                          borderColor: dept.color,
+                          borderWidth: 1,
+                          borderStyle: "solid",
+                        }
+                      : undefined
+                  }
                 >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
+                  <span
+                    className="h-2 w-2 rounded-full shrink-0"
+                    style={{ backgroundColor: dept.color }}
+                  />
+                  <span>{dept.label}</span>
+                  <span
+                    className={cn(
+                      "px-1.5 py-0.5 rounded-full text-[10px] tabular-nums",
+                      isSelected
+                        ? "font-bold text-foreground"
+                        : "bg-background/80 text-muted-foreground",
+                    )}
+                    style={isSelected ? { backgroundColor: `${dept.color}35` } : undefined}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Breakdown Mode Switcher (By Service / By State / Service by State) */}
+          <div className="flex items-center rounded-lg bg-muted/60 p-0.5 border border-border/50 text-xs shrink-0">
+            <button
+              type="button"
+              onClick={() => setBreakdownMode("service")}
+              className={cn(
+                "px-3 py-1.5 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1.5",
+                breakdownMode === "service"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>By Service</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBreakdownMode("state")}
+              className={cn(
+                "px-3 py-1.5 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1.5",
+                breakdownMode === "state"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <MapPin className="h-3.5 w-3.5" />
+              <span>By State</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBreakdownMode("service_by_state")}
+              className={cn(
+                "px-3 py-1.5 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1.5",
+                breakdownMode === "service_by_state"
+                  ? "bg-card text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              title="See how many leads each service has in each state"
+            >
+              <Filter className="h-3.5 w-3.5" />
+              <span>Services by State</span>
+            </button>
+          </div>
         </div>
 
-        {/* Breakdown Mode Switcher (By Service / By State) */}
-        <div className="flex items-center rounded-lg bg-muted/60 p-0.5 border border-border/50 text-xs shrink-0">
-          <button
-            type="button"
-            onClick={() => setBreakdownMode("service")}
-            className={cn(
-              "px-3 py-1.5 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1.5",
-              breakdownMode === "service"
-                ? "bg-card text-foreground shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Layers className="h-3.5 w-3.5" />
-            <span>By Service</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setBreakdownMode("state")}
-            className={cn(
-              "px-3 py-1.5 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1.5",
-              breakdownMode === "state"
-                ? "bg-card text-foreground shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <MapPin className="h-3.5 w-3.5" />
-            <span>By State</span>
-          </button>
+        {/* Secondary Filter Bar: State / Service Drill-Down */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs">
+          {/* State Filter when in By Service or Service by State */}
+          {(breakdownMode === "service" || breakdownMode === "service_by_state") && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-primary" /> Filter by State:
+              </span>
+              <div className="relative inline-flex items-center">
+                <select
+                  value={selectedState}
+                  onChange={(e) => setSelectedState(e.target.value)}
+                  className="h-8 rounded-md bg-muted/60 border border-border/70 px-2.5 pr-8 py-1 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                >
+                  <option value="all">All States ({deptFilteredRows.length} leads)</option>
+                  {availableStates.map((st) => (
+                    <option key={st.state} value={st.state}>
+                      {st.state} ({st.count} lead{st.count === 1 ? "" : "s"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedState !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedState("all")}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium cursor-pointer"
+                  title="Clear state filter"
+                >
+                  <span>{selectedState}</span>
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Service Filter when in By State */}
+          {breakdownMode === "state" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-primary" /> Filter by Service:
+              </span>
+              <div className="relative inline-flex items-center">
+                <select
+                  value={selectedService}
+                  onChange={(e) => setSelectedService(e.target.value)}
+                  className="h-8 rounded-md bg-muted/60 border border-border/70 px-2.5 pr-8 py-1 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                >
+                  <option value="all">All Services ({deptFilteredRows.length} leads)</option>
+                  {availableServices.map((s) => (
+                    <option key={s.service} value={s.service}>
+                      {s.service} ({s.count} lead{s.count === 1 ? "" : "s"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedService !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedService("all")}
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium cursor-pointer"
+                  title="Clear service filter"
+                >
+                  <span>{selectedService}</span>
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Search box when in Service by State mode */}
+          {breakdownMode === "service_by_state" && (
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search state..."
+                value={stateSearch}
+                onChange={(e) => setStateSearch(e.target.value)}
+                className="pl-8 h-8 text-xs bg-muted/40"
+              />
+              {stateSearch && (
+                <button
+                  type="button"
+                  onClick={() => setStateSearch("")}
+                  className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {deptQuery.isLoading ? (
         <div className="h-64 flex items-center justify-center text-muted-foreground text-xs gap-2">
           <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          <span>Loading department {breakdownMode === "service" ? "service" : "state"} data...</span>
+          <span>Loading department data...</span>
         </div>
+      ) : breakdownMode === "service_by_state" ? (
+        /* ─── Service by State: In each state how much each service has leads ─── */
+        filteredMatrix.length === 0 ? (
+          <EmptyState label="No state data found matching your selection" />
+        ) : (
+          <div className="space-y-4">
+            {/* Quick State Pills Bar */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin">
+              <button
+                type="button"
+                onClick={() => setSelectedState("all")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-xs font-medium shrink-0 transition-colors cursor-pointer",
+                  selectedState === "all"
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "bg-muted/60 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                All States ({deptFilteredRows.length})
+              </button>
+              {availableStates.slice(0, 10).map((st) => (
+                <button
+                  key={st.state}
+                  type="button"
+                  onClick={() => setSelectedState(st.state === selectedState ? "all" : st.state)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-md text-xs font-medium shrink-0 transition-colors cursor-pointer inline-flex items-center gap-1",
+                    selectedState === st.state
+                      ? "bg-primary text-primary-foreground font-semibold"
+                      : "bg-muted/60 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>{st.state}</span>
+                  <span className="opacity-75 text-[10.5px]">({st.count})</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Grid of State Cards with Services Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              {filteredMatrix.map((item) => (
+                <div
+                  key={item.state}
+                  className="rounded-lg border border-border/70 bg-card p-4 hover:border-primary/50 transition-all flex flex-col justify-between"
+                >
+                  <div>
+                    {/* State Card Header */}
+                    <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2.5 mb-3">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span className="font-semibold text-sm text-foreground truncate">
+                          {item.state}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-primary/15 text-primary tabular-nums">
+                          {item.total.toLocaleString()} leads
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedState(item.state);
+                            setBreakdownMode("service");
+                          }}
+                          className="text-[11px] text-muted-foreground hover:text-primary transition-colors cursor-pointer font-medium underline"
+                          title="View in horizontal bar chart"
+                        >
+                          Chart
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Services Breakdown in this State */}
+                    <div className="space-y-2">
+                      {item.services.slice(0, 6).map((svc) => (
+                        <div key={svc.service} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="truncate text-muted-foreground font-medium max-w-[200px]" title={svc.service}>
+                              {svc.service}
+                            </span>
+                            <span className="tabular-nums font-semibold text-foreground text-[11.5px]">
+                              {svc.count}{" "}
+                              <span className="text-[10px] text-muted-foreground font-normal">
+                                ({svc.pct.toFixed(1)}%)
+                              </span>
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-muted/60 overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-300"
+                              style={{ width: `${Math.max(2, svc.pct)}%`, backgroundColor: activeColor }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+
+                      {item.services.length > 6 && (
+                        <div className="pt-1.5 text-[11px] text-muted-foreground text-center">
+                          +{item.services.length - 6} more service{item.services.length - 6 === 1 ? "" : "s"} ({item.services.slice(6).reduce((s, x) => s + x.count, 0)} leads)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
       ) : breakdownData.length === 0 ? (
         <EmptyState
           label={`No ${breakdownMode === "service" ? "service" : "state"} leads recorded for ${activeLabel} in this date range`}
@@ -1299,6 +1647,13 @@ function DeptLeadsChart({ since, until }: { since: string; until: string }) {
                 fill={activeColor}
                 radius={[0, 6, 6, 0]}
                 barSize={20}
+                className={breakdownMode === "state" ? "cursor-pointer" : undefined}
+                onClick={(entry: any) => {
+                  if (breakdownMode === "state" && entry?.name) {
+                    setSelectedState(entry.name);
+                    setBreakdownMode("service");
+                  }
+                }}
               >
                 <LabelList
                   dataKey="count"
