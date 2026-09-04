@@ -15,6 +15,7 @@ import {
   PieChart,
   KeyRound,
   MessageSquare,
+  Menu,
 } from "lucide-react";
 
 import { CrmUpdatesNotifier } from "@/components/crm-updates-notifier";
@@ -28,6 +29,7 @@ import { useClockSkew } from "@/hooks/use-clock-skew";
 import jellybeanLogo from "@/assets/jellybean-logo.png";
 import { ChangePasswordDialog } from "@/components/auth/change-password-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useState } from "react";
 import { useCrispUnread } from "@/hooks/use-crisp-unread";
 
@@ -70,10 +72,7 @@ const MATURING: Item[] = [
   { to: "/app/submit-lead", label: "Manual Lead", icon: Send },
 ];
 
-const CS: Item[] = [
-  { to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard },
-  CRISP_ITEM,
-];
+const CS: Item[] = [{ to: "/app/cs-leads", label: "Dashboard", icon: LayoutDashboard }, CRISP_ITEM];
 
 const CS_ADMIN_ITEMS: Item[] = [
   { to: "/app/cs-leads", label: "CS Pipeline", icon: Headphones },
@@ -121,6 +120,37 @@ function itemsForRole(role: AppRole | null): Item[] {
   return [];
 }
 
+function navigationGroupsForRole(role: AppRole | null): Array<{ label: string; items: Item[] }> {
+  const available = itemsForRole(role);
+  if (role !== "admin" && role !== "sub_admin") return [{ label: "Workspace", items: available }];
+
+  const groups = [
+    {
+      label: "Operations",
+      paths: [
+        "/app",
+        "/app/raw-leads",
+        "/app/forwarded-leads",
+        "/app/submit-lead",
+        "/app/browser-profiles",
+        "/app/map",
+      ],
+    },
+    {
+      label: "Customer service",
+      paths: ["/app/cs-leads", "/app/crisp-chat", "/app/lead-assignment"],
+    },
+    { label: "Intelligence", paths: ["/app/analytics", "/app/reports"] },
+    { label: "Administration", paths: ["/app/logs", "/app/settings"] },
+  ];
+  return groups
+    .map((group) => ({
+      ...group,
+      items: available.filter((item) => group.paths.includes(item.to)),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
 function initials(name?: string | null, email?: string | null) {
   const src = name?.trim() || email?.trim() || "?";
   const parts = src.split(/[\s.@]+/).filter(Boolean);
@@ -134,25 +164,26 @@ function roleLabel(role: AppRole | null) {
 
 export function AppShell({ auth, children }: { auth: AuthState; children: React.ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const items = itemsForRole(auth.primaryRole);
+  const navigationGroups = navigationGroupsForRole(auth.primaryRole);
   const displayName = auth.profile?.full_name || auth.user?.email || "-";
   const skewSeconds = useClockSkew();
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { unreadCount: crispUnreadCount, hasUnread: hasCrispUnread } = useCrispUnread();
 
   useRealtimeSync(auth.primaryRole);
 
   return (
     <div className="crm-app-shell flex h-screen overflow-hidden bg-background text-foreground">
-      <aside className="crm-sidebar-shell w-[76px] lg:w-[236px] shrink-0 text-sidebar-foreground flex flex-col h-full">
-        <div className="px-3 lg:px-5 pt-5 pb-4">
-          <div className="flex items-center justify-center lg:justify-start gap-2.5">
+      <aside className="crm-sidebar-shell hidden w-[236px] shrink-0 text-sidebar-foreground lg:flex flex-col h-full">
+        <div className="px-5 pt-5 pb-4">
+          <div className="flex items-center justify-start gap-2.5">
             <img
               src={jellybeanLogo}
               alt="JellyBean"
               className="h-10 w-10 object-contain shrink-0"
             />
-            <div className="hidden lg:block leading-tight">
+            <div className="leading-tight">
               <div className="text-[14px] font-bold tracking-[-0.015em] text-white">JellyBean</div>
               <div className="text-[11px] font-medium tracking-[0.02em] uppercase text-white/50">
                 CRM
@@ -161,73 +192,87 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           </div>
         </div>
 
-        <nav className="flex-1 min-h-0 px-2.5 lg:px-3 py-3 space-y-1 overflow-y-auto">
-          <div className="hidden lg:block px-3 pb-2 pt-1 text-[10px] uppercase tracking-[0.14em] text-white/40 font-bold">
-            Workspace
-          </div>
-          {items.map((item) => {
-            const Icon = item.icon;
-            const active =
-              item.to === "/app" ? path === "/app" || path === "/app/" : path.startsWith(item.to);
-            const isCrispItem = item.to === "/app/crisp-chat";
-            const shouldBlinkCrisp = isCrispItem && hasCrispUnread;
+        <nav className="flex-1 min-h-0 px-3 py-3 space-y-1 overflow-y-auto">
+          {navigationGroups.map((group) => (
+            <div key={group.label} className="space-y-1 pb-3">
+              <div className="px-3 pb-2 pt-1 text-[10px] uppercase tracking-[0.14em] text-white/40 font-bold">
+                {group.label}
+              </div>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active =
+                  item.to === "/app"
+                    ? path === "/app" || path === "/app/"
+                    : path.startsWith(item.to);
+                const isCrispItem = item.to === "/app/crisp-chat";
+                const shouldBlinkCrisp = isCrispItem && hasCrispUnread;
 
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                title={item.label}
-                className={cn(
-                  "group crm-motion relative flex h-11 items-center justify-center lg:justify-start gap-3 px-0 lg:px-3 rounded-2xl text-[13px] tracking-[-0.005em]",
-                  shouldBlinkCrisp && "animate-pulse bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.35)]",
-                  active
-                    ? "crm-sidebar-active text-white font-semibold"
-                    : !shouldBlinkCrisp && "text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white",
-                )}
-              >
-                <div className="relative flex items-center justify-center">
-                  <Icon
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    title={item.label}
                     className={cn(
-                      "h-[16px] w-[16px] crm-motion",
-                      active ? "text-white" : shouldBlinkCrisp ? "text-emerald-300" : "text-white/60 group-hover:text-white",
-                    )}
-                  />
-                  {shouldBlinkCrisp && (
-                    <span className="lg:hidden absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
-                  )}
-                </div>
-                <span className={cn("hidden lg:block flex-1 truncate", shouldBlinkCrisp && "font-semibold text-emerald-200")}>
-                  {item.label}
-                </span>
-                {isCrispItem && crispUnreadCount > 0 && (
-                  <span className="hidden lg:inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500 text-white shadow-sm shrink-0 animate-bounce">
-                    {crispUnreadCount}
-                  </span>
-                )}
-                {item.shortcut && !shouldBlinkCrisp && (
-                  <kbd
-                    className={cn(
-                      "hidden lg:inline-flex crm-motion opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded font-mono",
-                      active ? "bg-white/15 text-white" : "bg-white/10 text-white/60",
+                      "group crm-motion relative flex h-11 items-center justify-start gap-3 px-3 rounded-2xl text-[13px] tracking-[-0.005em]",
+                      shouldBlinkCrisp &&
+                        "animate-pulse bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.35)]",
+                      active
+                        ? "crm-sidebar-active text-white font-semibold"
+                        : !shouldBlinkCrisp &&
+                            "text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white",
                     )}
                   >
-                    {item.shortcut}
-                  </kbd>
-                )}
-              </Link>
-            );
-          })}
+                    <div className="relative flex items-center justify-center">
+                      <Icon
+                        className={cn(
+                          "h-[16px] w-[16px] crm-motion",
+                          active
+                            ? "text-white"
+                            : shouldBlinkCrisp
+                              ? "text-emerald-300"
+                              : "text-white/60 group-hover:text-white",
+                        )}
+                      />
+                    </div>
+                    <span
+                      className={cn(
+                        "flex-1 truncate",
+                        shouldBlinkCrisp && "font-semibold text-emerald-200",
+                      )}
+                    >
+                      {item.label}
+                    </span>
+                    {isCrispItem && crispUnreadCount > 0 && (
+                      <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500 text-white shadow-sm shrink-0">
+                        {crispUnreadCount}
+                      </span>
+                    )}
+                    {item.shortcut && !shouldBlinkCrisp && (
+                      <kbd
+                        className={cn(
+                          "inline-flex crm-motion opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded font-mono",
+                          active ? "bg-white/15 text-white" : "bg-white/10 text-white/60",
+                        )}
+                      >
+                        {item.shortcut}
+                      </kbd>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
-        <div className="px-2.5 lg:px-3 pb-3 flex flex-col gap-1.5">
-          <ThemeToggle className="group crm-motion relative flex h-11 w-full items-center justify-center lg:justify-start gap-3 px-0 lg:px-3 rounded-2xl text-[13px] tracking-[-0.005em] text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white focus:ring-0 focus:ring-offset-0 [&>span]:hidden lg:[&>span]:inline" />
+        <div className="px-3 pb-3 flex flex-col gap-1.5">
+          <ThemeToggle className="group crm-motion relative flex h-11 w-full items-center justify-start gap-3 px-3 rounded-2xl text-[13px] tracking-[-0.005em] text-sidebar-foreground/72 font-medium hover:bg-white/[0.10] hover:text-white focus:ring-0 focus:ring-offset-0" />
         </div>
-        <div className="mt-auto p-2.5 lg:p-3">
-          <div className="flex items-center justify-center lg:justify-start gap-2.5 rounded-[22px] bg-sidebar-accent/72 border border-white/[0.10] shadow-sm p-2 lg:p-2.5 overflow-hidden">
+        <div className="mt-auto p-3">
+          <div className="flex items-center justify-start gap-2.5 rounded-[22px] bg-sidebar-accent/72 border border-white/[0.10] shadow-sm p-2.5 overflow-hidden">
             <div className="h-9 w-9 shrink-0 rounded-full bg-primary grid place-items-center text-[12px] font-bold text-white shadow-sm">
               {initials(auth.profile?.full_name, auth.user?.email)}
             </div>
-            <div className="hidden lg:flex min-w-0 flex-1 flex-col justify-center">
+            <div className="flex min-w-0 flex-1 flex-col justify-center">
               <div className="text-[13px] font-bold tracking-tight truncate text-white leading-none mb-1.5">
                 {displayName}
               </div>
@@ -236,7 +281,7 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
                 <span className="truncate">{roleLabel(auth.primaryRole)}</span>
               </div>
             </div>
-            <div className="hidden lg:flex items-center gap-0.5 shrink-0">
+            <div className="flex items-center gap-0.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setPasswordDialogOpen(true)}
@@ -258,7 +303,81 @@ export function AppShell({ auth, children }: { auth: AuthState; children: React.
           </div>
         </div>
       </aside>
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent
+          side="left"
+          className="crm-sidebar-shell flex h-full w-[min(86vw,320px)] flex-col border-0 p-0 text-sidebar-foreground"
+        >
+          <SheetHeader className="border-b border-white/10 px-5 py-5 text-left">
+            <SheetTitle className="flex items-center gap-2.5 text-white">
+              <img src={jellybeanLogo} alt="" className="h-9 w-9 object-contain" />
+              <span>JellyBean CRM</span>
+            </SheetTitle>
+          </SheetHeader>
+          <nav aria-label="Main navigation" className="flex-1 overflow-y-auto space-y-1 px-3 py-4">
+            {navigationGroups.map((group) => (
+              <div key={group.label} className="space-y-1 pb-3">
+                <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
+                  {group.label}
+                </div>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active =
+                    item.to === "/app"
+                      ? path === "/app" || path === "/app/"
+                      : path.startsWith(item.to);
+                  const isCrispItem = item.to === "/app/crisp-chat";
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setMobileNavOpen(false)}
+                      className={cn(
+                        "flex h-11 items-center gap-3 rounded-2xl px-3 text-[14px] font-medium",
+                        active
+                          ? "crm-sidebar-active text-white"
+                          : "text-sidebar-foreground/75 hover:bg-white/[0.10] hover:text-white",
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      {isCrispItem && crispUnreadCount > 0 && (
+                        <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                          {crispUnreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+          <div className="border-t border-white/10 p-3 space-y-1.5">
+            <ThemeToggle className="flex h-11 w-full items-center justify-start gap-3 rounded-2xl px-3 text-[14px] text-sidebar-foreground/75 hover:bg-white/[0.10] hover:text-white" />
+            <button
+              type="button"
+              onClick={() => void auth.signOut()}
+              className="flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-[14px] text-sidebar-foreground/75 hover:bg-destructive/15 hover:text-white"
+            >
+              <LogOut className="h-4 w-4" /> Sign out
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
       <main className="flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden bg-background">
+        <div className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/70 bg-background/88 px-4 backdrop-blur lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            className="inline-flex h-10 items-center gap-2 rounded-xl px-2 text-sm font-semibold text-foreground hover:bg-muted"
+            aria-label="Open navigation"
+          >
+            <Menu className="h-5 w-5" />
+            <span>Menu</span>
+          </button>
+          <img src={jellybeanLogo} alt="JellyBean" className="h-8 w-8 object-contain" />
+          <ThemeToggle className="h-10 w-10 p-0 [&>span]:hidden" />
+        </div>
         {skewSeconds !== null && (
           <div className="m-4 p-3 rounded-md border border-warning/40 bg-warning/10 text-warning-foreground text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in">
             <div className="flex flex-col gap-1">

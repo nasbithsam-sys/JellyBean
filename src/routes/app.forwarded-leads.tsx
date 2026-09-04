@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { listCsTeam } from "@/lib/cs-team.functions";
+import { isCsUser } from "@/lib/cs-filter";
 import { RouteSkeleton } from "@/components/route-skeleton";
 import { useMemo, useState, useEffect } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -210,6 +211,10 @@ function Inner() {
     return map;
   }, [csTeam.data]);
 
+  const csUserIds = useMemo(() => {
+    return new Set((csTeam.data ?? []).map((m) => m.user_id));
+  }, [csTeam.data]);
+
   const list = useQuery({
     queryKey: ["forwarded-leads", auth.user?.id, isAdmin, { page, dbDateFrom, dbDateTo, forwardedByFilter, outcomeFilter, dbSearch }],
     enabled: !!auth.user?.id,
@@ -360,6 +365,7 @@ function Inner() {
               <SelectItem value="all">All forwarders</SelectItem>
               {(allProfiles.data ?? [])
                 .slice()
+                .filter((profile) => !isCsUser(profile, csUserIds))
                 .sort((a, b) =>
                   (a.full_name || a.email).localeCompare(b.full_name || b.email),
                 )

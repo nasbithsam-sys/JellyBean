@@ -15,7 +15,6 @@ import {
   startOfMonth,
 } from "date-fns";
 import {
-  
   ImagePlus,
   CheckCircle2,
   Plus,
@@ -27,6 +26,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -53,7 +53,6 @@ const DraftsDialog = lazy(() =>
 );
 import { saveDraft, deleteDraft, countMyDrafts, type LeadDraft } from "@/lib/lead-drafts";
 import { friendlyError } from "@/lib/error-messages";
-
 
 export const Route = createFileRoute("/app/submit-lead")({ component: Page });
 
@@ -241,11 +240,16 @@ function Dashboard() {
   return (
     <div>
       <PageHeader
-        title="Submissions dashboard"
+        title="My submitted leads"
         description={`Track the leads you sent to CS${role === "facebook" || role === "seo" ? ` as ${role.toUpperCase()}` : ""}.`}
         actions={
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="relative" onClick={() => setDraftsOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="relative"
+              onClick={() => setDraftsOpen(true)}
+            >
               <FolderOpen className="h-4 w-4 mr-1.5" />
               Drafts
               {hasDraftLeads && (
@@ -258,18 +262,30 @@ function Dashboard() {
                 </span>
               )}
             </Button>
-            <Dialog open={open} onOpenChange={(newOpen) => {
-              if (!newOpen && isDirty && !window.confirm("You have unsaved changes. Are you sure you want to close?")) return;
-              setOpen(newOpen);
-              if (!newOpen) setActiveDraft(null);
-            }}>
+            <Dialog
+              open={open}
+              onOpenChange={(newOpen) => {
+                if (
+                  !newOpen &&
+                  isDirty &&
+                  !window.confirm("You have unsaved changes. Are you sure you want to close?")
+                )
+                  return;
+                setOpen(newOpen);
+                if (!newOpen) setActiveDraft(null);
+              }}
+            >
               <DialogTrigger asChild>
                 <Button size="sm">
                   <Plus className="h-4 w-4 mr-1.5" />
                   New lead
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined} onInteractOutside={(e) => e.preventDefault()}>
+              <DialogContent
+                className="max-w-2xl max-h-[90vh] overflow-y-auto"
+                aria-describedby={undefined}
+                onInteractOutside={(e) => e.preventDefault()}
+              >
                 <DialogHeader>
                   <DialogTitle>
                     {activeDraft ? "Send lead to CS (Draft)" : "Send a new lead to CS"}
@@ -279,7 +295,11 @@ function Dashboard() {
                   key={activeDraft?.id ?? "new"}
                   role={role}
                   initialDraft={activeDraft}
-                  onDone={() => { setOpen(false); setIsDirty(false); setActiveDraft(null); }}
+                  onDone={() => {
+                    setOpen(false);
+                    setIsDirty(false);
+                    setActiveDraft(null);
+                  }}
                   onDirtyChange={setIsDirty}
                 />
               </DialogContent>
@@ -291,20 +311,24 @@ function Dashboard() {
       <PageBody className="space-y-6">
         <div className="crm-section-panel">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <StatCard label="Today" value={stats.today} icon={<Send className="h-4 w-4 text-foreground" />} />
+            <StatCard
+              label="Today"
+              value={all.isLoading ? null : stats.today}
+              icon={<Send className="h-4 w-4 text-foreground" />}
+            />
             <StatCard
               label="This week"
-              value={stats.week}
+              value={all.isLoading ? null : stats.week}
               icon={<CalendarDays className="h-4 w-4 text-primary-glow" />}
             />
             <StatCard
               label="This month"
-              value={stats.month}
+              value={all.isLoading ? null : stats.month}
               icon={<TrendingUp className="h-4 w-4 text-success" />}
             />
             <StatCard
               label="All time"
-              value={leads.length}
+              value={all.isLoading ? null : leads.length}
               icon={<CheckCircle2 className="h-4 w-4 text-warning" />}
             />
           </div>
@@ -312,104 +336,104 @@ function Dashboard() {
 
         <div className="crm-section-panel">
           <div className="glass-card p-5 space-y-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <div className="text-sm font-semibold">Leads in range</div>
-              <div className="text-xs text-muted-foreground">{rangeLabel}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <QuickRange
-                label="7d"
-                onClick={() => {
-                  const today = getToday();
-                  setRange({ from: subDays(today, 6), to: today });
-                }}
-              />
-              <QuickRange
-                label="30d"
-                onClick={() => {
-                  const today = getToday();
-                  setRange({ from: subDays(today, 29), to: today });
-                }}
-              />
-              <QuickRange
-                label="90d"
-                onClick={() => {
-                  const today = getToday();
-                  setRange({ from: subDays(today, 89), to: today });
-                }}
-              />
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
-                    Custom
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
-                  <Calendar
-                    mode="range"
-                    selected={range}
-                    onSelect={setRange}
-                    today={isFacebook ? toPktWallClockDate(new Date()) : undefined}
-                    numberOfMonths={2}
-                    className={cn("p-3 pointer-events-auto")}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          <div className="flex items-end gap-4">
-            <div className="text-3xl font-bold tabular-nums">{stats.ranged}</div>
-            <div className="text-xs text-muted-foreground pb-1">leads in selected range</div>
-          </div>
-
-          <div className="h-40 flex items-end gap-1 border-b border-border-strong pb-1">
-            {stats.series.length === 0 ? (
-              <div className="text-xs text-muted-foreground self-center mx-auto">
-                Pick a date range to see daily trend.
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-sm font-semibold">Leads in range</div>
+                <div className="text-xs text-muted-foreground">{rangeLabel}</div>
               </div>
-            ) : (
-              stats.series.map((seriesItem) => {
-                const h = stats.max > 0 ? (seriesItem.count / stats.max) * 100 : 0;
-                return (
-                  <div
-                    key={seriesItem.date}
-                    className="flex-1 group relative flex flex-col items-center justify-end h-full"
-                  >
-                    <div
-                      className="w-full bg-primary/80 hover:bg-primary rounded-t transition-colors min-h-[2px]"
-                      style={{ height: `${h}%` }}
-                      title={`${seriesItem.label}: ${seriesItem.count}`}
+              <div className="flex items-center gap-2">
+                <QuickRange
+                  label="7d"
+                  onClick={() => {
+                    const today = getToday();
+                    setRange({ from: subDays(today, 6), to: today });
+                  }}
+                />
+                <QuickRange
+                  label="30d"
+                  onClick={() => {
+                    const today = getToday();
+                    setRange({ from: subDays(today, 29), to: today });
+                  }}
+                />
+                <QuickRange
+                  label="90d"
+                  onClick={() => {
+                    const today = getToday();
+                    setRange({ from: subDays(today, 89), to: today });
+                  }}
+                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <CalendarDays className="h-3.5 w-3.5 mr-1.5" />
+                      Custom
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      mode="range"
+                      selected={range}
+                      onSelect={setRange}
+                      today={isFacebook ? toPktWallClockDate(new Date()) : undefined}
+                      numberOfMonths={2}
+                      className={cn("p-3 pointer-events-auto")}
                     />
-                  </div>
-                );
-              })
-            )}
-          </div>
-          {stats.series.length > 0 && (
-            <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
-              <span>{stats.series[0].label}</span>
-              <span>{stats.series[stats.series.length - 1].label}</span>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
-          )}
 
-          {Object.keys(stats.byStatus).length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-              {Object.entries(stats.byStatus).map(([key, value]) => (
-                <div
-                  key={key}
-                  className="text-[11px] px-2.5 py-1 rounded-full bg-muted border border-border"
-                >
-                  <span className="uppercase tracking-wide text-muted-foreground mr-1.5">
-                    {key}
-                  </span>
-                  <span className="font-semibold tabular-nums">{value}</span>
-                </div>
-              ))}
+            <div className="flex items-end gap-4">
+              <div className="text-3xl font-bold tabular-nums">{stats.ranged}</div>
+              <div className="text-xs text-muted-foreground pb-1">leads in selected range</div>
             </div>
-          )}
+
+            <div className="h-40 flex items-end gap-1 border-b border-border-strong pb-1">
+              {stats.series.length === 0 ? (
+                <div className="text-xs text-muted-foreground self-center mx-auto">
+                  Pick a date range to see daily trend.
+                </div>
+              ) : (
+                stats.series.map((seriesItem) => {
+                  const h = stats.max > 0 ? (seriesItem.count / stats.max) * 100 : 0;
+                  return (
+                    <div
+                      key={seriesItem.date}
+                      className="flex-1 group relative flex flex-col items-center justify-end h-full"
+                    >
+                      <div
+                        className="w-full bg-primary/80 hover:bg-primary rounded-t transition-colors min-h-[2px]"
+                        style={{ height: `${h}%` }}
+                        title={`${seriesItem.label}: ${seriesItem.count}`}
+                      />
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            {stats.series.length > 0 && (
+              <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+                <span>{stats.series[0].label}</span>
+                <span>{stats.series[stats.series.length - 1].label}</span>
+              </div>
+            )}
+
+            {Object.keys(stats.byStatus).length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                {Object.entries(stats.byStatus).map(([key, value]) => (
+                  <div
+                    key={key}
+                    className="text-[11px] px-2.5 py-1 rounded-full bg-muted border border-border"
+                  >
+                    <span className="uppercase tracking-wide text-muted-foreground mr-1.5">
+                      {key}
+                    </span>
+                    <span className="font-semibold tabular-nums">{value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -474,14 +498,26 @@ function Dashboard() {
   );
 }
 
-function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
+function StatCard({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: number | null;
+  icon: React.ReactNode;
+}) {
   return (
     <div className="crm-surface-card p-4">
       <div className="flex items-center justify-between text-muted-foreground">
         <span className="text-[10px] uppercase tracking-[0.18em] font-mono">{label}</span>
         {icon}
       </div>
-      <div className="text-2xl font-bold mt-1 tabular-nums">{value}</div>
+      {value === null ? (
+        <Skeleton className="mt-2 h-7 w-14" />
+      ) : (
+        <div className="text-2xl font-bold mt-1 tabular-nums">{value}</div>
+      )}
     </div>
   );
 }
@@ -580,8 +616,7 @@ function SubmitForm({
           customer_number_2: cleanedExtras[0] ?? null,
           extra_numbers: cleanedExtras,
           service: values.service,
-          pass_it_to:
-            role === "facebook" || role === "seo" ? null : values.service,
+          pass_it_to: role === "facebook" || role === "seo" ? null : values.service,
           main_area: values.area || null,
           sub_area: values.area || null,
           context: values.context,
@@ -655,4 +690,3 @@ function SubmitForm({
     />
   );
 }
-

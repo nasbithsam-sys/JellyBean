@@ -57,7 +57,7 @@ function Page() {
 }
 
 function Inner() {
-  const [visuals, setVisuals] = useState(false);
+  const [visuals, setVisuals] = useState(true);
   const [radiusMode, setRadiusMode] = useState<MapRadiusMode>("daily");
   const [LeafletMap, setLeafletMap] = useState<LeafletMapComp | null>(null);
   const [tempPin, setTempPin] = useState<{ lat: number; lng: number } | null>(null);
@@ -168,23 +168,27 @@ function Inner() {
             <div className="text-[11.5px] text-muted-foreground mt-0.5">
               {radiusMode === "all"
                 ? "Every added browser profile with coordinates shows a 50-mile radius."
-                : "50-mile radius appears only for profiles launched today (PKT, resets at midnight PKT)."}
+                : "Shows a 50-mile radius for profiles launched today. The daily window resets at midnight PKT."}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Tabs value={radiusMode} onValueChange={changeRadiusMode} className="max-w-full overflow-x-auto pb-1 -mb-1">
+            <Tabs
+              value={radiusMode}
+              onValueChange={changeRadiusMode}
+              className="max-w-full overflow-x-auto pb-1 -mb-1"
+            >
               <TabsList className="h-9 w-max flex-shrink-0">
                 <TabsTrigger value="daily" className="h-7 text-[11.5px]">
-                  Daily launches
+                  Today
                 </TabsTrigger>
                 <TabsTrigger value="all" className="h-7 text-[11.5px]">
-                  All Added Accounts
+                  All profiles
                 </TabsTrigger>
                 <TabsTrigger value="inactive" className="h-7 text-[11.5px]">
-                  Inactive
+                  Inactive profiles
                 </TabsTrigger>
                 <TabsTrigger value="inactive_daily" className="h-7 text-[11.5px]">
-                  Inactive Daily Launches
+                  Inactive today
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -200,7 +204,10 @@ function Inner() {
                 </span>
               </div>
               <div className="flex items-center gap-2 pl-3 border-l border-border shrink-0">
-                <Label htmlFor="visuals" className="text-[12px] text-muted-foreground cursor-pointer whitespace-nowrap">
+                <Label
+                  htmlFor="visuals"
+                  className="text-[12px] text-muted-foreground cursor-pointer whitespace-nowrap"
+                >
                   Map visuals
                 </Label>
                 <Switch id="visuals" checked={visuals} onCheckedChange={toggle} />
@@ -234,7 +241,7 @@ function Inner() {
         <p className="text-[11.5px] text-muted-foreground mt-3">
           {visuals
             ? "Click anywhere on the map to drop a temporary 50-mile red radius. It clears when you leave this page."
-            : "Map visuals stay off by default so tile egress only happens when you need the map."}
+            : "Turn map visuals on to inspect coverage circles and profile locations."}
           {tempPin && (
             <>
               {" · "}

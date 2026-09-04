@@ -12,8 +12,10 @@
   --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-background: var(--background);
@@ -70,10 +72,10 @@
   --surface-hover: #e2ddd0;
 
   --card: #ffffff;
-  --card-foreground: #0F172A;
+  --card-foreground: #0f172a;
 
   --popover: #ffffff;
-  --popover-foreground: #0F172A;
+  --popover-foreground: #0f172a;
 
   --primary: #1a2b45;
   --primary-foreground: #f4f1ea;
@@ -118,9 +120,9 @@
   --chart-5: #a1291b;
 
   --shadow-sm: 0 1px 2px 0 rgba(20, 23, 29, 0.06);
-  --shadow-md: 0 4px 12px -4px rgba(20, 23, 29, 0.10), 0 2px 4px -2px rgba(20, 23, 29, 0.06);
+  --shadow-md: 0 4px 12px -4px rgba(20, 23, 29, 0.1), 0 2px 4px -2px rgba(20, 23, 29, 0.06);
   --shadow-lg: 0 12px 28px -12px rgba(20, 23, 29, 0.18);
-  --shadow-glow: 0 0 0 1px rgba(26, 43, 69, 0.20), 0 6px 14px -8px rgba(26, 43, 69, 0.35);
+  --shadow-glow: 0 0 0 1px rgba(26, 43, 69, 0.2), 0 6px 14px -8px rgba(26, 43, 69, 0.35);
 }
 
 .dark {
@@ -183,7 +185,7 @@
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px -4px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 12px 28px -12px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 0 1px rgba(59, 130, 246, 0.20), 0 6px 14px -8px rgba(96, 165, 250, 0.35);
+  --shadow-glow: 0 0 0 1px rgba(59, 130, 246, 0.2), 0 6px 14px -8px rgba(96, 165, 250, 0.35);
 }
 
 @layer base {
@@ -198,7 +200,12 @@
   select {
     font-family: var(--font-sans);
   }
-  h1, h2, h3, h4, h5, h6,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
   .crm-page-title,
   .crm-section-title,
   .crm-card-value {
@@ -334,7 +341,9 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 .crm-table tbody td {
   font-size: 13.5px;
@@ -465,8 +474,6 @@
   color: var(--primary-foreground);
 }
 
-
-
 .crm-motion {
   transition-property: color, background-color, border-color, box-shadow, transform, opacity;
   transition-duration: 160ms;
@@ -579,7 +586,6 @@
   letter-spacing: -0.015em;
   color: var(--foreground);
 }
-
 
 .crm-lead-meta {
   font-size: 12.5px;
@@ -856,7 +862,8 @@ button,
 .crm-chip,
 .crm-tab,
 .crm-badge {
-  transition-property: color, background-color, border-color, box-shadow, transform, opacity, fill, stroke;
+  transition-property:
+    color, background-color, border-color, box-shadow, transform, opacity, fill, stroke;
   transition-duration: 160ms;
   transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -878,7 +885,6 @@ button:hover:not(:disabled),
 [role="button"]:hover:not(:disabled) {
   transform: translateY(-0.5px);
 }
-
 
 [data-slot="dialog-content"],
 [data-slot="popover-content"],
@@ -950,10 +956,10 @@ button:hover:not(:disabled),
 
   --destructive: oklch(0.52 0.15 25);
   --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.52 0.10 165);
+  --success: oklch(0.52 0.1 165);
   --success-foreground: oklch(0.99 0 0);
   --warning: oklch(0.64 0.11 70);
-  --warning-foreground: oklch(0.20 0.03 70);
+  --warning-foreground: oklch(0.2 0.03 70);
 
   --border: oklch(0.55 0.015 250 / 0.22);
   --border-strong: oklch(0.42 0.02 250 / 0.4);
@@ -972,13 +978,14 @@ button:hover:not(:disabled),
   --chart-1: oklch(0.38 0.07 255);
   --chart-2: oklch(0.55 0.08 220);
   --chart-3: oklch(0.68 0.06 195);
-  --chart-4: oklch(0.52 0.10 165);
+  --chart-4: oklch(0.52 0.1 165);
   --chart-5: oklch(0.64 0.11 70);
 
-  --shadow-sm: 0 1px 3px 0 oklch(0.20 0.02 250 / 0.06), 0 1px 2px -1px oklch(0.20 0.02 250 / 0.08);
-  --shadow-md: 0 10px 30px -12px oklch(0.20 0.03 250 / 0.18);
+  --shadow-sm: 0 1px 3px 0 oklch(0.2 0.02 250 / 0.06), 0 1px 2px -1px oklch(0.2 0.02 250 / 0.08);
+  --shadow-md: 0 10px 30px -12px oklch(0.2 0.03 250 / 0.18);
   --shadow-lg: 0 24px 60px -20px oklch(0.18 0.04 250 / 0.24);
-  --shadow-glow: 0 0 0 1px oklch(0.45 0.06 255 / 0.18), 0 12px 28px -14px oklch(0.38 0.07 255 / 0.28);
+  --shadow-glow:
+    0 0 0 1px oklch(0.45 0.06 255 / 0.18), 0 12px 28px -14px oklch(0.38 0.07 255 / 0.28);
 
   --glass-rim: rgba(255, 255, 255, 0.55);
   --glass-rim-strong: rgba(255, 255, 255, 0.85);
@@ -1001,12 +1008,12 @@ button:hover:not(:disabled),
   --popover-foreground: oklch(0.94 0.005 250);
 
   /* Muted steel-blue accent — refined, not neon */
-  --primary: oklch(0.70 0.08 245);
+  --primary: oklch(0.7 0.08 245);
   --primary-foreground: oklch(0.14 0.02 255);
   --primary-glow: oklch(0.78 0.07 235);
 
   --secondary: oklch(0.28 0.012 255 / 0.55);
-  --secondary-foreground: oklch(0.90 0.006 250);
+  --secondary-foreground: oklch(0.9 0.006 250);
 
   --muted: oklch(0.26 0.01 255 / 0.5);
   --muted-foreground: oklch(0.72 0.01 250);
@@ -1016,7 +1023,7 @@ button:hover:not(:disabled),
 
   --destructive: oklch(0.65 0.15 25);
   --destructive-foreground: oklch(0.14 0.03 25);
-  --success: oklch(0.70 0.11 165);
+  --success: oklch(0.7 0.11 165);
   --success-foreground: oklch(0.14 0.04 165);
   --warning: oklch(0.78 0.12 78);
   --warning-foreground: oklch(0.16 0.03 78);
@@ -1027,26 +1034,26 @@ button:hover:not(:disabled),
   --ring: oklch(0.72 0.08 245);
 
   --sidebar: oklch(0.19 0.012 255 / 0.68);
-  --sidebar-foreground: oklch(0.90 0.006 250);
-  --sidebar-primary: oklch(0.70 0.08 245);
+  --sidebar-foreground: oklch(0.9 0.006 250);
+  --sidebar-primary: oklch(0.7 0.08 245);
   --sidebar-primary-foreground: oklch(0.14 0.02 255);
   --sidebar-accent: oklch(0.28 0.014 255 / 0.55);
   --sidebar-accent-foreground: oklch(0.94 0.006 250);
   --sidebar-border: oklch(0.55 0.014 255 / 0.18);
-  --sidebar-ring: oklch(0.70 0.08 245);
+  --sidebar-ring: oklch(0.7 0.08 245);
 
-  --chart-1: oklch(0.70 0.08 245);
+  --chart-1: oklch(0.7 0.08 245);
   --chart-2: oklch(0.76 0.07 215);
   --chart-3: oklch(0.84 0.05 245);
-  --chart-4: oklch(0.70 0.11 165);
+  --chart-4: oklch(0.7 0.11 165);
   --chart-5: oklch(0.78 0.12 78);
 
   --shadow-sm: 0 2px 10px -3px oklch(0.03 0.01 255 / 0.55);
   --shadow-md: 0 14px 36px -14px oklch(0.03 0.015 255 / 0.65);
   --shadow-lg: 0 28px 70px -22px oklch(0.02 0.02 255 / 0.75);
-  --shadow-glow: 0 0 0 1px oklch(0.70 0.08 245 / 0.22), 0 16px 38px -18px oklch(0.60 0.10 245 / 0.4);
+  --shadow-glow: 0 0 0 1px oklch(0.7 0.08 245 / 0.22), 0 16px 38px -18px oklch(0.6 0.1 245 / 0.4);
 
-  --glass-rim: rgba(200, 215, 240, 0.10);
+  --glass-rim: rgba(200, 215, 240, 0.1);
   --glass-rim-strong: rgba(210, 225, 245, 0.18);
 }
 
@@ -1064,7 +1071,7 @@ body {
   background:
     radial-gradient(1200px 800px at 10% -10%, oklch(0.32 0.05 250 / 0.5), transparent 62%),
     radial-gradient(1000px 780px at 100% 105%, oklch(0.28 0.04 225 / 0.42), transparent 62%),
-    linear-gradient(180deg, oklch(0.14 0.012 255), oklch(0.10 0.014 258));
+    linear-gradient(180deg, oklch(0.14 0.012 255), oklch(0.1 0.014 258));
   background-repeat: no-repeat;
 }
 
@@ -1330,9 +1337,15 @@ button[data-slot="button"][data-variant="ghost"],
   background: color-mix(in oklch, var(--card) 55%, transparent);
   border: 1px solid var(--glass-rim);
 }
-.crm-accent-mint { border-color: color-mix(in oklch, var(--success) 40%, var(--glass-rim)); }
-.crm-accent-amber { border-color: color-mix(in oklch, var(--warning) 42%, var(--glass-rim)); }
-.crm-accent-rose { border-color: color-mix(in oklch, var(--destructive) 40%, var(--glass-rim)); }
+.crm-accent-mint {
+  border-color: color-mix(in oklch, var(--success) 40%, var(--glass-rim));
+}
+.crm-accent-amber {
+  border-color: color-mix(in oklch, var(--warning) 42%, var(--glass-rim));
+}
+.crm-accent-rose {
+  border-color: color-mix(in oklch, var(--destructive) 40%, var(--glass-rim));
+}
 
 /* ---------- Interactions ---------- */
 button:active:not(:disabled),
@@ -1340,11 +1353,9 @@ button:active:not(:disabled),
   transform: scale(0.985);
 }
 
-
 .crm-card-value,
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 
 /* Theme switch is instant */
-

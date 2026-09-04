@@ -2,7 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow, startOfDay, endOfDay } from "date-fns";
-import { Download, Loader2, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import {
+  Download,
+  Loader2,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -34,7 +42,7 @@ function Inner() {
   const PAGE_SIZE = 500;
 
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query.trim()), 400);
     return () => clearTimeout(t);
@@ -74,7 +82,7 @@ function Inner() {
       if (dbSearch) {
         const s = `%${dbSearch}%`;
         request = request.or(
-          `actor_name.ilike.${s},actor_role.ilike.${s},action.ilike.${s},entity_type.ilike.${s}`
+          `actor_name.ilike.${s},actor_role.ilike.${s},action.ilike.${s},entity_type.ilike.${s}`,
         );
       }
 
@@ -88,9 +96,7 @@ function Inner() {
   const totalCount = useQuery({
     queryKey: ["activity_logs_count", { dbDateFrom, dbDateTo, dbSearch }],
     queryFn: async () => {
-      let request = supabase
-        .from("activity_logs")
-        .select("id", { count: "exact", head: true });
+      let request = supabase.from("activity_logs").select("id", { count: "exact", head: true });
 
       if (dbDateFrom) request = request.gte("created_at", dbDateFrom);
       if (dbDateTo) request = request.lte("created_at", dbDateTo);
@@ -98,7 +104,7 @@ function Inner() {
       if (dbSearch) {
         const s = `%${dbSearch}%`;
         request = request.or(
-          `actor_name.ilike.${s},actor_role.ilike.${s},action.ilike.${s},entity_type.ilike.${s}`
+          `actor_name.ilike.${s},actor_role.ilike.${s},action.ilike.${s},entity_type.ilike.${s}`,
         );
       }
 
@@ -134,31 +140,33 @@ function Inner() {
     <div className="space-y-4">
       <div className="crm-toolbar-panel">
         <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[220px] max-w-md">
-          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <div className="relative flex-1 min-w-[220px] max-w-md">
+            <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search actor, action, entity..."
+              className="h-9 pl-9"
+            />
+          </div>
           <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search actor, action, entity..."
-            className="h-9 pl-9"
+            type="date"
+            aria-label="Activity log start date"
+            value={dateFrom}
+            onChange={(event) => setDateFrom(event.target.value)}
+            className="h-9 w-[150px]"
           />
-        </div>
-        <Input
-          type="date"
-          value={dateFrom}
-          onChange={(event) => setDateFrom(event.target.value)}
-          className="h-9 w-[150px]"
-        />
-        <Input
-          type="date"
-          value={dateTo}
-          onChange={(event) => setDateTo(event.target.value)}
-          className="h-9 w-[150px]"
-        />
-        <Button size="sm" variant="outline" className="h-9" onClick={exportLogs}>
-          <Download className="h-3.5 w-3.5 mr-1.5" />
-          Export
-        </Button>
+          <Input
+            type="date"
+            aria-label="Activity log end date"
+            value={dateTo}
+            onChange={(event) => setDateTo(event.target.value)}
+            className="h-9 w-[150px]"
+          />
+          <Button size="sm" variant="outline" className="h-9" onClick={exportLogs}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export
+          </Button>
         </div>
       </div>
 
@@ -169,52 +177,55 @@ function Inner() {
       )}
 
       <div className="crm-section-panel">
-        <div className="crm-surface-card overflow-hidden">
-          <table className="crm-table">
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>Actor</th>
-              <th>Role</th>
-              <th>Action</th>
-              <th>Entity</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.isLoading && !logs.data && (
+        <div className="crm-surface-card overflow-x-auto">
+          <table className="crm-table min-w-[900px]">
+            <thead>
               <tr>
-                <td colSpan={6} className="text-center py-8 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
-                  Loading...
-                </td>
+                <th>When</th>
+                <th>Actor</th>
+                <th>Role</th>
+                <th>Action</th>
+                <th>Entity</th>
+                <th>Details</th>
               </tr>
-            )}
-            {!logs.isLoading && visible.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-8 text-muted-foreground">
-                  <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
-                  No activity logs found for the selected date range.
-                </td>
-              </tr>
-            )}
-            {visible.map((log) => (
-              <tr key={log.id}>
-                <td className="text-xs text-muted-foreground whitespace-nowrap">
-                  {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
-                </td>
-                <td className="font-medium">{log.actor_name ?? "-"}</td>
-                <td className="capitalize text-sm">{log.actor_role ?? "-"}</td>
-                <td className="font-mono text-xs">{log.action}</td>
-                <td className="font-mono text-xs">{log.entity_type ?? "-"}</td>
-                <td className="font-mono text-xs text-muted-foreground max-w-xs">
-                  <div className="truncate">
-                    {log.metadata ? JSON.stringify(log.metadata) : "-"}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
+            </thead>
+            <tbody>
+              {logs.isLoading && !logs.data && (
+                <tr>
+                  <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                    Loading...
+                  </td>
+                </tr>
+              )}
+              {!logs.isLoading && visible.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <Search className="h-5 w-5 mx-auto mb-2 opacity-50" />
+                    No activity logs found for the selected date range.
+                  </td>
+                </tr>
+              )}
+              {visible.map((log) => (
+                <tr key={log.id}>
+                  <td
+                    className="text-xs text-muted-foreground whitespace-nowrap"
+                    title={new Date(log.created_at).toLocaleString()}
+                  >
+                    {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+                  </td>
+                  <td className="font-medium">{log.actor_name ?? "-"}</td>
+                  <td className="capitalize text-sm">{log.actor_role ?? "-"}</td>
+                  <td className="font-mono text-xs">{log.action}</td>
+                  <td className="font-mono text-xs">{log.entity_type ?? "-"}</td>
+                  <td className="font-mono text-xs text-muted-foreground max-w-xs">
+                    <div className="truncate">
+                      {log.metadata ? JSON.stringify(log.metadata) : "-"}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
       </div>

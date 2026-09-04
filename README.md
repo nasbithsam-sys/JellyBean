@@ -26,7 +26,7 @@ A custom Chrome extension scrapes relevant posts from Nextdoor and sends them to
 - **Database**: Supabase (PostgreSQL + Auth + Realtime)
 - **AI**: OpenAI (gpt-5-nano) for lead classification
 - **Styling**: Tailwind CSS v4, shadcn/ui
-- **Deployment**: Lovable
+- **Deployment**: Lovable and Vercel (same Supabase backend)
 
 ## Environment variables
 
@@ -39,6 +39,26 @@ A custom Chrome extension scrapes relevant posts from Nextdoor and sends them to
 | VITE_SUPABASE_PUBLISHABLE_KEY | Yes         | Same as publishable key (client-side)        |
 | OPENAI_API_KEY                | Yes         | OpenAI API key for AI lead classification    |
 | WEBHOOK_SECRET                | Recommended | Secret header value for the Nextdoor webhook |
+
+## Deploying on Lovable and Vercel
+
+Both deployments can run at the same time against the same Supabase project. They are two frontends; they do not create separate databases or user accounts.
+
+1. In Vercel, import this GitHub repository and leave the framework preset as **TanStack Start**. The included `vercel.json` makes that choice explicit.
+2. Add the variables below in Vercel for **Production**, **Preview**, and **Development**. Add the same values to Lovable if they are not already present there.
+
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `OPENAI_API_KEY`
+   - `WEBHOOK_SECRET` (or `NEXTDOOR_WEBHOOK_SECRET`)
+
+   Only the two `VITE_` values are safe for the browser. The service-role key, OpenAI key, and webhook secret must stay private.
+
+3. In Supabase Authentication settings, add both the Lovable and Vercel production URLs to the allowed redirect URLs. This keeps future password-reset or email-link flows working from either host.
+4. Deploy from Vercel. New commits to `main` will then update Vercel, while Lovable remains active independently.
 
 ## Data flow
 

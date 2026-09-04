@@ -945,8 +945,6 @@ function CrispInboxInner() {
             message_type: "text",
             sent_at: res.sent_at || new Date().toISOString(),
             raw_payload: {},
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
           };
           return [...prev, tempMsg];
         });

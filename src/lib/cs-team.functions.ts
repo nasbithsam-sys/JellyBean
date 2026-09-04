@@ -33,7 +33,7 @@ export const listCsTeam = createServerFn({ method: "GET" })
     const { data: roleRows, error: rErr } = await supabaseAdmin
       .from("user_roles")
       .select("user_id, role")
-      .eq("role", "cs");
+      .in("role", ["cs", "cs_admin"]);
     if (rErr) throw new Error(rErr.message);
     const ids = Array.from(new Set((roleRows ?? []).map((r) => r.user_id)));
     if (ids.length === 0) return [] as CsTeamMember[];
