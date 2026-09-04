@@ -1044,18 +1044,6 @@ function Inner() {
     }
 
     const destinationLabel = destination === "wrong" ? "Wrong posts" : "Duplicate";
-    const confirmed = await confirmDialog({
-      title: `Move ${targets.length} lead${targets.length === 1 ? "" : "s"}?`,
-      description:
-        destination === "wrong"
-          ? `This will move every visible uncategorized lead marked “No” to Wrong posts. You can recategorize individual leads afterward.`
-          : `This will move every visible uncategorized lead flagged as a duplicate to Duplicate. You can recategorize individual leads afterward.`,
-      confirmText: `Move to ${destinationLabel}`,
-      cancelText: "Cancel",
-      tone: "destructive",
-    });
-    if (!confirmed) return;
-
     const keys = targets.map((entry) => entry.row_key);
     const keySet = new Set(keys);
     updateCachedEntries((entry) =>
