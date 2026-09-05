@@ -16,6 +16,7 @@ import {
   KeyRound,
   MessageSquare,
   Menu,
+  FileSpreadsheet,
 } from "lucide-react";
 
 import { CrmUpdatesNotifier } from "@/components/crm-updates-notifier";
@@ -58,6 +59,7 @@ const ADMIN: Item[] = [
   { to: "/app/reports", label: "Reports", icon: BarChart3, shortcut: "R" },
   { to: "/app/lead-assignment", label: "Lead Assignment", icon: PieChart },
   { to: "/app/logs", label: "Activity", icon: ScrollText, shortcut: "G" },
+  { to: "/app/google-sheets", label: "Google Sheets", icon: FileSpreadsheet, shortcut: "H" },
   { to: "/app/settings", label: "Settings", icon: Settings, shortcut: "S" },
 ];
 
@@ -141,7 +143,7 @@ function navigationGroupsForRole(role: AppRole | null): Array<{ label: string; i
       paths: ["/app/cs-leads", "/app/crisp-chat", "/app/lead-assignment"],
     },
     { label: "Intelligence", paths: ["/app/analytics", "/app/reports"] },
-    { label: "Administration", paths: ["/app/logs", "/app/settings"] },
+    { label: "Administration", paths: ["/app/logs", "/app/google-sheets", "/app/settings"] },
   ];
   return groups
     .map((group) => ({

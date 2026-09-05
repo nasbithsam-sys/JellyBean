@@ -1,0 +1,646 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import {
+  FileSpreadsheet,
+  ExternalLink,
+  CheckCircle2,
+  Code2,
+  Copy,
+  RefreshCw,
+  Zap,
+  Check,
+  Loader2,
+  HelpCircle,
+} from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { PageHeader, PageBody, RoleGate } from "@/components/page";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { supabase } from "@/integrations/supabase/client";
+
+const GOOGLE_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/1JOW5XGEsDa-ewm7Xh4BIzru8_QU_z4MFFXTZ9ZvZodE/edit?gid=0#gid=0";
+
+const APPS_SCRIPT_SOURCE = `/**
+ * JELLYBEAN CRM -> GOOGLE SHEETS LIVE SYNC SCRIPT
+ * Target Spreadsheet: https://docs.google.com/spreadsheets/d/1JOW5XGEsDa-ewm7Xh4BIzru8_QU_z4MFFXTZ9ZvZodE/edit
+ */
+const CONFIG = {
+  SHEET_NEW_TO_CONTACT: "New to Contact",
+  SHEET_PINNED_IMPORTANT: "Pinned Important",
+  HEADERS: [
+    "Customer Name", "Customer Phone No", "Area", "Service", "Status",
+    "Number Name", "Context", "Exact Customer Requirement", "Compose",
+    "Assigned To", "Lead Created Date & Time", "Important", "Lead ID"
+  ]
+};
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu("⚡ Jellybean CRM")
+    .addItem("1. Format & Setup Sheets", "setupSheets")
+    .addToUi();
+}
+
+function setupSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  [CONFIG.SHEET_NEW_TO_CONTACT, CONFIG.SHEET_PINNED_IMPORTANT].forEach((name, idx) => {
+    let sheet = ss.getSheetByName(name) || ss.insertSheet(name, idx);
+    sheet.getRange(1, 1, 1, CONFIG.HEADERS.length).setValues([CONFIG.HEADERS]);
+    const headerRange = sheet.getRange(1, 1, 1, CONFIG.HEADERS.length);
+    headerRange.setFontWeight("bold").setFontSize(10);
+    headerRange.setBackground(name === CONFIG.SHEET_PINNED_IMPORTANT ? "#fee2e2" : "#e0e7ff");
+    headerRange.setFontColor("#0f172a").setVerticalAlignment("middle");
+    sheet.setRowHeight(1, 38).setFrozenRows(1);
+    sheet.setColumnWidth(1, 180).setColumnWidth(2, 160).setColumnWidth(3, 140)
+         .setColumnWidth(4, 130).setColumnWidth(5, 130).setColumnWidth(6, 140)
+         .setColumnWidth(7, 220).setColumnWidth(8, 240).setColumnWidth(9, 220)
+         .setColumnWidth(10, 150).setColumnWidth(11, 170).setColumnWidth(12, 130).setColumnWidth(13, 110);
+  });
+  const def = ss.getSheetByName("Sheet1");
+  if (def && ss.getSheets().length > 1) { try { ss.deleteSheet(def); } catch(e){} }
+  SpreadsheetApp.getActiveSpreadsheet().toast("Sheets created and formatted!", "Jellybean CRM");
+}
+
+function doPost(e) {
+  try {
+    const payload = JSON.parse(e.postData.contents);
+    const eventType = payload.type || payload.action;
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheetNew = ss.getSheetByName(CONFIG.SHEET_NEW_TO_CONTACT) || ss.insertSheet(CONFIG.SHEET_NEW_TO_CONTACT);
+    const sheetPinned = ss.getSheetByName(CONFIG.SHEET_PINNED_IMPORTANT) || ss.insertSheet(CONFIG.SHEET_PINNED_IMPORTANT);
+
+    if (eventType === "PING") {
+      return jsonResponse({ status: "ok", message: "Connected to Google Sheets successfully!" });
+    }
+
+    if (eventType === "BULK_SYNC") {
+      setupSheets();
+      const leads = payload.leads || [];
+      if (sheetNew.getLastRow() > 1) sheetNew.getRange(2, 1, sheetNew.getLastRow() - 1, CONFIG.HEADERS.length).clearContent();
+      if (sheetPinned.getLastRow() > 1) sheetPinned.getRange(2, 1, sheetPinned.getLastRow() - 1, CONFIG.HEADERS.length).clearContent();
+      const newRows = [];
+      const pinnedRows = [];
+      leads.forEach(l => {
+        const r = [
+          l.customer_name || "", l.customer_number || "", l.area || "", l.service || "",
+          "New to contact", l.number_name || "", l.context || "", l.exact_requirement || "",
+          l.marketing_notes || "", l.assigned_to_name || "Unassigned", l.created_at || "",
+          l.pinned_important ? "Pinned Important" : (l.is_important ? "Important" : "No"), l.id || ""
+        ];
+        newRows.push(r);
+        if (l.pinned_important) pinnedRows.push(r);
+      });
+      if (newRows.length > 0) sheetNew.getRange(2, 1, newRows.length, CONFIG.HEADERS.length).setValues(newRows);
+      if (pinnedRows.length > 0) sheetPinned.getRange(2, 1, pinnedRows.length, CONFIG.HEADERS.length).setValues(pinnedRows);
+      return jsonResponse({ status: "success", count: newRows.length, pinnedCount: pinnedRows.length });
+    }
+
+    const rec = payload.record || payload.lead || {};
+    const oldRec = payload.old_record || payload.old_lead || {};
+    const leadId = rec.id || oldRec.id;
+    if (!leadId) return jsonResponse({ error: "Missing lead ID" }, 400);
+
+    if (eventType === "DELETE") {
+      deleteLeadRow(sheetNew, leadId);
+      deleteLeadRow(sheetPinned, leadId);
+      return jsonResponse({ success: true, action: "DELETED", leadId });
+    }
+
+    if (eventType === "UPDATE") {
+      if (rec.cs_status !== "new") {
+        deleteLeadRow(sheetNew, leadId);
+        deleteLeadRow(sheetPinned, leadId);
+        return jsonResponse({ success: true, action: "REMOVED_STATUS_CHANGED" });
+      }
+      const row = [
+        rec.customer_name || "", rec.customer_number || "", rec.area || "", rec.service || "",
+        "New to contact", rec.number_name || "", rec.context || "", rec.exact_requirement || "",
+        rec.marketing_notes || "", rec.assigned_to_name || "Unassigned", rec.created_at || "",
+        rec.pinned_important ? "Pinned Important" : (rec.is_important ? "Important" : "No"), rec.id || ""
+      ];
+      upsertLeadRow(sheetNew, leadId, row);
+      if (rec.pinned_important) upsertLeadRow(sheetPinned, leadId, row);
+      else deleteLeadRow(sheetPinned, leadId);
+      return jsonResponse({ success: true, action: "UPDATED" });
+    }
+
+    if (eventType === "INSERT") {
+      if (rec.cs_status !== "new") return jsonResponse({ message: "Ignored" });
+      const row = [
+        rec.customer_name || "", rec.customer_number || "", rec.area || "", rec.service || "",
+        "New to contact", rec.number_name || "", rec.context || "", rec.exact_requirement || "",
+        rec.marketing_notes || "", rec.assigned_to_name || "Unassigned", rec.created_at || "",
+        rec.pinned_important ? "Pinned Important" : (rec.is_important ? "Important" : "No"), rec.id || ""
+      ];
+      insertLeadAtTop(sheetNew, row);
+      if (rec.pinned_important) insertLeadAtTop(sheetPinned, row);
+      return jsonResponse({ success: true, action: "INSERTED" });
+    }
+    return jsonResponse({ message: "No action" });
+  } catch(e) {
+    return jsonResponse({ error: e.toString() }, 500);
+  }
+}
+
+function insertLeadAtTop(sheet, row) {
+  sheet.insertRowBefore(2);
+  sheet.getRange(2, 1, 1, row.length).setValues([row]);
+}
+
+function upsertLeadRow(sheet, leadId, row) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) { insertLeadAtTop(sheet, row); return; }
+  const ids = sheet.getRange(2, 13, lastRow - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(leadId)) {
+      sheet.getRange(i + 2, 1, 1, row.length).setValues([row]);
+      return;
+    }
+  }
+  insertLeadAtTop(sheet, row);
+}
+
+function deleteLeadRow(sheet, leadId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const ids = sheet.getRange(2, 13, lastRow - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(leadId)) {
+      sheet.deleteRow(i + 2);
+      return;
+    }
+  }
+}
+
+function jsonResponse(data, code) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}`;
+
+export const Route = createFileRoute("/app/google-sheets")({ component: Page });
+
+function Page() {
+  const auth = useAuth();
+  return (
+    <RoleGate allow={["admin", "sub_admin"]} current={auth.primaryRole}>
+      <Dashboard />
+    </RoleGate>
+  );
+}
+
+function Dashboard() {
+  const [webhookUrl, setWebhookUrl] = useState(() => {
+    return localStorage.getItem("jellybean_google_sheets_webhook") || "";
+  });
+  const [autoSync, setAutoSync] = useState(() => {
+    return localStorage.getItem("jellybean_google_sheets_autosync") !== "false";
+  });
+  const [lastBulkSync, setLastBulkSync] = useState<string | null>(() => {
+    return localStorage.getItem("jellybean_google_sheets_last_sync") || null;
+  });
+  const [lastSyncCount, setLastSyncCount] = useState<number>(() => {
+    return Number(localStorage.getItem("jellybean_google_sheets_sync_count") || 0);
+  });
+  const [isConnected, setIsConnected] = useState<boolean>(() => {
+    return !!localStorage.getItem("jellybean_google_sheets_connected");
+  });
+
+  const [isTesting, setIsTesting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Save changes locally
+  const handleSaveSettings = () => {
+    localStorage.setItem("jellybean_google_sheets_webhook", webhookUrl.trim());
+    localStorage.setItem("jellybean_google_sheets_autosync", String(autoSync));
+    toast.success("Google Sheets sync settings saved successfully!");
+  };
+
+  // Test connection to Google Apps Script Web App
+  const handleTestConnection = async () => {
+    if (!webhookUrl.trim()) {
+      toast.error("Please enter a valid Google Apps Script Web App URL first.");
+      return;
+    }
+    setIsTesting(true);
+    try {
+      // In browser, sending POST with mode: 'no-cors' reaches Google Apps Script
+      await fetch(webhookUrl.trim(), {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ type: "PING" }),
+        mode: "no-cors",
+      });
+
+      setIsConnected(true);
+      localStorage.setItem("jellybean_google_sheets_connected", "true");
+      toast.success("Connected & Active! Webhook test ping successfully dispatched.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to reach webhook URL. Make sure it is deployed as 'Anyone'.");
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  // Trigger full bulk sync of all "New to contact" leads
+  const handleSyncAllLeads = async () => {
+    if (!webhookUrl.trim()) {
+      toast.error("Please enter your Google Apps Script Web App URL before syncing.");
+      return;
+    }
+
+    setIsSyncing(true);
+    const toastId = toast.loading("Fetching 'New to Contact' leads from Jellybean CRM...");
+
+    try {
+      // 1. Fetch leads where cs_status = 'new'
+      const { data: leads, error } = await supabase
+        .from("qualified_leads")
+        .select(
+          "id, customer_name, customer_number, customer_number_2, main_area, sub_area, service, cs_status, number_name, context, requirement_1, requirement_2, post_text, marketing_notes, assigned_to, created_at, pinned_important, is_important",
+        )
+        .eq("cs_status", "new")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // 2. Fetch profiles to resolve assigned_to names
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name, email");
+      const nameMap: Record<string, string> = {};
+      (profiles || []).forEach((p) => {
+        nameMap[p.user_id] = p.full_name || p.email || "Staff";
+      });
+
+      // 3. Prepare clean payload rows
+      const mappedLeads = (leads || []).map((l) => ({
+        id: l.id,
+        customer_name: l.customer_name || "",
+        customer_number: l.customer_number_2
+          ? `${l.customer_number || ""}, ${l.customer_number_2}`
+          : l.customer_number || "",
+        area: l.main_area || l.sub_area || "",
+        service: l.service || "",
+        number_name: l.number_name || "",
+        context: l.context || "",
+        exact_requirement: l.requirement_1 || l.requirement_2 || l.post_text || l.context || "",
+        marketing_notes: l.marketing_notes || "",
+        assigned_to_name: l.assigned_to ? nameMap[l.assigned_to] || "CS" : "Unassigned",
+        created_at: l.created_at ? new Date(l.created_at).toLocaleString() : "",
+        pinned_important: !!l.pinned_important,
+        is_important: !!l.is_important,
+      }));
+
+      toast.loading(`Pushing ${mappedLeads.length} leads to Google Sheets...`, { id: toastId });
+
+      // 4. Send to Google Apps Script
+      await fetch(webhookUrl.trim(), {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          type: "BULK_SYNC",
+          leads: mappedLeads,
+        }),
+        mode: "no-cors",
+      });
+
+      const nowStr = new Date().toLocaleString();
+      setLastBulkSync(nowStr);
+      setLastSyncCount(mappedLeads.length);
+      setIsConnected(true);
+
+      localStorage.setItem("jellybean_google_sheets_last_sync", nowStr);
+      localStorage.setItem("jellybean_google_sheets_sync_count", String(mappedLeads.length));
+      localStorage.setItem("jellybean_google_sheets_connected", "true");
+
+      toast.success(
+        `Successfully synced ${mappedLeads.length} leads across 'New to Contact' and 'Pinned Important' tabs!`,
+        { id: toastId },
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error(`Sync failed: ${err instanceof Error ? err.message : String(err)}`, {
+        id: toastId,
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(APPS_SCRIPT_SOURCE);
+    setCopied(true);
+    toast.success("Apps Script code copied to clipboard!");
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <div className="pb-12">
+      {/* Header */}
+      <PageHeader
+        title="Google Sheets Live Sync"
+        description="Real-time bidirectional synchronization with your Google Sheet"
+        actions={
+          <div className="flex items-center gap-3">
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                isConnected
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                  : "bg-muted text-muted-foreground border border-border"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isConnected ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground"
+                }`}
+              />
+              {isConnected ? "Connected & Active" : "Disconnected"}
+            </span>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-border bg-card/60 hover:bg-card text-foreground"
+              onClick={() => window.open(GOOGLE_SHEET_URL, "_blank")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open Sheet
+            </Button>
+          </div>
+        }
+      />
+
+      <PageBody>
+        {/* Top 3 Stat Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {/* Card 1: Target Sheet */}
+          <div className="bg-card/70 border border-border/80 rounded-2xl p-5 backdrop-blur-sm">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+              Target Sheet
+            </span>
+            <div className="text-lg font-bold text-foreground">Jellybean CRM Leads</div>
+            <a
+              href={GOOGLE_SHEET_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline mt-2"
+            >
+              View in Google Sheets <span>&rarr;</span>
+            </a>
+          </div>
+
+          {/* Card 2: Sync Engine */}
+          <div className="bg-card/70 border border-border/80 rounded-2xl p-5 backdrop-blur-sm">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+              Sync Engine
+            </span>
+            <div className="text-lg font-bold text-foreground">Instant Realtime</div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Triggers on create, edit &amp; delete
+            </p>
+          </div>
+
+          {/* Card 3: Last Bulk Sync */}
+          <div className="bg-card/70 border border-border/80 rounded-2xl p-5 backdrop-blur-sm">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+              Last Bulk Sync
+            </span>
+            <div className="text-lg font-bold text-foreground">
+              {lastBulkSync || "Never synced"}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              {lastBulkSync
+                ? `Successfully synced ${lastSyncCount} leads across New to Contact and Pinned tabs.`
+                : "Click 'Sync All Leads Now' below to perform your initial sync."}
+            </p>
+          </div>
+        </div>
+
+        {/* Webhook Configuration Card */}
+        <div className="bg-card/70 border border-border/80 rounded-2xl p-6 mb-6 backdrop-blur-sm space-y-6">
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Google Apps Script Web App URL (Webhook)
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                type="text"
+                placeholder="https://script.google.com/macros/s/.../exec"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                className="font-mono text-xs bg-background/80 border-border flex-1"
+              />
+              <Button
+                variant="secondary"
+                size="default"
+                onClick={handleTestConnection}
+                disabled={isTesting}
+                className="gap-2 shrink-0 font-semibold"
+              >
+                {isTesting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
+                )}
+                Test Connection
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Generated from your Google Sheet by clicking{" "}
+              <strong className="text-foreground">
+                Extensions &gt; Apps Script &gt; Deploy &gt; New deployment &gt; Web app
+              </strong>
+              .
+            </p>
+          </div>
+
+          {/* Toggle & Buttons */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-border/60">
+            <div className="flex items-start sm:items-center gap-3">
+              <Switch
+                id="autoSyncToggle"
+                checked={autoSync}
+                onCheckedChange={setAutoSync}
+                className="data-[state=checked]:bg-primary"
+              />
+              <div>
+                <label
+                  htmlFor="autoSyncToggle"
+                  className="text-sm font-semibold text-foreground cursor-pointer block"
+                >
+                  Automatic Realtime Sync
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Instantly syncs lead creation, updates, status changes, and deletions to Google Sheets.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <Button
+                variant="outline"
+                size="default"
+                onClick={handleSaveSettings}
+                className="border-border hover:bg-accent"
+              >
+                Save Settings
+              </Button>
+
+              <Button
+                size="default"
+                onClick={handleSyncAllLeads}
+                disabled={isSyncing}
+                className="gap-2 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+              >
+                {isSyncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Sync All Leads Now
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* 1-Minute Setup Guide for Google Sheets */}
+        <div className="bg-card/70 border border-border/80 rounded-2xl p-6 backdrop-blur-sm">
+          {/* Guide Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border/60">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0 mt-0.5">
+                <Code2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  1-Minute Setup Guide for Google Sheets
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Copy this Apps Script into your Google Sheet to enable automated tab creation &amp; row shifting
+                </p>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyCode}
+              className="gap-2 border-border font-medium hover:bg-accent shrink-0"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-emerald-400" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              {copied ? "Copied!" : "Copy Apps Script Code"}
+            </Button>
+          </div>
+
+          {/* 4 Steps Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 my-6">
+            {/* Step 1 */}
+            <div className="bg-background/50 border border-border/70 rounded-xl p-4 flex flex-col justify-between">
+              <div>
+                <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold mb-3">
+                  1
+                </span>
+                <h4 className="text-sm font-semibold text-foreground mb-1">Open Sheet</h4>
+                <p className="text-xs text-muted-foreground">
+                  Open{" "}
+                  <a
+                    href={GOOGLE_SHEET_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline font-medium"
+                  >
+                    your Google Sheet
+                  </a>
+                  .
+                </p>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="bg-background/50 border border-border/70 rounded-xl p-4 flex flex-col justify-between">
+              <div>
+                <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold mb-3">
+                  2
+                </span>
+                <h4 className="text-sm font-semibold text-foreground mb-1">Open Apps Script</h4>
+                <p className="text-xs text-muted-foreground">
+                  Click <strong className="text-foreground">Extensions &gt; Apps Script</strong> in Google Sheets menu.
+                </p>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="bg-background/50 border border-border/70 rounded-xl p-4 flex flex-col justify-between">
+              <div>
+                <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold mb-3">
+                  3
+                </span>
+                <h4 className="text-sm font-semibold text-foreground mb-1">Paste &amp; Save</h4>
+                <p className="text-xs text-muted-foreground">
+                  Click <strong className="text-foreground">Copy Apps Script Code</strong> above, paste into editor, and hit <strong className="text-foreground">Save (Ctrl+S)</strong>.
+                </p>
+              </div>
+            </div>
+
+            {/* Step 4 */}
+            <div className="bg-background/50 border border-border/70 rounded-xl p-4 flex flex-col justify-between">
+              <div>
+                <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold mb-3">
+                  4
+                </span>
+                <h4 className="text-sm font-semibold text-foreground mb-1">Deploy as Web App</h4>
+                <p className="text-xs text-muted-foreground">
+                  Deploy &gt; New deployment &gt; Web app. Execute as: <strong className="text-foreground">Me</strong>, Access: <strong className="text-foreground">Anyone</strong>. Paste URL here!
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Checklist Area */}
+          <div className="bg-background/80 border border-border/70 rounded-xl p-5 space-y-3">
+            <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              What this Google Sheet sync handles automatically:
+            </h5>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="flex items-start gap-2 text-foreground/90">
+                <Check className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-foreground">12 Mapped Columns:</strong> Customer Name, Phone No, Area, Service, Status, Number Name, Context, Exact Requirement, Compose, Assigned To, Created Date &amp; Time, Important.
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 text-foreground/90">
+                <Check className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-foreground">Recent Leads on Top:</strong> Reverse chronological order with recent leads always inserted on Row 2 directly below the header.
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 text-foreground/90">
+                <Check className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-foreground">New to Contact Sheet Only:</strong> Automatically creates &amp; updates dedicated tab for &ldquo;New to contact&rdquo; leads only. No all-leads tab is generated.
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2 text-foreground/90">
+                <Check className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-foreground">Pinned Important Leads Sheet:</strong> Dedicated &ldquo;Pinned Important&rdquo; tab where only pinned important leads with &ldquo;New to contact&rdquo; status are kept, plus automatic row deletion and shift-up.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </PageBody>
+    </div>
+  );
+}
