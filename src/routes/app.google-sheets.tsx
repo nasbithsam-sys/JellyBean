@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
-  FileSpreadsheet,
   ExternalLink,
   CheckCircle2,
   Code2,
@@ -11,7 +10,6 @@ import {
   Zap,
   Check,
   Loader2,
-  HelpCircle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
@@ -24,16 +22,28 @@ const GOOGLE_SHEET_URL =
   "https://docs.google.com/spreadsheets/d/1JOW5XGEsDa-ewm7Xh4BIzru8_QU_z4MFFXTZ9ZvZodE/edit?gid=0#gid=0";
 
 const APPS_SCRIPT_SOURCE = `/**
+ * =========================================================================
  * JELLYBEAN CRM -> GOOGLE SHEETS LIVE SYNC SCRIPT
  * Target Spreadsheet: https://docs.google.com/spreadsheets/d/1JOW5XGEsDa-ewm7Xh4BIzru8_QU_z4MFFXTZ9ZvZodE/edit
+ * =========================================================================
  */
 const CONFIG = {
   SHEET_NEW_TO_CONTACT: "New to Contact",
   SHEET_PINNED_IMPORTANT: "Pinned Important",
   HEADERS: [
-    "Customer Name", "Customer Phone No", "Area", "Service", "Status",
-    "Number Name", "Context", "Exact Customer Requirement", "Compose",
-    "Assigned To", "Lead Created Date & Time", "Important", "Lead ID"
+    "Lead Created Date & Time", // Column A (First Column)
+    "Customer Name",            // Column B
+    "Customer Phone No",        // Column C
+    "Area",                     // Column D
+    "Service",                  // Column E
+    "Status",                   // Column F
+    "Number Name",              // Column G
+    "Context",                  // Column H
+    "Exact Customer Requirement",// Column I
+    "Compose",                  // Column J
+    "Assigned To",              // Column K
+    "Important",                // Column L
+    "Lead ID"                   // Column M (Reference for updates & deletes)
   ]
 };
 
@@ -53,10 +63,10 @@ function setupSheets() {
     headerRange.setBackground(name === CONFIG.SHEET_PINNED_IMPORTANT ? "#fee2e2" : "#e0e7ff");
     headerRange.setFontColor("#0f172a").setVerticalAlignment("middle");
     sheet.setRowHeight(1, 38).setFrozenRows(1);
-    sheet.setColumnWidth(1, 180).setColumnWidth(2, 160).setColumnWidth(3, 140)
-         .setColumnWidth(4, 130).setColumnWidth(5, 130).setColumnWidth(6, 140)
-         .setColumnWidth(7, 220).setColumnWidth(8, 240).setColumnWidth(9, 220)
-         .setColumnWidth(10, 150).setColumnWidth(11, 170).setColumnWidth(12, 130).setColumnWidth(13, 110);
+    sheet.setColumnWidth(1, 175).setColumnWidth(2, 180).setColumnWidth(3, 160)
+         .setColumnWidth(4, 140).setColumnWidth(5, 130).setColumnWidth(6, 130).setColumnWidth(7, 140)
+         .setColumnWidth(8, 220).setColumnWidth(9, 240).setColumnWidth(10, 220)
+         .setColumnWidth(11, 150).setColumnWidth(12, 130).setColumnWidth(13, 110);
   });
   const def = ss.getSheetByName("Sheet1");
   if (def && ss.getSheets().length > 1) { try { ss.deleteSheet(def); } catch(e){} }
@@ -80,21 +90,24 @@ function doPost(e) {
       const leads = payload.leads || [];
       if (sheetNew.getLastRow() > 1) sheetNew.getRange(2, 1, sheetNew.getLastRow() - 1, CONFIG.HEADERS.length).clearContent();
       if (sheetPinned.getLastRow() > 1) sheetPinned.getRange(2, 1, sheetPinned.getLastRow() - 1, CONFIG.HEADERS.length).clearContent();
-      const newRows = [];
+      const unpinnedNewRows = [];
       const pinnedRows = [];
       leads.forEach(l => {
-        const r = [
-          l.customer_name || "", l.customer_number || "", l.area || "", l.service || "",
+        const row = [
+          l.created_at || "", l.customer_name || "", l.customer_number || "", l.area || "", l.service || "",
           "New to contact", l.number_name || "", l.context || "", l.exact_requirement || "",
-          l.marketing_notes || "", l.assigned_to_name || "Unassigned", l.created_at || "",
+          l.marketing_notes || "", l.assigned_to_name || "Unassigned",
           l.pinned_important ? "Pinned Important" : (l.is_important ? "Important" : "No"), l.id || ""
         ];
-        newRows.push(r);
-        if (l.pinned_important) pinnedRows.push(r);
+        if (l.pinned_important === true) {
+          pinnedRows.push(row);
+        } else {
+          unpinnedNewRows.push(row);
+        }
       });
-      if (newRows.length > 0) sheetNew.getRange(2, 1, newRows.length, CONFIG.HEADERS.length).setValues(newRows);
+      if (unpinnedNewRows.length > 0) sheetNew.getRange(2, 1, unpinnedNewRows.length, CONFIG.HEADERS.length).setValues(unpinnedNewRows);
       if (pinnedRows.length > 0) sheetPinned.getRange(2, 1, pinnedRows.length, CONFIG.HEADERS.length).setValues(pinnedRows);
-      return jsonResponse({ status: "success", count: newRows.length, pinnedCount: pinnedRows.length });
+      return jsonResponse({ status: "success", unpinnedCount: unpinnedNewRows.length, pinnedCount: pinnedRows.length });
     }
 
     const rec = payload.record || payload.lead || {};
@@ -115,27 +128,34 @@ function doPost(e) {
         return jsonResponse({ success: true, action: "REMOVED_STATUS_CHANGED" });
       }
       const row = [
-        rec.customer_name || "", rec.customer_number || "", rec.area || "", rec.service || "",
+        rec.created_at || "", rec.customer_name || "", rec.customer_number || "", rec.area || "", rec.service || "",
         "New to contact", rec.number_name || "", rec.context || "", rec.exact_requirement || "",
-        rec.marketing_notes || "", rec.assigned_to_name || "Unassigned", rec.created_at || "",
+        rec.marketing_notes || "", rec.assigned_to_name || "Unassigned",
         rec.pinned_important ? "Pinned Important" : (rec.is_important ? "Important" : "No"), rec.id || ""
       ];
-      upsertLeadRow(sheetNew, leadId, row);
-      if (rec.pinned_important) upsertLeadRow(sheetPinned, leadId, row);
-      else deleteLeadRow(sheetPinned, leadId);
+      if (rec.pinned_important === true) {
+        deleteLeadRow(sheetNew, leadId);
+        upsertLeadRow(sheetPinned, leadId, row);
+      } else {
+        deleteLeadRow(sheetPinned, leadId);
+        upsertLeadRow(sheetNew, leadId, row);
+      }
       return jsonResponse({ success: true, action: "UPDATED" });
     }
 
     if (eventType === "INSERT") {
       if (rec.cs_status !== "new") return jsonResponse({ message: "Ignored" });
       const row = [
-        rec.customer_name || "", rec.customer_number || "", rec.area || "", rec.service || "",
+        rec.created_at || "", rec.customer_name || "", rec.customer_number || "", rec.area || "", rec.service || "",
         "New to contact", rec.number_name || "", rec.context || "", rec.exact_requirement || "",
-        rec.marketing_notes || "", rec.assigned_to_name || "Unassigned", rec.created_at || "",
+        rec.marketing_notes || "", rec.assigned_to_name || "Unassigned",
         rec.pinned_important ? "Pinned Important" : (rec.is_important ? "Important" : "No"), rec.id || ""
       ];
-      insertLeadAtTop(sheetNew, row);
-      if (rec.pinned_important) insertLeadAtTop(sheetPinned, row);
+      if (rec.pinned_important === true) {
+        insertLeadAtTop(sheetPinned, row);
+      } else {
+        insertLeadAtTop(sheetNew, row);
+      }
       return jsonResponse({ success: true, action: "INSERTED" });
     }
     return jsonResponse({ message: "No action" });
@@ -210,14 +230,14 @@ function Dashboard() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Save changes locally
+  // Save settings locally
   const handleSaveSettings = () => {
     localStorage.setItem("jellybean_google_sheets_webhook", webhookUrl.trim());
     localStorage.setItem("jellybean_google_sheets_autosync", String(autoSync));
     toast.success("Google Sheets sync settings saved successfully!");
   };
 
-  // Test connection to Google Apps Script Web App
+  // Test connection
   const handleTestConnection = async () => {
     if (!webhookUrl.trim()) {
       toast.error("Please enter a valid Google Apps Script Web App URL first.");
@@ -225,7 +245,6 @@ function Dashboard() {
     }
     setIsTesting(true);
     try {
-      // In browser, sending POST with mode: 'no-cors' reaches Google Apps Script
       await fetch(webhookUrl.trim(), {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -235,7 +254,7 @@ function Dashboard() {
 
       setIsConnected(true);
       localStorage.setItem("jellybean_google_sheets_connected", "true");
-      toast.success("Connected & Active! Webhook test ping successfully dispatched.");
+      toast.success("Connected & Active! Webhook test ping dispatched.");
     } catch (err) {
       console.error(err);
       toast.error("Failed to reach webhook URL. Make sure it is deployed as 'Anyone'.");
@@ -244,7 +263,7 @@ function Dashboard() {
     }
   };
 
-  // Trigger full bulk sync of all "New to contact" leads
+  // Trigger bulk sync
   const handleSyncAllLeads = async () => {
     if (!webhookUrl.trim()) {
       toast.error("Please enter your Google Apps Script Web App URL before syncing.");
@@ -275,9 +294,10 @@ function Dashboard() {
         nameMap[p.user_id] = p.full_name || p.email || "Staff";
       });
 
-      // 3. Prepare clean payload rows
+      // 3. Map leads with Date & Time as first attribute
       const mappedLeads = (leads || []).map((l) => ({
         id: l.id,
+        created_at: l.created_at ? new Date(l.created_at).toLocaleString() : "",
         customer_name: l.customer_name || "",
         customer_number: l.customer_number_2
           ? `${l.customer_number || ""}, ${l.customer_number_2}`
@@ -289,12 +309,17 @@ function Dashboard() {
         exact_requirement: l.requirement_1 || l.requirement_2 || l.post_text || l.context || "",
         marketing_notes: l.marketing_notes || "",
         assigned_to_name: l.assigned_to ? nameMap[l.assigned_to] || "CS" : "Unassigned",
-        created_at: l.created_at ? new Date(l.created_at).toLocaleString() : "",
         pinned_important: !!l.pinned_important,
         is_important: !!l.is_important,
       }));
 
-      toast.loading(`Pushing ${mappedLeads.length} leads to Google Sheets...`, { id: toastId });
+      const unpinnedCount = mappedLeads.filter((l) => !l.pinned_important).length;
+      const pinnedCount = mappedLeads.filter((l) => l.pinned_important).length;
+
+      toast.loading(
+        `Pushing ${unpinnedCount} unpinned and ${pinnedCount} pinned leads to Google Sheets...`,
+        { id: toastId },
+      );
 
       // 4. Send to Google Apps Script
       await fetch(webhookUrl.trim(), {
@@ -317,7 +342,7 @@ function Dashboard() {
       localStorage.setItem("jellybean_google_sheets_connected", "true");
 
       toast.success(
-        `Successfully synced ${mappedLeads.length} leads across 'New to Contact' and 'Pinned Important' tabs!`,
+        `Successfully synced ${unpinnedCount} unpinned 'New to Contact' leads and ${pinnedCount} 'Pinned Important' leads!`,
         { id: toastId },
       );
     } catch (err) {
@@ -413,7 +438,7 @@ function Dashboard() {
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               {lastBulkSync
-                ? `Successfully synced ${lastSyncCount} leads across New to Contact and Pinned tabs.`
+                ? `Successfully synced ${lastSyncCount} leads across New to Contact (unpinned) and Pinned Important tabs.`
                 : "Click 'Sync All Leads Now' below to perform your initial sync."}
             </p>
           </div>
@@ -613,7 +638,7 @@ function Dashboard() {
               <div className="flex items-start gap-2 text-foreground/90">
                 <Check className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-foreground">12 Mapped Columns:</strong> Customer Name, Phone No, Area, Service, Status, Number Name, Context, Exact Requirement, Compose, Assigned To, Created Date &amp; Time, Important.
+                  <strong className="text-foreground">First Column: Lead Created Date &amp; Time:</strong> Automatically placed as Column A for instant timeline filtering.
                 </div>
               </div>
 
@@ -627,14 +652,14 @@ function Dashboard() {
               <div className="flex items-start gap-2 text-foreground/90">
                 <Check className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-foreground">New to Contact Sheet Only:</strong> Automatically creates &amp; updates dedicated tab for &ldquo;New to contact&rdquo; leads only. No all-leads tab is generated.
+                  <strong className="text-foreground">New to Contact (Unpinned Only):</strong> Tab strictly holds leads where status is &ldquo;New to contact&rdquo; and NOT marked as Pinned Important.
                 </div>
               </div>
 
               <div className="flex items-start gap-2 text-foreground/90">
                 <Check className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-foreground">Pinned Important Leads Sheet:</strong> Dedicated &ldquo;Pinned Important&rdquo; tab where only pinned important leads with &ldquo;New to contact&rdquo; status are kept, plus automatic row deletion and shift-up.
+                  <strong className="text-foreground">Pinned Important Leads Sheet:</strong> Dedicated tab for &ldquo;New to contact&rdquo; leads that ARE pinned. Pinning a lead moves it here; unpinning moves it back to New to Contact automatically!
                 </div>
               </div>
             </div>
