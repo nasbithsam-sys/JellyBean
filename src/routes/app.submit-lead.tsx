@@ -24,6 +24,7 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { syncLeadToGoogleSheet } from "@/lib/google-sheets-sync";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -636,6 +637,21 @@ function SubmitForm({
       if (error) throw error;
 
       if (insertedLead?.id) {
+        void syncLeadToGoogleSheet("INSERT", {
+          id: insertedLead.id,
+          customer_name: values.customerName,
+          customer_number: values.customerNumber,
+          customer_number_2: cleanedExtras[0] ?? null,
+          service: values.service,
+          main_area: values.area || null,
+          sub_area: values.area || null,
+          context: values.context,
+          requirement_1: values.exactCustomerText,
+          created_at: new Date().toISOString(),
+          is_important: values.isImportant,
+          pinned_important: values.isImportant,
+          cs_status: "new",
+        });
         void autoRephraseFn({ data: { leadId: insertedLead.id } }).catch((err) => {
           console.error("[Auto-rephrase] Failed for submitted lead:", insertedLead.id, err);
         });

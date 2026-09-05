@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
+import { syncLeadToGoogleSheet } from "@/lib/google-sheets-sync";
 import { useSignedLeadUrls } from "@/lib/lead-attachments";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
@@ -2289,6 +2290,7 @@ function LeadCard({
         entity_id: lead.id,
         metadata: { status: next, from: "card" },
       });
+      void syncLeadToGoogleSheet("UPDATE", { ...lead, cs_status: next });
       toast.success(`Status → ${STATUS_LABEL[next] ?? next}`);
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
     } catch (e) {
@@ -2364,6 +2366,7 @@ function LeadCard({
         entity_id: lead.id,
         metadata: { customer_name: lead.customer_name, pinned: false },
       });
+      void syncLeadToGoogleSheet("UPDATE", { ...lead, is_important: next });
       toast.success(next ? "Lead marked important" : "Important tag removed");
       qc.invalidateQueries({ queryKey: ["cs_leads"] });
     } catch (error) {
@@ -2380,6 +2383,7 @@ function LeadCard({
     try {
       const { error } = await supabase.from("qualified_leads").delete().eq("id", lead.id);
       if (error) throw error;
+      void syncLeadToGoogleSheet("DELETE", lead);
       await supabase.from("activity_logs").insert({
         actor_id: auth.user?.id,
         actor_name: auth.profile?.full_name,
@@ -3185,6 +3189,17 @@ function LeadDrawer({
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
+      void syncLeadToGoogleSheet("UPDATE", {
+        ...lead,
+        cs_status: status,
+        number_name: numberName.trim() || null,
+        marketing_notes: compose.trim() || null,
+        requirement_1: requirement1.trim() || null,
+        requirement_2: requirement2.trim() || null,
+        assigned_to: assignedTo,
+        is_important: isImportant,
+        pinned_important: isImportant ? lead.pinned_important : false,
+      });
       await supabase.from("activity_logs").insert({
         actor_id: auth.user?.id,
         actor_name: auth.profile?.full_name,

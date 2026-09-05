@@ -10,6 +10,7 @@ import { formatDistanceToNow, startOfDay, endOfDay } from "date-fns";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/error-messages";
 import { useAuth } from "@/hooks/use-auth";
+import { syncLeadToGoogleSheet } from "@/lib/google-sheets-sync";
 import { PageHeader, PageBody, RoleGate } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -793,6 +794,18 @@ function UnifiedForwardedLeadForm({
         } as never)
         .eq("id", lead.id);
       if (error) throw error;
+      void syncLeadToGoogleSheet("UPDATE", {
+        ...lead,
+        customer_name: values.customerName,
+        customer_number: values.customerNumber,
+        customer_number_2: cleanedExtras[0] ?? null,
+        service: values.service,
+        main_area: values.area || null,
+        sub_area: values.area || null,
+        context: values.context,
+        requirement_1: values.exactCustomerText,
+        is_important: lead.pinned_important ? true : values.isImportant,
+      });
       toast.success("Forwarded lead updated");
       onSaved();
     } catch (error) {
@@ -849,6 +862,7 @@ async function deleteForwardedLead(
   try {
     const { error } = await supabase.from("qualified_leads").delete().eq("id", lead.id);
     if (error) throw error;
+    void syncLeadToGoogleSheet("DELETE", lead);
     await supabase.from("activity_logs").insert({
       actor_id: auth.user?.id,
       actor_name: auth.profile?.full_name,
