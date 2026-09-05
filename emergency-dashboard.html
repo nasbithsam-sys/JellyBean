@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JellyBean CRM - Emergency Data Recovery Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 24px; font-size: 14px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 24px; }
+    .header h1 { font-size: 20px; font-weight: 700; color: #fff; }
+    .header p { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+    .badge { background: #3b82f620; color: #60a5fa; border: 1px solid #3b82f640; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
+    
+    .config-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 24px; }
+    .config-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+    .form-group input { width: 100%; background: #0b1120; border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; color: #fff; font-size: 13px; }
+    .form-group input:focus { outline: 2px solid var(--primary); }
+    
+    button { background: var(--primary); color: #fff; border: none; border-radius: 6px; padding: 9px 16px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; transition: 0.2s; }
+    button:hover { background: var(--primary-hover); }
+    button.btn-secondary { background: #334155; }
+    button.btn-secondary:hover { background: #475569; }
+    button.btn-success { background: var(--success); }
+    button.btn-success:hover { background: #059669; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .tab-btn { background: transparent; color: var(--text-muted); border: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+    .tab-btn.active { background: var(--card); color: #fff; border: 1px solid var(--border); }
+
+    .content-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-height: 350px; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .table-container { overflow-x: auto; max-height: 550px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th { background: #0b1120; color: var(--text-muted); font-size: 12px; font-weight: 600; text-transform: uppercase; padding: 10px 12px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--border); }
+    td { padding: 11px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: #e2e8f0; }
+    tr:hover td { background: #263349; }
+    
+    .status-pill { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; background: #334155; }
+    .status-new { background: #1e3a8a; color: #93c5fd; }
+    .status-converted { background: #064e3b; color: #6ee7b7; }
+    
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .loading { text-align: center; padding: 40px; color: #60a5fa; font-weight: 600; }
+    .error-msg { background: #ef444420; border: 1px solid #ef444450; color: #fca5a5; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1>JellyBean CRM - Emergency Backup & Data Viewer</h1>
+        <p>Direct standalone portal to read database records without frontend or Lovable dependencies</p>
+      </div>
+      <span class="badge">Standalone Mode (100% Offline Capable)</span>
+    </div>
+
+    <!-- Credentials Config Card -->
+    <div class="config-card">
+      <div class="config-grid">
+        <div class="form-group">
+          <label for="sbUrl">Supabase URL</label>
+          <input type="text" id="sbUrl" placeholder="https://your-project.supabase.co" />
+        </div>
+        <div class="form-group">
+          <label for="sbKey">Supabase Key (Anon Key or Service Role Key)</label>
+          <input type="password" id="sbKey" placeholder="eyJhbGciOiJIUzI1NiIsIn..." />
+        </div>
+        <div>
+          <button id="connectBtn" onclick="saveAndConnect()">Connect & Load</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="errorAlert" class="error-msg"></div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('qualified')">CS Qualified Leads</button>
+      <button class="tab-btn" onclick="switchTab('raw')">Raw Leads</button>
+      <button class="tab-btn" onclick="switchTab('logs')">Who Used CRM (Activity Logs)</button>
+      <button class="tab-btn" onclick="switchTab('users')">Profiles / Staff</button>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="content-card">
+      <div class="toolbar">
+        <div>
+          <label style="color: var(--text-muted); font-size: 13px;">Filter Date: </label>
+          <select id="dateFilter" onchange="fetchCurrentTab()" style="background:#0b1120; border:1px solid var(--border); color:#fff; padding:6px 10px; border-radius:6px;">
+            <option value="today">Today Only</option>
+            <option value="yesterday">Past 2 Days</option>
+            <option value="week">Last 7 Days</option>
+            <option value="all">All Records (Latest 200)</option>
+          </select>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-secondary" onclick="fetchCurrentTab()">Refresh</button>
+          <button class="btn-success" onclick="exportToCsv()">Export to CSV</button>
+        </div>
+      </div>
+
+      <div id="loading" class="loading" style="display: none;">Fetching latest records directly from Supabase...</div>
+
+      <div class="table-container" id="tableContainer">
+        <div class="empty-state">Connect with your Supabase credentials above to view latest data.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentTab = 'qualified';
+    let currentData = [];
+    let supabaseClient = null;
+
+    // Load saved credentials
+    window.onload = () => {
+      const savedUrl = localStorage.getItem("emergency_sb_url") || "";
+      const savedKey = localStorage.getItem("emergency_sb_key") || "";
+      if (savedUrl) document.getElementById("sbUrl").value = savedUrl;
+      if (savedKey) document.getElementById("sbKey").value = savedKey;
+
+      if (savedUrl && savedKey) {
+        initSupabase(savedUrl, savedKey);
+        fetchCurrentTab();
+      }
+    };
+
+    function saveAndConnect() {
+      const url = document.getElementById("sbUrl").value.trim();
+      const key = document.getElementById("sbKey").value.trim();
+      if (!url || !key) {
+        showError("Please enter both Supabase URL and Key.");
+        return;
+      }
+      localStorage.setItem("emergency_sb_url", url);
+      localStorage.setItem("emergency_sb_key", key);
+      initSupabase(url, key);
+      fetchCurrentTab();
+    }
+
+    function initSupabase(url, key) {
+      try {
+        supabaseClient = window.supabase.createClient(url, key);
+        hideError();
+      } catch (e) {
+        showError("Failed to initialize Supabase client: " + e.message);
+      }
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      fetchCurrentTab();
+    }
+
+    function getDateLimit() {
+      const filter = document.getElementById("dateFilter").value;
+      const now = new Date();
+      if (filter === 'today') {
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return start.toISOString();
+      } else if (filter === 'yesterday') {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        d.setHours(0,0,0,0);
+        return d.toISOString();
+      } else if (filter === 'week') {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        return d.toISOString();
+      }
+      return null;
+    }
+
+    async function fetchCurrentTab() {
+      if (!supabaseClient) return;
+      document.getElementById("loading").style.display = "block";
+      document.getElementById("tableContainer").innerHTML = "";
+      hideError();
+
+      try {
+        const dateLimit = getDateLimit();
+        if (currentTab === 'qualified') {
+          let q = supabaseClient.from('qualified_leads').select('*').order('created_at', { ascending: false }).limit(200);
+          if (dateLimit) q = q.gte('created_at', dateLimit);
+          const { data, error } = await q;
+          if (error) throw error;
+          currentData = data || [];
+          renderQualifiedLeads(currentData);
+
+        } else if (currentTab === 'raw') {
+          let q = supabaseClient.from('raw_leads').select('*').order('created_at', { ascending: false }).limit(200);
+          if (dateLimit) q = q.gte('created_at', dateLimit);
+          const { data, error } = await q;
+          if (error) throw error;
+          currentData = data || [];
+          renderRawLeads(currentData);
+
+        } else if (currentTab === 'logs') {
+          let q = supabaseClient.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(200);
+          if (dateLimit) q = q.gte('created_at', dateLimit);
+          const { data, error } = await q;
+          if (error) throw error;
+          currentData = data || [];
+          renderLogs(currentData);
+
+        } else if (currentTab === 'users') {
+          const { data, error } = await supabaseClient.from('profiles').select('*').order('created_at', { ascending: false });
+          if (error) throw error;
+          currentData = data || [];
+          renderUsers(currentData);
+        }
+      } catch (err) {
+        showError("Database Query Error: " + err.message + " (Check RLS policies or try using Service Role Key)");
+      } finally {
+        document.getElementById("loading").style.display = "none";
+      }
+    }
+
+    function renderQualifiedLeads(data) {
+      if (!data.length) {
+        document.getElementById("tableContainer").innerHTML = `<div class="empty-state">No qualified leads found for selected date range.</div>`;
+        return;
+      }
+      let html = `<table><thead><tr>
+        <th>Customer Name</th><th>Phone Number</th><th>Service / Status</th><th>Area</th><th>Pass It To</th><th>Created Time</th><th>Notes</th>
+      </tr></thead><tbody>`;
+      data.forEach(r => {
+        html += `<tr>
+          <td><strong>${escapeHtml(r.customer_name || 'N/A')}</strong></td>
+          <td><a href="tel:${r.customer_number}" style="color:#60a5fa; text-decoration:none;">${escapeHtml(r.customer_number || '')}</a></td>
+          <td><span class="status-pill status-${r.cs_status}">${escapeHtml(r.cs_status || 'new')}</span></td>
+          <td>${escapeHtml(r.main_area || r.sub_area || '-')}</td>
+          <td>${escapeHtml(r.pass_it_to || '-')}</td>
+          <td style="color:var(--text-muted); font-size:12px;">${new Date(r.created_at).toLocaleString()}</td>
+          <td style="max-width:200px; font-size:12px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis;">${escapeHtml(r.marketing_notes || '')}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      document.getElementById("tableContainer").innerHTML = html;
+    }
+
+    function renderRawLeads(data) {
+      if (!data.length) {
+        document.getElementById("tableContainer").innerHTML = `<div class="empty-state">No raw leads found.</div>`;
+        return;
+      }
+      let html = `<table><thead><tr>
+        <th>Poster Name</th><th>Area</th><th>Status</th><th>Captured At</th><th>Created Time</th>
+      </tr></thead><tbody>`;
+      data.forEach(r => {
+        html += `<tr>
+          <td><strong>${escapeHtml(r.poster_name || 'N/A')}</strong></td>
+          <td>${escapeHtml(r.account_area || r.sub_area || '-')}</td>
+          <td><span class="status-pill">${escapeHtml(r.status || 'new')}</span></td>
+          <td style="font-size:12px;">${r.captured_at ? new Date(r.captured_at).toLocaleString() : '-'}</td>
+          <td style="color:var(--text-muted); font-size:12px;">${new Date(r.created_at).toLocaleString()}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      document.getElementById("tableContainer").innerHTML = html;
+    }
+
+    function renderLogs(data) {
+      if (!data.length) {
+        document.getElementById("tableContainer").innerHTML = `<div class="empty-state">No activity logs recorded.</div>`;
+        return;
+      }
+      let html = `<table><thead><tr>
+        <th>Timestamp</th><th>User / Actor</th><th>Role</th><th>Action</th><th>Entity</th>
+      </tr></thead><tbody>`;
+      data.forEach(r => {
+        html += `<tr>
+          <td style="color:var(--text-muted); font-size:12px;">${new Date(r.created_at).toLocaleString()}</td>
+          <td><strong>${escapeHtml(r.actor_name || 'System')}</strong></td>
+          <td><span class="status-pill">${escapeHtml(r.actor_role || '-')}</span></td>
+          <td style="color:#60a5fa;">${escapeHtml(r.action || '-')}</td>
+          <td style="font-size:12px;">${escapeHtml(r.entity_type || '-')}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      document.getElementById("tableContainer").innerHTML = html;
+    }
+
+    function renderUsers(data) {
+      if (!data.length) {
+        document.getElementById("tableContainer").innerHTML = `<div class="empty-state">No profiles found.</div>`;
+        return;
+      }
+      let html = `<table><thead><tr>
+        <th>Full Name</th><th>Username</th><th>Email</th><th>Status</th><th>Created</th>
+      </tr></thead><tbody>`;
+      data.forEach(r => {
+        html += `<tr>
+          <td><strong>${escapeHtml(r.full_name || '-')}</strong></td>
+          <td>${escapeHtml(r.username || '-')}</td>
+          <td>${escapeHtml(r.email || '-')}</td>
+          <td><span class="status-pill ${r.is_active ? 'status-converted' : ''}">${r.is_active ? 'Active' : 'Inactive'}</span></td>
+          <td style="color:var(--text-muted); font-size:12px;">${new Date(r.created_at).toLocaleDateString()}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      document.getElementById("tableContainer").innerHTML = html;
+    }
+
+    function exportToCsv() {
+      if (!currentData || !currentData.length) {
+        alert("No data available to export.");
+        return;
+      }
+      const keys = Object.keys(currentData[0]);
+      let csv = keys.join(",") + "\\n";
+      currentData.forEach(row => {
+        csv += keys.map(k => {
+          let val = row[k] === null || row[k] === undefined ? "" : JSON.stringify(row[k]);
+          if (typeof val === 'string' && val.startsWith('"') && val.endsWith('"')) {
+            val = val.slice(1, -1);
+          }
+          return `"${String(val).replace(/"/g, '""')}"`;
+        }).join(",") + "\\n";
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${currentTab}_backup_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function showError(msg) {
+      const el = document.getElementById("errorAlert");
+      el.innerText = msg;
+      el.style.display = "block";
+    }
+
+    function hideError() {
+      document.getElementById("errorAlert").style.display = "none";
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    }
+  </script>
+</body>
+</html>
